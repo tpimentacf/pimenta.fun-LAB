@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login &mdash; Pimenta Shop</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a30;
+      --accent: #f6821f;
+      --accent2: #ff6b6b;
+      --text: #e8edf7;
+      --muted: #9aa6c0;
+      --border: #233056;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(900px 500px at 50% -10%, #1b2547 0%, var(--bg) 60%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 20px 5vw;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand { font-size: 1.3rem; font-weight: 700; }
+    .brand span { color: var(--accent); }
+    nav a { color: var(--muted); text-decoration: none; margin-left: 20px; font-size: 0.95rem; }
+    nav a:hover { color: var(--text); }
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+    .card {
+      width: 100%;
+      max-width: 400px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px 30px;
+    }
+    .card h1 { font-size: 1.6rem; margin-bottom: 6px; text-align: center; }
+    .card p.sub { color: var(--muted); text-align: center; margin-bottom: 26px; font-size: 0.9rem; }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; margin-top: 16px; }
+    input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 9px;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+    }
+    input:focus { outline: none; border-color: var(--accent); }
+    .btn {
+      width: 100%;
+      margin-top: 24px;
+      background: var(--accent);
+      color: #1a1205;
+      border: none;
+      padding: 13px;
+      border-radius: 9px;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .btn:hover { filter: brightness(1.05); }
+    .meta { text-align: center; margin-top: 18px; font-size: 0.85rem; color: var(--muted); }
+    .meta a { color: var(--accent); text-decoration: none; }
+    #result {
+      margin-top: 18px;
+      padding: 12px 14px;
+      border-radius: 9px;
+      font-size: 0.88rem;
+      display: none;
+    }
+    #result.ok { display: block; background: rgba(54,211,153,0.12); border: 1px solid rgba(54,211,153,0.4); color: #b6f5dc; }
+    #result.err { display: block; background: rgba(255,107,107,0.12); border: 1px solid rgba(255,107,107,0.4); color: #ffc4c4; }
+    footer { padding: 20px 5vw; color: var(--muted); font-size: 0.8rem; text-align: center; border-top: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">pimenta<span>.fun</span> shop</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="index.html">Shop</a>
+      <a href="https://api.pimenta.fun">API</a>
+    </nav>
+  </header>
+
+  <main>
+    <form class="card" id="login-form" method="post" action="/rest/user/login">
+      <h1>Sign in</h1>
+      <p class="sub">Access your Pimenta Shop account</p>
+
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" placeholder="you@example.com" required />
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" required />
+
+      <button class="btn" type="submit">Log in</button>
+
+      <div id="result"></div>
+
+      <p class="meta">No account? <a href="#">Register</a> &middot; <a href="#">Forgot password?</a></p>
+    </form>
+  </main>
+
+  <footer>
+    Login endpoint &mdash; backed by api.pimenta.fun &bull; lab use only
+  </footer>
+
+  <script>
+    // Live login against the real Pimenta API. On success the JWT is stored in
+    // localStorage under the shared key, so the shop checkout and the API
+    // console are signed in too.
+    const API_BASE = "https://api.pimenta.fun";
+    const TOKEN_KEY = "pimenta_api_token";
+    const form = document.getElementById("login-form");
+    const result = document.getElementById("result");
+
+    // Avoid the browser submitting the form to the action URL.
+    form.setAttribute("action", "#");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+
+      result.className = "";
+      result.textContent = "";
+
+      if (!email || !password) {
+        result.className = "err";
+        result.textContent = "Please provide both email and password.";
+        return;
+      }
+
+      try {
+        const res = await fetch(API_BASE + "/rest/user/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json().catch(() => ({}));
+        const token = data && data.authentication && data.authentication.token;
+
+        if (res.ok && token) {
+          localStorage.setItem(TOKEN_KEY, token);
+          result.className = "ok";
+          result.innerHTML = "Signed in as <strong>" + email +
+            "</strong>. Token stored. Redirecting to the shop…";
+          setTimeout(() => { window.location.href = "index.html"; }, 1200);
+        } else {
+          result.className = "err";
+          result.textContent = (data && data.error)
+            ? data.error + " (HTTP " + res.status + ")"
+            : "Login failed (HTTP " + res.status + ").";
+        }
+      } catch (err) {
+        result.className = "err";
+        result.textContent = "Request failed: " + err.message +
+          " — is the backend running at " + API_BASE + "?";
+      }
+    });
+  </script>
+</body>
+</html>

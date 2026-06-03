@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contact Form &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Forms / Contact</div>
+    <span class="tag">Forms protection</span>
+    <h1>Contact <span class="grad">Form</span></h1>
+    <p class="lead">A simple form for testing Cloudflare form-protection features.</p>
+    <div class="note">
+      Good target for testing WAF Managed Rules, rate limiting, bot detection, and Turnstile on submit.
+    </div>
+
+    <form class="panel" id="contact">
+      <label for="name">Name</label>
+      <input id="name" type="text" placeholder="Your name" required />
+      <label for="email">Email</label>
+      <input id="email" type="email" placeholder="you@example.com" required />
+      <label for="message">Message</label>
+      <textarea id="message" rows="4" placeholder="How can we help?" required></textarea>
+      <br /><br />
+      <button class="btn" type="submit">Send message</button>
+      <div id="result"></div>
+    </form>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+
+  <script>
+    document.getElementById("contact").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const r = document.getElementById("result");
+      r.className = "ok";
+      r.textContent = "Demo: message captured client-side. Wire this to your backend or a Worker to test live.";
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turnstile (Managed) &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Turnstile / Managed</div>
+    <span class="tag">Turnstile</span>
+    <h1>Turnstile &mdash; <span class="grad">Managed</span></h1>
+    <p class="lead">A Cloudflare Turnstile widget in managed mode. Solve it to receive a token.</p>
+
+    <div class="warn">
+      This demo uses Cloudflare's <strong>test sitekey</strong> (<code class="inline">1x00000000000000000000AA</code>,
+      always passes). Replace it with your real sitekey from the Turnstile dashboard for a live test.
+    </div>
+
+    <form class="panel" id="ts-form">
+      <p style="color:var(--text)">Verify you are human, then submit:</p>
+      <div class="cf-turnstile"
+           data-sitekey="1x00000000000000000000AA"
+           data-theme="dark"
+           data-callback="onToken"></div>
+      <br />
+      <button class="btn" type="submit" id="submit" disabled>Submit</button>
+    </form>
+
+    <div id="result"></div>
+
+    <h2>Token</h2>
+    <pre id="token">(solve the widget above)</pre>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+
+  <script>
+    function onToken(token) {
+      document.getElementById("token").textContent = token;
+      document.getElementById("submit").disabled = false;
+    }
+    document.getElementById("ts-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const r = document.getElementById("result");
+      r.className = "ok";
+      r.textContent = "Turnstile token captured. In production, POST it to /siteverify on your backend to validate.";
+    });
+  </script>
+</body>
+</html>

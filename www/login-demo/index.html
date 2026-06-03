@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login Demo &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Forms / Login Demo</div>
+    <span class="tag">Forms protection</span>
+    <h1><span class="grad">Login</span> Demo</h1>
+    <form class="panel" id="f">
+      <label>Username</label><input type="text" value="admin" />
+      <label>Password</label><input type="password" />
+      <br /><br /><button class="btn" type="submit">Log in</button>
+    </form>
+    <div id="result"></div>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+  <script>
+    document.getElementById('f').addEventListener('submit',function(e){e.preventDefault();var r=document.getElementById('result');r.className='ok';r.textContent='Demo login submitted.';});
+  </script>
+</body>
+</html>

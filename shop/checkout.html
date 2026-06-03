@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Checkout &mdash; Pimenta Shop</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a30;
+      --accent: #f6821f;
+      --accent2: #ff6b6b;
+      --green: #36d399;
+      --text: #e8edf7;
+      --muted: #9aa6c0;
+      --border: #233056;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      padding: 20px 5vw;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: rgba(11,16,32,0.92);
+      backdrop-filter: blur(8px);
+      z-index: 50;
+    }
+    .brand { font-size: 1.3rem; font-weight: 700; }
+    .brand span { color: var(--accent); }
+    nav a { color: var(--muted); text-decoration: none; margin-left: 20px; font-size: 0.95rem; }
+    nav a:hover { color: var(--text); }
+    #auth-nav { display: inline-flex; align-items: center; margin-left: 20px; gap: 12px; }
+    #auth-nav .who { color: var(--text); font-size: 0.9rem; }
+    #auth-nav .who b { color: var(--accent); font-weight: 600; }
+    #auth-nav a { margin-left: 0; }
+    .btn {
+      background: var(--accent); color: #1a1205; border: none;
+      padding: 9px 18px; border-radius: 8px; font-weight: 600;
+      cursor: pointer; text-decoration: none; font-size: 0.9rem;
+    }
+    .btn:hover { filter: brightness(1.05); }
+    .btn[disabled] { opacity: 0.5; cursor: not-allowed; filter: none; }
+
+    h1 { padding: 40px 5vw 10px; font-size: 2rem; }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 28px;
+      padding: 20px 5vw 80px;
+      align-items: start;
+    }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+    }
+    .panel h2 { font-size: 1.2rem; margin-bottom: 16px; }
+
+    /* Cart items */
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .item:last-child { border-bottom: none; }
+    .item .emoji {
+      font-size: 1.8rem;
+      width: 52px; height: 52px;
+      display: flex; align-items: center; justify-content: center;
+      background: #1b2547; border-radius: 10px; flex-shrink: 0;
+    }
+    .item .info { flex: 1; min-width: 0; }
+    .item .info h3 { font-size: 1rem; margin-bottom: 3px; }
+    .item .info .unit { color: var(--muted); font-size: 0.82rem; }
+    .qty { display: flex; align-items: center; gap: 8px; }
+    .qty button {
+      width: 28px; height: 28px; border-radius: 7px;
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); cursor: pointer; font-size: 1rem; line-height: 1;
+    }
+    .qty button:hover { border-color: var(--accent); color: var(--accent); }
+    .qty span { min-width: 22px; text-align: center; font-weight: 600; }
+    .line-total { width: 80px; text-align: right; font-weight: 700; color: var(--green); }
+    .remove {
+      background: none; border: none; color: var(--accent2);
+      cursor: pointer; font-size: 0.8rem; margin-left: 6px;
+    }
+    .remove:hover { text-decoration: underline; }
+
+    .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+    .empty a { color: var(--accent); text-decoration: none; }
+
+    /* Summary */
+    .sum-row { display: flex; justify-content: space-between; padding: 8px 0; color: var(--muted); font-size: 0.95rem; }
+    .sum-row.total { color: var(--text); font-size: 1.2rem; font-weight: 700; border-top: 1px solid var(--border); margin-top: 8px; padding-top: 14px; }
+    .sum-row.total span:last-child { color: var(--green); }
+
+    label { display: block; font-size: 0.82rem; color: var(--muted); margin: 14px 0 6px; }
+    input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); border-radius: 9px; padding: 11px 13px; font-size: 0.92rem;
+    }
+    input:focus { outline: none; border-color: var(--accent); }
+    .pay-btn {
+      width: 100%; margin-top: 22px; background: var(--accent); color: #1a1205;
+      border: none; padding: 14px; border-radius: 10px; font-weight: 700;
+      font-size: 1rem; cursor: pointer;
+    }
+    .pay-btn:hover { filter: brightness(1.05); }
+    .pay-btn[disabled] { opacity: 0.5; cursor: not-allowed; filter: none; }
+    #pay-status { margin-top: 12px; font-size: 0.85rem; display: none; padding: 10px 12px; border-radius: 9px; }
+    #pay-status.show { display: block; }
+    #pay-status.err { background: rgba(255,107,107,0.12); border: 1px solid rgba(255,107,107,0.4); color: #ffc4c4; }
+    #pay-status.info { background: rgba(91,141,239,0.12); border: 1px solid rgba(91,141,239,0.4); color: #bcd3ff; }
+
+    .confirm {
+      display: none;
+      background: rgba(54,211,153,0.1);
+      border: 1px solid rgba(54,211,153,0.4);
+      color: #b6f5dc;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+    }
+    .confirm.show { display: block; }
+    .confirm h2 { color: var(--green); margin-bottom: 8px; }
+    .confirm .oid { font-family: monospace; color: var(--text); }
+    .confirm a { color: var(--accent); text-decoration: none; display: inline-block; margin-top: 14px; }
+    footer { padding: 22px 5vw; color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--border); text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">pimenta<span>.fun</span> shop</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="index.html">Shop</a>
+      <a href="https://api.pimenta.fun">API</a>
+      <a href="orders.html">Orders</a>
+      <span id="auth-nav"></span>
+    </nav>
+  </header>
+
+  <h1>Checkout</h1>
+
+  <div class="layout">
+    <!-- Cart + confirmation -->
+    <div>
+      <div class="panel" id="cart-panel">
+        <h2>Your Cart</h2>
+        <div id="cart-items"></div>
+      </div>
+
+      <div class="panel confirm" id="confirm">
+        <h2>&#10003; Order placed!</h2>
+        <p>Thanks for your order. Confirmation: <span class="oid" id="order-id"></span></p>
+        <a href="orders.html">View my orders</a> &nbsp;&middot;&nbsp;
+        <a href="index.html">Continue shopping &rarr;</a>
+      </div>
+    </div>
+
+    <!-- Summary + payment -->
+    <div class="panel" id="summary-panel">
+      <h2>Order Summary</h2>
+      <div class="sum-row"><span>Subtotal</span><span id="sum-subtotal">$0.00</span></div>
+      <div class="sum-row"><span>Tax (8%)</span><span id="sum-tax">$0.00</span></div>
+      <div class="sum-row"><span>Shipping</span><span id="sum-ship">$0.00</span></div>
+      <div class="sum-row total"><span>Total</span><span id="sum-total">$0.00</span></div>
+
+      <form id="pay-form">
+        <label for="name">Full name</label>
+        <input type="text" id="name" placeholder="Jane Doe" required />
+        <label for="email">Email (account)</label>
+        <input type="email" id="email" placeholder="you@example.com" required />
+        <label for="password">Password (account)</label>
+        <input type="password" id="password" placeholder="account password" required />
+        <label for="address">Shipping address</label>
+        <input type="text" id="address" placeholder="123 Juice St, AppSec City" required />
+        <label for="card">Card number</label>
+        <input type="text" id="card" placeholder="4242 4242 4242 4242" inputmode="numeric" required />
+        <button class="pay-btn" id="pay-btn" type="submit">Place order</button>
+        <div id="pay-status"></div>
+      </form>
+      <p style="color:var(--muted);font-size:0.78rem;margin-top:12px;">
+        Checkout signs in to <code style="color:var(--accent)">api.pimenta.fun</code> (creating the
+        account if new), syncs your cart to the server basket, and places a real order.
+      </p>
+    </div>
+  </div>
+
+  <footer>
+    Demo checkout &mdash; no real payment is processed. Lab use only.
+  </footer>
+
+  <script>
+    const API_BASE = "https://api.pimenta.fun";   // real pimenta API
+    const TOKEN_KEY = "pimenta_api_token";          // shared with login + API console
+    const CART_KEY = "pimenta_cart";
+    const TAX_RATE = 0.08;
+    const FREE_SHIP_THRESHOLD = 50;
+    const SHIP_FLAT = 4.99;
+
+    // ---- Auth state in the nav ("Signed in as …" / Logout) ----
+    function escHtml(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+    function decodeJwtEmail(token) {
+      try {
+        const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        const payload = JSON.parse(decodeURIComponent(escape(atob(part))));
+        return payload.email || null;
+      } catch (e) { return null; }
+    }
+    function renderAuthNav() {
+      const el = document.getElementById("auth-nav");
+      const token = (localStorage.getItem(TOKEN_KEY) || "").trim();
+      const email = token ? decodeJwtEmail(token) : null;
+      if (token && email) {
+        el.innerHTML = '<span class="who">&#128100; Signed in as <b>' + escHtml(email) + '</b></span>' +
+                       '<a href="#" id="logout-link">Logout</a>';
+        document.getElementById("logout-link").addEventListener("click", (e) => {
+          e.preventDefault();
+          localStorage.removeItem(TOKEN_KEY);
+          renderAuthNav();
+        });
+        // Prefill the email field with the signed-in account.
+        const emailInput = document.getElementById("email");
+        if (emailInput && !emailInput.value) emailInput.value = email;
+      } else {
+        el.innerHTML = '<a class="btn" href="login.html">Login</a>';
+      }
+    }
+
+    function getCart() {
+      try { return JSON.parse(localStorage.getItem(CART_KEY)) || {}; }
+      catch (e) { return {}; }
+    }
+    function saveCart(cart) { localStorage.setItem(CART_KEY, JSON.stringify(cart)); }
+
+    const itemsEl = document.getElementById("cart-items");
+    const payForm = document.getElementById("pay-form");
+    const payBtn = document.getElementById("pay-btn");
+
+    function money(n) { return "$" + n.toFixed(2); }
+
+    function render() {
+      const cart = getCart();
+      const ids = Object.keys(cart);
+      itemsEl.innerHTML = "";
+
+      if (ids.length === 0) {
+        itemsEl.innerHTML = '<div class="empty">Your cart is empty.<br><a href="index.html">&larr; Browse the shop</a></div>';
+        updateSummary(0);
+        payBtn.disabled = true;
+        return;
+      }
+      payBtn.disabled = false;
+
+      let subtotal = 0;
+      ids.forEach(id => {
+        const it = cart[id];
+        const lineTotal = it.price * it.qty;
+        subtotal += lineTotal;
+
+        const row = document.createElement("div");
+        row.className = "item";
+        row.innerHTML =
+          '<div class="emoji">' + (it.emoji || "&#128722;") + '</div>' +
+          '<div class="info">' +
+            '<h3>' + it.name + '</h3>' +
+            '<div class="unit">' + money(it.price) + ' each</div>' +
+          '</div>' +
+          '<div class="qty">' +
+            '<button data-act="dec">&minus;</button>' +
+            '<span>' + it.qty + '</span>' +
+            '<button data-act="inc">+</button>' +
+          '</div>' +
+          '<div class="line-total">' + money(lineTotal) + '</div>' +
+          '<button class="remove" data-act="rm">remove</button>';
+
+        row.querySelector('[data-act="inc"]').addEventListener("click", () => changeQty(id, 1));
+        row.querySelector('[data-act="dec"]').addEventListener("click", () => changeQty(id, -1));
+        row.querySelector('[data-act="rm"]').addEventListener("click", () => removeItem(id));
+        itemsEl.appendChild(row);
+      });
+
+      updateSummary(subtotal);
+    }
+
+    function updateSummary(subtotal) {
+      const tax = subtotal * TAX_RATE;
+      const ship = subtotal === 0 ? 0 : (subtotal >= FREE_SHIP_THRESHOLD ? 0 : SHIP_FLAT);
+      const total = subtotal + tax + ship;
+      document.getElementById("sum-subtotal").textContent = money(subtotal);
+      document.getElementById("sum-tax").textContent = money(tax);
+      document.getElementById("sum-ship").textContent = ship === 0 ? "FREE" : money(ship);
+      document.getElementById("sum-total").textContent = money(total);
+    }
+
+    function changeQty(id, delta) {
+      const cart = getCart();
+      if (!cart[id]) return;
+      cart[id].qty += delta;
+      if (cart[id].qty <= 0) delete cart[id];
+      saveCart(cart);
+      render();
+    }
+    function removeItem(id) {
+      const cart = getCart();
+      delete cart[id];
+      saveCart(cart);
+      render();
+    }
+
+    // ---- Real checkout against the live API ----
+    const statusEl = document.getElementById("pay-status");
+    function setStatus(msg, kind) {
+      statusEl.className = "show " + (kind || "info");
+      statusEl.innerHTML = msg;
+    }
+
+    async function api(path, opts) {
+      const res = await fetch(API_BASE + path, opts);
+      let data = {};
+      try { data = await res.json(); } catch (e) {}
+      return { res, data };
+    }
+
+    // Ensure we hold a valid JWT: try stored token, else login, else register+login.
+    async function ensureToken(email, password) {
+      const stored = (localStorage.getItem(TOKEN_KEY) || "").trim();
+      if (stored) return stored;
+
+      const headers = { "Content-Type": "application/json" };
+      // Try login
+      let { res, data } = await api("/rest/user/login", {
+        method: "POST", headers, body: JSON.stringify({ email, password })
+      });
+      // If login failed, try to register then login again
+      if (!res.ok || !(data.authentication && data.authentication.token)) {
+        setStatus("Creating your account…", "info");
+        await api("/api/Users", {
+          method: "POST", headers, body: JSON.stringify({ email, password })
+        });
+        ({ res, data } = await api("/rest/user/login", {
+          method: "POST", headers, body: JSON.stringify({ email, password })
+        }));
+      }
+      const token = data.authentication && data.authentication.token;
+      if (!token) throw new Error("Could not authenticate with the API.");
+      localStorage.setItem(TOKEN_KEY, token);
+      return token;
+    }
+
+    payForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const cart = getCart();
+      const ids = Object.keys(cart);
+      if (ids.length === 0) return;
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      payBtn.disabled = true;
+      const original = payBtn.textContent;
+      payBtn.textContent = "Processing…";
+
+      try {
+        setStatus("Signing in…", "info");
+        const token = await ensureToken(email, password);
+        renderAuthNav();
+        const authHeaders = {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + token
+        };
+
+        // 1. Sync each cart line to the server-side basket.
+        setStatus("Adding " + ids.length + " item(s) to your basket…", "info");
+        for (const id of ids) {
+          const it = cart[id];
+          const { res } = await api("/api/BasketItems", {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({ ProductId: Number(it.id), quantity: it.qty })
+          });
+          if (!res.ok) throw new Error("Failed to add '" + it.name + "' to basket (HTTP " + res.status + ").");
+        }
+
+        // 2. Check out the server basket (id is derived from the token server-side).
+        setStatus("Placing your order…", "info");
+        const { res, data } = await api("/rest/basket/0/checkout", {
+          method: "POST", headers: authHeaders
+        });
+        if (!res.ok) throw new Error((data && data.error) || ("Checkout failed (HTTP " + res.status + ")."));
+
+        const orderId = (data.data && data.data.orderId) || ("PIM-" + Date.now().toString(36).toUpperCase());
+
+        // 3. Success — clear local cart, show confirmation.
+        localStorage.removeItem(CART_KEY);
+        document.getElementById("cart-panel").style.display = "none";
+        document.getElementById("summary-panel").style.display = "none";
+        document.getElementById("order-id").textContent = orderId;
+        document.getElementById("confirm").classList.add("show");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch (err) {
+        setStatus("&#9888; " + err.message +
+          "<br><span style='opacity:.8'>Check that the backend is running at " + API_BASE + ".</span>", "err");
+        payBtn.disabled = false;
+        payBtn.textContent = original;
+      }
+    });
+
+    render();
+    renderAuthNav();
+  </script>
+</body>
+</html>

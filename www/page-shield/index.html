@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Page Shield &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" defer></script>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Page Shield / Workers</div>
+    <span class="tag">Page Shield</span>
+    <h1>Page <span class="grad">Shield</span></h1>
+    <p class="lead">This page loads a third-party script so Page Shield has something to inventory.</p>
+    <div class="note">Open <em>Security &rarr; Page Shield</em> in Cloudflare to see the connected/loaded scripts detected on this page.</div>
+    <pre id="libs">checking…</pre>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+  <script>
+    window.addEventListener('load', function(){
+      document.getElementById('libs').textContent = 'jQuery loaded: ' + (window.jQuery ? jQuery.fn.jquery : 'no');
+    });
+  </script>
+</body>
+</html>

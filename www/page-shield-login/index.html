@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Page Shield (Login) &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" defer></script>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Page Shield / Login</div>
+    <span class="tag">Page Shield</span>
+    <h1>Page Shield &mdash; <span class="grad">Login</span></h1>
+    <p class="lead">A login form monitored by Page Shield for script/skimmer changes (Magecart-style).</p>
+    <form class="panel" id="f">
+      <label>Email</label><input type="email" required />
+      <label>Password</label><input type="password" required />
+      <br /><br /><button class="btn" type="submit">Sign in</button>
+    </form>
+    <div id="result"></div>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+  <script>
+    document.getElementById('f').addEventListener('submit', function(e){ e.preventDefault();
+      var r=document.getElementById('result'); r.className='ok'; r.textContent='Submitted (demo).'; });
+  </script>
+</body>
+</html>

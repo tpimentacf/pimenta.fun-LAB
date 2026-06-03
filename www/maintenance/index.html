@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Under Maintenance &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab center">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Maintenance / From Origin</div>
+    <div class="big-code">&#128679;</div>
+    <h1>We&rsquo;ll be right back</h1>
+    <p class="lead">The Pimenta lab is undergoing scheduled maintenance.</p>
+    <p>
+      This page is served from the origin and is typically returned with HTTP
+      <code class="inline">503 Service Unavailable</code> plus a
+      <code class="inline">Retry-After</code> header during a maintenance window.
+    </p>
+    <div class="note" style="text-align:left">
+      In Cloudflare you can deliver this via a <strong>Custom Error Response</strong>, a
+      <strong>Snippet/Worker</strong>, or an <strong>Origin Rule</strong> redirecting traffic here while
+      the real origin is down.
+    </div>
+    <a class="btn" href="https://www.pimenta.fun">Back to home</a>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+</body>
+</html>

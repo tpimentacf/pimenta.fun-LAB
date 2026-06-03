@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pimenta.fun &mdash; Security Lab</title>
+  <meta name="description" content="Pimenta.fun security lab — shop, API, and chatbot test environment." />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a30;
+      --accent: #f6821f;
+      --accent2: #ff6b6b;
+      --text: #e8edf7;
+      --muted: #9aa6c0;
+      --border: #233056;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(1200px 600px at 20% -10%, #1b2547 0%, var(--bg) 55%);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+    header {
+      padding: 28px 6vw;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.5px; }
+    .brand span { color: var(--accent); }
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      margin-left: 22px;
+      font-size: 0.95rem;
+      transition: color 0.2s;
+    }
+    nav a:hover { color: var(--text); }
+    .hero {
+      padding: 80px 6vw 60px;
+      max-width: 900px;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(246,130,31,0.12);
+      color: var(--accent);
+      border: 1px solid rgba(246,130,31,0.4);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 22px;
+    }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.15; margin-bottom: 18px; }
+    .hero h1 .grad {
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero p { color: var(--muted); font-size: 1.1rem; max-width: 640px; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 22px;
+      padding: 20px 6vw 80px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      text-decoration: none;
+      color: var(--text);
+      transition: transform 0.2s, border-color 0.2s;
+      display: flex;
+      flex-direction: column;
+    }
+    .card:hover { transform: translateY(-4px); border-color: var(--accent); }
+    .card .icon { font-size: 1.8rem; margin-bottom: 14px; }
+    .card h3 { font-size: 1.25rem; margin-bottom: 8px; }
+    .card .url { color: var(--accent); font-size: 0.9rem; font-family: monospace; margin-bottom: 12px; }
+    .card p { color: var(--muted); font-size: 0.95rem; flex: 1; }
+    .card .go { margin-top: 18px; color: var(--accent); font-weight: 600; font-size: 0.9rem; }
+    .section-head { padding: 30px 6vw 0; max-width: 900px; }
+    .section-head h2 { font-size: 1.6rem; margin-bottom: 6px; }
+    .section-head p { color: var(--muted); font-size: 0.98rem; }
+    .doc-tag {
+      align-self: flex-start;
+      background: rgba(91,141,239,0.15);
+      color: #8fb4ff;
+      border: 1px solid rgba(91,141,239,0.4);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      padding: 3px 9px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+    }
+    .doc-tag.guide { background: rgba(54,211,153,0.15); color: #6ee7b7; border-color: rgba(54,211,153,0.4); }
+    .doc-tag.page  { background: rgba(246,130,31,0.15); color: #f6a85f; border-color: rgba(246,130,31,0.4); }
+    .doc-tag.soon  { background: rgba(154,166,192,0.12); color: var(--muted); border-color: var(--border); }
+
+    /* Tabbed feature tests */
+    .tabs-wrap { padding: 10px 6vw 30px; }
+    .tab-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      margin-bottom: 20px;
+    }
+    .tab-btn {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); border-color: var(--accent); }
+    .tab-btn.active { background: var(--accent); color: #1a1205; border-color: var(--accent); }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+    .link-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 12px;
+    }
+    .link-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+    }
+    .link-card h4 { font-size: 1rem; margin-bottom: 10px; color: var(--accent); }
+    .link-card ul { list-style: none; }
+    .link-card li { margin: 6px 0; }
+    .link-card a {
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .link-card a::before { content: "\2192"; color: var(--muted); }
+    .link-card a:hover { color: var(--accent); }
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 26px 6vw;
+      color: var(--muted);
+      font-size: 0.85rem;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .warn {
+      background: rgba(255,107,107,0.1);
+      border: 1px solid rgba(255,107,107,0.35);
+      color: #ffc4c4;
+      padding: 14px 18px;
+      border-radius: 12px;
+      margin: 0 6vw 30px;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">pimenta<span>.fun</span></div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://shop.pimenta.fun">Shop</a>
+      <a href="https://api.pimenta.fun">API</a>
+      <a href="#tests">Tests</a>
+      <a href="#docs">Docs</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <span class="badge">SECURITY LAB ENVIRONMENT</span>
+    <h1>Welcome to the <span class="grad">Pimenta.fun</span> Lab</h1>
+    <p>
+      A self-hosted playground for application security testing. Explore the storefront,
+      poke at the login flow, chat with the bot, and hit the vulnerable API powered by
+      OWASP Juice Shop.
+    </p>
+  </section>
+
+  <div class="warn">
+    &#9888; <strong>For authorized testing only.</strong> This environment is intentionally
+    vulnerable and built for learning and lab use. Do not deploy with real user data.
+  </div>
+
+  <section class="cards">
+    <a class="card" href="https://shop.pimenta.fun">
+      <div class="icon">&#128722;</div>
+      <h3>The Shop</h3>
+      <div class="url">shop.pimenta.fun</div>
+      <p>Browse products, sign in through the login endpoint, and try the embedded support chatbot.</p>
+      <div class="go">Open shop &rarr;</div>
+    </a>
+
+    <a class="card" href="https://api.pimenta.fun">
+      <div class="icon">&#128268;</div>
+      <h3>The API</h3>
+      <div class="url">api.pimenta.fun</div>
+      <p>OWASP Juice Shop API endpoint. REST routes for products, users, and authentication.</p>
+      <div class="go">View API &rarr;</div>
+    </a>
+
+    <a class="card" href="https://shop.pimenta.fun/login.html">
+      <div class="icon">&#128273;</div>
+      <h3>Login Endpoint</h3>
+      <div class="url">shop.pimenta.fun/login.html</div>
+      <p>Authentication form for the shop. A good target for testing auth and injection flaws.</p>
+      <div class="go">Go to login &rarr;</div>
+    </a>
+  </section>
+
+  <div class="section-head" id="docs">
+    <h2>Documents &amp; Implementations</h2>
+    <p>Guides, runbooks, and additional pages built for this lab. New implementations get added here.</p>
+  </div>
+
+  <section class="cards">
+    <a class="card" href="https://shop.pimenta.fun/checkout.html">
+      <span class="doc-tag page">Page</span>
+      <h3>Shopping Cart &amp; Checkout</h3>
+      <div class="url">shop.pimenta.fun/checkout.html</div>
+      <p>Cart with quantity controls, order summary, tax/shipping, and a demo checkout flow.</p>
+      <div class="go">Open checkout &rarr;</div>
+    </a>
+
+    <a class="card" href="https://api.pimenta.fun">
+      <span class="doc-tag page">Page</span>
+      <h3>API Endpoint Reference</h3>
+      <div class="url">api.pimenta.fun</div>
+      <p>Documented OWASP Juice Shop REST routes: auth, products, basket, feedback, and utility.</p>
+      <div class="go">View reference &rarr;</div>
+    </a>
+
+    <a class="card" href="DEPLOY.md">
+      <span class="doc-tag guide">Guide</span>
+      <h3>Apache Deployment Guide</h3>
+      <div class="url">DEPLOY.md</div>
+      <p>Step-by-step setup of the three vhosts on Ubuntu + Apache, with HTTPS via Certbot.</p>
+      <div class="go">Read guide &rarr;</div>
+    </a>
+
+    <a class="card" href="ddns/README.md">
+      <span class="doc-tag guide">Guide</span>
+      <h3>Cloudflare Dynamic DNS</h3>
+      <div class="url">ddns/README.md</div>
+      <p>Cron job that syncs www &amp; shop A records to the GCP VM's public IP every day.</p>
+      <div class="go">Read guide &rarr;</div>
+    </a>
+
+    <a class="card" href="#docs" style="cursor: default;">
+      <span class="doc-tag soon">Planned</span>
+      <h3>More implementations</h3>
+      <div class="url">coming soon</div>
+      <p>Add new lab pages and write-ups here as they're built &mdash; just drop another card in this section.</p>
+      <div class="go">&nbsp;</div>
+    </a>
+  </section>
+
+  <div class="section-head" id="tests">
+    <h2>Configuration Tests</h2>
+    <p>Pages to exercise specific Cloudflare features &amp; configurations. Pick a category tab.</p>
+  </div>
+
+  <div class="tabs-wrap">
+    <div class="tab-bar" id="tab-bar"></div>
+    <div id="tab-panes"></div>
+  </div>
+
+  <footer>
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab</span>
+    <span>GCE - Tiago Pimenta</span>
+  </footer>
+
+  <script>
+    // ---------------------------------------------------------------------
+    // Configuration test catalogue. Each tab is a category; each group is a
+    // card of links. Edit/extend freely — the tabs render from this data.
+    // ---------------------------------------------------------------------
+    const TESTS = [
+      { tab: "Challenges", groups: [
+        { title: "Challenge types", links: [
+          ["Managed challenge", "https://www.pimenta.fun/challenges/managed/"],
+          ["JS challenge", "https://www.pimenta.fun/challenges/javascript/"],
+          ["Interactive challenge", "https://www.pimenta.fun/challenges/interactive/"],
+          ["mTLS", "https://www.pimenta.fun/challenges/mtls/"],
+          ["JWT", "https://www.pimenta.fun/challenges/jwt/"]
+        ]}
+      ]},
+      { tab: "Rate Limiting", groups: [
+        { title: "Rules", links: [
+          ["5 Req / 1 Min", "https://www.pimenta.fun/ratelimiting/5r1m/"],
+          ["5 Req / 1 Min - Throttle", "https://www.pimenta.fun/ratelimiting/throttle/"],
+          ["Rate limit by Worker", "https://www.pimenta.fun/ratelimiting/worker-rl/"]
+        ]}
+      ]},
+      { tab: "Turnstile", groups: [
+        { title: "Widget modes", links: [
+          ["Managed", "https://www.pimenta.fun/turnstile/managed/"],
+          ["Non-interactive", "https://www.pimenta.fun/turnstile/non-interactive/"],
+          ["Invisible", "https://www.pimenta.fun/turnstile/invisible/"],
+          ["Pre-clearance", "https://www.pimenta.fun/turnstile/pre-clearance/"],
+          ["Demo", "https://www.pimenta.fun/turnstile/simple/"],
+          ["Login", "https://www.pimenta.fun/turnstile/login/"],
+          ["Browser troubleshooter", "https://browser-compat.turnstile.workers.dev/"]
+        ]}
+      ]},
+      { tab: "Error Pages", groups: [
+        { title: "Custom errors", links: [
+          ["403", "https://www.pimenta.fun/error/error403/"],
+          ["404", "https://www.pimenta.fun/error/error404/"],
+          ["406", "https://www.pimenta.fun/error/error406/"],
+          ["502", "https://www.pimenta.fun/error/error502/"],
+          ["CF default block page", "https://www.pimenta.fun/error/block/"]
+        ]}
+      ]},
+      { tab: "Page Shield", groups: [
+        { title: "Scenarios", links: [
+          ["Workers", "https://www.pimenta.fun/page-shield/"],
+          ["Login", "https://www.pimenta.fun/page-shield-login/"],
+          ["Origin", "https://www.pimenta.fun/page-shield/page-shield-origin/"],
+          ["LAB", "https://www.pimenta.fun/page-shield/page-shield-lab/"]
+        ]}
+      ]},
+      { tab: "API Shield", groups: [
+        { title: "Endpoints", links: [
+          ["API Shield dashboard", "https://www.pimenta.fun/api-shield/"],
+          ["API console", "https://api.pimenta.fun/"],
+          ["mTLS", "https://www.pimenta.fun/challenges/mtls/"],
+          ["Login with JWT", "https://www.pimenta.fun/forms/login-jwt.html"]
+        ]},
+        { title: "Sequence", links: [
+          ["Page 1", "https://www.pimenta.fun/api-shield/sequence/page1/"],
+          ["Page 2", "https://www.pimenta.fun/api-shield/sequence/page2/"],
+          ["Page 3", "https://www.pimenta.fun/api-shield/sequence/page3/"]
+        ]}
+      ]},
+      { tab: "Bot Management", groups: [
+        { title: "Tests", links: [
+          ["Delay-action", "https://www.pimenta.fun/delay-action/"],
+          ["Chatbot", "https://shop.pimenta.fun/"]
+        ]}
+      ]},
+      { tab: "Cache", groups: [
+        { title: "Cache control", links: [
+          ["Cloudflare-CDN-Cache-Control", "https://www.pimenta.fun/cache/cloudflare-cdn-cache-control/"],
+          ["Override via Workers", "https://www.pimenta.fun/cache/cache-worker/"]
+        ]}
+      ]},
+      { tab: "Forms", groups: [
+        { title: "Forms protection", links: [
+          ["Contact form", "https://www.pimenta.fun/forms/contact.html"],
+          ["Login form", "https://shop.pimenta.fun/login.html"],
+          ["Signup protection", "https://www.pimenta.fun/forms/signup/"],
+          ["Login demo", "https://www.pimenta.fun/login-demo/"]
+        ]}
+      ]},
+      { tab: "Maintenance", groups: [
+        { title: "Maintenance modes", links: [
+          ["From origin", "https://www.pimenta.fun/maintenance/"],
+          ["From snippets", "https://www.pimenta.fun/maintenance-snippets/"],
+          ["Origin response 204", "https://www.pimenta.fun/error/error204/"]
+        ]}
+      ]},
+      { tab: "Content Scanning", groups: [
+        { title: "Uploads", links: [
+          ["Upload file to R2", "https://www.pimenta.fun/media/upload/"],
+          ["Content scanning lab", "https://www.pimenta.fun/content-scanning-lab/"]
+        ]}
+      ]},
+      { tab: "Security Solutions", groups: [
+        { title: "Tools & tests", links: [
+          ["WAF testing (GoTestWAF)", "https://www.pimenta.fun/gotestwaf/"],
+          ["Response headers", "https://www.pimenta.fun/response-headers.html"],
+          ["security.txt", "https://www.pimenta.fun/.well-known/security.txt"],
+          ["Password spraying protection", "https://www.pimenta.fun/security-solutions/password-spraying/"],
+          ["E-commerce features", "https://www.pimenta.fun/security-solutions/e-commerce/"],
+          ["Firewall for AI & LLMs", "https://www.pimenta.fun/security-solutions/firewall-for-ai-llm/"]
+        ]}
+      ]}
+    ];
+
+    function escAttr(s) {
+      return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    const tabBar = document.getElementById("tab-bar");
+    const tabPanes = document.getElementById("tab-panes");
+
+    TESTS.forEach((cat, i) => {
+      // Tab button
+      const btn = document.createElement("button");
+      btn.className = "tab-btn" + (i === 0 ? " active" : "");
+      btn.textContent = cat.tab;
+      btn.dataset.index = i;
+      tabBar.appendChild(btn);
+
+      // Pane
+      const pane = document.createElement("div");
+      pane.className = "tab-pane" + (i === 0 ? " active" : "");
+      pane.dataset.index = i;
+
+      const grid = document.createElement("div");
+      grid.className = "link-grid";
+      cat.groups.forEach(g => {
+        const card = document.createElement("div");
+        card.className = "link-card";
+        const links = g.links.map(([label, url]) =>
+          '<li><a href="' + escAttr(url) + '">' + escAttr(label) + '</a></li>'
+        ).join("");
+        card.innerHTML = "<h4>" + escAttr(g.title) + "</h4><ul>" + links + "</ul>";
+        grid.appendChild(card);
+      });
+      pane.appendChild(grid);
+      tabPanes.appendChild(pane);
+    });
+
+    tabBar.addEventListener("click", (e) => {
+      const btn = e.target.closest(".tab-btn");
+      if (!btn) return;
+      const idx = btn.dataset.index;
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b === btn));
+      document.querySelectorAll(".tab-pane").forEach(p => p.classList.toggle("active", p.dataset.index === idx));
+    });
+  </script>
+</body>
+</html>

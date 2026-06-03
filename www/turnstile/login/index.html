@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turnstile Login &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Turnstile / Login</div>
+    <span class="tag">Turnstile</span>
+    <h1>Turnstile <span class="grad">Login</span></h1>
+    <form class="panel" id="f">
+      <label for="u">Email</label><input id="u" type="email" placeholder="you@example.com" required />
+      <label for="p">Password</label><input id="p" type="password" placeholder="password" required />
+      <br /><br /><div class="cf-turnstile" data-sitekey="1x00000000000000000000AA" data-theme="dark"></div>
+      <br /><button class="btn" type="submit">Sign in</button>
+    </form>
+    <div id="result"></div>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+  <script>
+    document.getElementById('f').addEventListener('submit', function(e){ e.preventDefault();
+      var r = document.getElementById('result'); r.className='ok';
+      r.textContent = 'Demo login submitted with a Turnstile token.'; });
+  </script>
+</body>
+</html>

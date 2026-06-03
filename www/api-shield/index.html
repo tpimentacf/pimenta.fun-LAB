@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Shield Dashboard &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .ep-list { list-style: none; }
+    .ep-list li { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    .ep-list li:last-child { border-bottom: none; }
+    .m { font-family: ui-monospace, monospace; font-weight: 700; font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; min-width: 50px; text-align: center; }
+    .m.get { background: rgba(91,141,239,0.15); color: var(--blue); border: 1px solid rgba(91,141,239,0.4); }
+    .m.post { background: rgba(54,211,153,0.15); color: var(--green); border: 1px solid rgba(54,211,153,0.4); }
+    .p { font-family: ui-monospace, monospace; color: var(--text); }
+    .ep-list .auth { margin-left: auto; font-size: 0.72rem; color: var(--accent); border: 1px solid rgba(246,130,31,0.4); padding: 1px 7px; border-radius: 999px; }
+    .feat { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 12px; }
+    .feat a { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-decoration: none; color: var(--text); display: block; }
+    .feat a:hover { border-color: var(--accent); }
+    .feat h4 { color: var(--accent); margin-bottom: 6px; font-size: 0.98rem; }
+    .feat p { margin: 0; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+      <a href="https://api.pimenta.fun">API Console</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / API Shield / Dashboard</div>
+    <span class="tag">API Shield</span>
+    <h1>API Shield <span class="grad">Dashboard</span></h1>
+    <p class="lead">Overview of the lab API and the API Shield protections you can exercise against it.</p>
+
+    <div class="metrics" id="metrics">
+      <div class="metric"><div class="n" id="m-status">…</div><div class="l">API status</div></div>
+      <div class="metric"><div class="n" id="m-products">…</div><div class="l">Products</div></div>
+      <div class="metric"><div class="n" id="m-uptime">…</div><div class="l">Uptime (s)</div></div>
+    </div>
+    <button class="btn" id="refresh">&#8635; Refresh</button>
+
+    <h2>Protections to test</h2>
+    <div class="feat">
+      <a href="https://www.pimenta.fun/forms/login-jwt.html"><h4>JWT validation</h4><p>Get a token and call protected routes.</p></a>
+      <a href="https://www.pimenta.fun/challenges/mtls/"><h4>mTLS</h4><p>Require a client certificate.</p></a>
+      <a href="https://www.pimenta.fun/api-shield/sequence/page1/"><h4>Sequence mitigation</h4><p>Enforce call order 1&rarr;2&rarr;3.</p></a>
+      <a href="https://www.pimenta.fun/ratelimiting/5r1m/"><h4>Rate limiting</h4><p>Throttle abusive clients.</p></a>
+      <a href="https://api.pimenta.fun/"><h4>Schema / discovery</h4><p>Browse routes in the API console.</p></a>
+      <a href="https://www.pimenta.fun/security-solutions/firewall-for-ai-llm/"><h4>Firewall for AI</h4><p>Guardrails for LLM endpoints.</p></a>
+    </div>
+
+    <h2>Endpoints</h2>
+    <div class="panel">
+      <ul class="ep-list">
+        <li><span class="m post">POST</span><span class="p">/rest/user/login</span></li>
+        <li><span class="m post">POST</span><span class="p">/api/Users</span></li>
+        <li><span class="m get">GET</span><span class="p">/rest/user/whoami</span><span class="auth">JWT</span></li>
+        <li><span class="m get">GET</span><span class="p">/api/Products</span></li>
+        <li><span class="m get">GET</span><span class="p">/rest/products/search?q=</span></li>
+        <li><span class="m post">POST</span><span class="p">/api/BasketItems</span><span class="auth">JWT</span></li>
+        <li><span class="m post">POST</span><span class="p">/rest/basket/:id/checkout</span><span class="auth">JWT</span></li>
+        <li><span class="m get">GET</span><span class="p">/api/Orders</span><span class="auth">JWT</span></li>
+      </ul>
+      <p style="margin-top:12px"><a class="btn" href="https://api.pimenta.fun/">Open the interactive API console &rarr;</a></p>
+    </div>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+
+  <script>
+    const API_BASE = "https://api.pimenta.fun";
+    async function load() {
+      const setS = (id, v) => { document.getElementById(id).textContent = v; };
+      setS("m-status", "…"); setS("m-products", "…"); setS("m-uptime", "…");
+      try {
+        const res = await fetch(API_BASE + "/health", { cache: "no-store" });
+        const j = await res.json();
+        setS("m-status", j.status === "ok" ? "UP" : "DOWN");
+        setS("m-products", (j.counts && j.counts.products != null) ? j.counts.products : "?");
+        setS("m-uptime", j.uptime_seconds != null ? j.uptime_seconds : "?");
+      } catch (e) {
+        setS("m-status", "DOWN"); setS("m-products", "—"); setS("m-uptime", "—");
+      }
+    }
+    document.getElementById("refresh").addEventListener("click", load);
+    load();
+  </script>
+</body>
+</html>

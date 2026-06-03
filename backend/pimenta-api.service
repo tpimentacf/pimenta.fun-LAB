@@ -1,0 +1,38 @@
+# /etc/systemd/system/pimenta-api.service
+#
+# Long-running Pimenta API. Starts on boot and restarts automatically on crash.
+
+[Unit]
+Description=Pimenta API (Express + SQLite)
+Documentation=https://api.pimenta.fun
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pimenta
+Group=pimenta
+WorkingDirectory=/opt/pimenta-api
+EnvironmentFile=/etc/pimenta-api/pimenta-api.env
+ExecStart=/usr/bin/node /opt/pimenta-api/server.js
+
+# --- Auto-restart policy ---
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=0   # never give up restarting
+
+# --- Hardening / persistence ---
+# DB lives here and survives reboots; service user owns it.
+StateDirectory=pimenta-api
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+# Logs go to the journal (view with: journalctl -u pimenta-api -f)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pimenta-api
+
+[Install]
+WantedBy=multi-user.target

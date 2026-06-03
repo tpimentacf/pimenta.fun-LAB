@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Orders &mdash; Pimenta Shop</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a30;
+      --panel2: #0f1528;
+      --accent: #f6821f;
+      --accent2: #ff6b6b;
+      --green: #36d399;
+      --text: #e8edf7;
+      --muted: #9aa6c0;
+      --border: #233056;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+    }
+    header {
+      padding: 20px 5vw; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border); position: sticky; top: 0;
+      background: rgba(11,16,32,0.92); backdrop-filter: blur(8px); z-index: 50;
+    }
+    .brand { font-size: 1.3rem; font-weight: 700; }
+    .brand span { color: var(--accent); }
+    nav a { color: var(--muted); text-decoration: none; margin-left: 20px; font-size: 0.95rem; }
+    nav a:hover { color: var(--text); }
+    .btn {
+      background: var(--accent); color: #1a1205; border: none; padding: 9px 18px;
+      border-radius: 8px; font-weight: 600; cursor: pointer; text-decoration: none; font-size: 0.9rem;
+    }
+    .btn:hover { filter: brightness(1.05); }
+    #auth-nav { display: inline-flex; align-items: center; margin-left: 20px; gap: 12px; }
+    #auth-nav .who { color: var(--text); font-size: 0.9rem; }
+    #auth-nav .who b { color: var(--accent); font-weight: 600; }
+    #auth-nav a { margin-left: 0; }
+
+    h1 { padding: 40px 5vw 6px; font-size: 2rem; }
+    .sub { padding: 0 5vw; color: var(--muted); }
+    .wrap { padding: 24px 5vw 80px; max-width: 900px; }
+
+    .state {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+      padding: 30px; text-align: center; color: var(--muted);
+    }
+    .state a { color: var(--accent); text-decoration: none; }
+    .state.err { background: rgba(255,107,107,0.1); border-color: rgba(255,107,107,0.35); color: #ffc4c4; }
+
+    .order {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+      padding: 18px 20px; margin-bottom: 14px;
+    }
+    .order-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+    .order-id { font-family: monospace; font-weight: 700; color: var(--accent); font-size: 1rem; }
+    .order-date { color: var(--muted); font-size: 0.85rem; }
+    .order-total { color: var(--green); font-weight: 700; font-size: 1.1rem; }
+    .lines { border-top: 1px solid var(--border); padding-top: 10px; }
+    .line { display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.9rem; }
+    .line .nm { color: var(--text); }
+    .line .nm span { color: var(--muted); }
+    .line .lt { color: var(--muted); font-family: monospace; }
+    footer { padding: 22px 5vw; color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--border); text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">pimenta<span>.fun</span> shop</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="index.html">Shop</a>
+      <a href="checkout.html">Cart</a>
+      <a href="orders.html">Orders</a>
+      <span id="auth-nav"></span>
+    </nav>
+  </header>
+
+  <h1>My Orders</h1>
+  <p class="sub">Your past checkouts, pulled live from api.pimenta.fun.</p>
+
+  <div class="wrap" id="orders-wrap">
+    <div class="state" id="loading">Loading…</div>
+  </div>
+
+  <footer>Order history &mdash; lab use only.</footer>
+
+  <script>
+    const API_BASE = "https://api.pimenta.fun";
+    const TOKEN_KEY = "pimenta_api_token";
+    const wrap = document.getElementById("orders-wrap");
+
+    function escHtml(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+    function money(n) { return "$" + Number(n || 0).toFixed(2); }
+    function fmtDate(s) {
+      const d = new Date((s || "").replace(" ", "T") + "Z");
+      return isNaN(d) ? (s || "") : d.toLocaleString();
+    }
+
+    // ---- Auth nav ----
+    function decodeJwtEmail(token) {
+      try {
+        const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        return JSON.parse(decodeURIComponent(escape(atob(part)))).email || null;
+      } catch (e) { return null; }
+    }
+    function renderAuthNav() {
+      const el = document.getElementById("auth-nav");
+      const token = (localStorage.getItem(TOKEN_KEY) || "").trim();
+      const email = token ? decodeJwtEmail(token) : null;
+      if (token && email) {
+        el.innerHTML = '<span class="who">&#128100; Signed in as <b>' + escHtml(email) + '</b></span>' +
+                       '<a href="#" id="logout-link">Logout</a>';
+        document.getElementById("logout-link").addEventListener("click", (e) => {
+          e.preventDefault();
+          localStorage.removeItem(TOKEN_KEY);
+          renderAuthNav();
+          loadOrders();
+        });
+      } else {
+        el.innerHTML = '<a class="btn" href="login.html">Login</a>';
+      }
+    }
+
+    // ---- Orders ----
+    function renderOrders(orders) {
+      if (!orders.length) {
+        wrap.innerHTML = '<div class="state">No orders yet. <a href="index.html">Start shopping &rarr;</a></div>';
+        return;
+      }
+      wrap.innerHTML = "";
+      orders.forEach(o => {
+        const lines = (o.items || []).map(it =>
+          '<div class="line">' +
+            '<span class="nm">' + escHtml(it.name) + ' <span>&times; ' + (it.quantity || 1) + '</span></span>' +
+            '<span class="lt">' + money(it.price * (it.quantity || 1)) + '</span>' +
+          '</div>'
+        ).join("");
+        const card = document.createElement("div");
+        card.className = "order";
+        card.innerHTML =
+          '<div class="order-head">' +
+            '<span class="order-id">' + escHtml(o.orderId) + '</span>' +
+            '<span class="order-date">' + escHtml(fmtDate(o.created_at)) + '</span>' +
+            '<span class="order-total">' + money(o.total) + '</span>' +
+          '</div>' +
+          '<div class="lines">' + lines + '</div>';
+        wrap.appendChild(card);
+      });
+    }
+
+    async function loadOrders() {
+      const token = (localStorage.getItem(TOKEN_KEY) || "").trim();
+      if (!token) {
+        wrap.innerHTML = '<div class="state">Please <a href="login.html">sign in</a> to view your orders.</div>';
+        return;
+      }
+      wrap.innerHTML = '<div class="state">Loading your orders…</div>';
+      try {
+        const res = await fetch(API_BASE + "/api/Orders", {
+          headers: { "Authorization": "Bearer " + token }
+        });
+        if (res.status === 401) {
+          localStorage.removeItem(TOKEN_KEY);
+          renderAuthNav();
+          wrap.innerHTML = '<div class="state">Session expired. Please <a href="login.html">sign in</a> again.</div>';
+          return;
+        }
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const json = await res.json();
+        renderOrders(json.data || []);
+      } catch (err) {
+        wrap.innerHTML = '<div class="state err">&#9888; Could not load orders (' + escHtml(err.message) +
+          ').<br>Check the backend is running at ' + escHtml(API_BASE) + '.</div>';
+      }
+    }
+
+    renderAuthNav();
+    loadOrders();
+  </script>
+</body>
+</html>

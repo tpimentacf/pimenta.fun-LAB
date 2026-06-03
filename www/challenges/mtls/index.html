@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mTLS &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Challenges / mTLS</div>
+    <span class="tag">mTLS</span>
+    <h1>Mutual TLS <span class="grad">(mTLS)</span></h1>
+    <p class="lead">Require clients to present a valid X.509 certificate before they can reach a protected endpoint.</p>
+
+    <div class="ok">&#10003; If you can read this over <code class="inline">https://</code>, the page itself loaded. mTLS enforcement is applied by Cloudflare on the protected route (see below).</div>
+
+    <h2>Live client-certificate check</h2>
+    <p>This calls a protected endpoint and shows what the edge reports about your client certificate.</p>
+    <button class="btn" id="check">Check my client certificate</button>
+    <pre id="out">(not checked yet)</pre>
+    <div class="note">
+      Browsers only send a client cert if one is installed and the site requests it. The check hits
+      <code class="inline">/cdn-cgi/access/get-identity</code> style data via a Worker route; in this lab it
+      returns the <code class="inline">cf-client-cert-*</code> headers if mTLS is configured.
+    </div>
+
+    <h2>How to configure (Cloudflare)</h2>
+    <ul class="bullets">
+      <li><em>SSL/TLS &rarr; Client Certificates</em>: create or upload a CA, then enable a hostname for mTLS.</li>
+      <li><em>Security &rarr; WAF &rarr; Custom rules</em>: add a rule like
+        <code class="inline">not cf.tls_client_auth.cert_verified</code> &rarr; <strong>Block</strong> for this path.</li>
+      <li>For APIs, enable <strong>API Shield &rarr; mTLS</strong> and bind the client-cert to your endpoints.</li>
+    </ul>
+
+    <h2>Test from the CLI</h2>
+    <p>Generate a client cert from your CA, then call the endpoint with it:</p>
+    <pre># create a client key + CSR, sign with your CA
+openssl req -newkey rsa:2048 -nodes -keyout client.key -out client.csr -subj "/CN=lab-client"
+openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -set_serial 01 -out client.crt -days 365
+
+# call WITHOUT a cert (should be blocked once mTLS is enforced):
+curl -i https://mtls.pimenta.fun/
+
+# call WITH the client cert (should succeed):
+curl -i --cert client.crt --key client.key https://mtls.pimenta.fun/</pre>
+
+    <p><a class="btn ghost" href="https://www.pimenta.fun/#tests">&larr; Back to tests</a></p>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+
+  <script>
+    document.getElementById("check").addEventListener("click", async () => {
+      const out = document.getElementById("out");
+      out.textContent = "Checking…";
+      try {
+        // Protected route returns client-cert details when mTLS is configured.
+        const res = await fetch("https://api.pimenta.fun/rest/user/whoami", { cache: "no-store" });
+        const lines = ["GET /rest/user/whoami -> " + res.status + " " + res.statusText, ""];
+        ["cf-client-cert-presented","cf-client-cert-verified","cf-client-cert-subject-dn","cf-ray"].forEach(h => {
+          const v = res.headers.get(h);
+          if (v) lines.push(h + ": " + v);
+        });
+        if (lines.length === 2) lines.push("(no client-certificate headers exposed — mTLS not configured on this route, or no cert presented)");
+        out.textContent = lines.join("\n");
+      } catch (e) {
+        out.textContent = "Error: " + e.message + "\nIf mTLS is enforced and you have no client cert, the request is expected to fail.";
+      }
+    });
+  </script>
+</body>
+</html>

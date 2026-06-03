@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>5 Req / 1 Min (Throttle) &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Rate Limiting / 5 Req / 1 Min (Throttle)</div>
+    <span class="tag">Rate limiting</span>
+    <h1>5 Req / 1 Min (Throttle)</h1>
+    <p class="lead">Throttle action slows excess requests instead of blocking outright.</p>
+    <div class="panel">
+      <button class="btn" id="one">Send 1 request</button>
+      &nbsp; <button class="btn ghost" id="ten">Burst 10</button>
+      <h2>Responses (newest first)</h2>
+      <div id="log"></div>
+    </div>
+    <div class="note">Watch for HTTP <code class="inline">429 Too Many Requests</code> once the configured threshold is exceeded.</div>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+  <script>
+    var n = 0;
+    function hit() {
+      n++;
+      var idx = n;
+      var t0 = performance.now();
+      fetch(location.href, { cache: 'no-store' }).then(function (r) {
+        log(idx, r.status, Math.round(performance.now() - t0));
+      }).catch(function (e) { log(idx, 'ERR', '-'); });
+    }
+    function burst(k) { for (var i = 0; i < k; i++) hit(); }
+    function log(idx, status, ms) {
+      var cls = (status === 429) ? 'warn' : 'ok';
+      var el = document.getElementById('log');
+      var line = document.createElement('div');
+      line.textContent = '#' + idx + '  ->  ' + status + '  (' + ms + ' ms)';
+      line.style.color = (status === 429) ? '#ffc4c4' : '#b6f5dc';
+      el.prepend(line);
+    }
+    document.getElementById('one').addEventListener('click', function () { hit(); });
+    document.getElementById('ten').addEventListener('click', function () { burst(10); });
+  </script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cloudflare-CDN-Cache-Control &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Cache / Cloudflare-CDN-Cache-Control</div>
+    <span class="tag">Cache</span>
+    <h1>Cloudflare-CDN-Cache-Control</h1>
+    <p class="lead">Tests the Cloudflare-specific edge cache TTL header, separate from the browser's Cache-Control.</p>
+    <button class="btn" id="go">&#8635; Check cache headers</button>
+    <h2>Cache headers</h2>
+    <pre id="hdr">…</pre>
+    <div class="note">Look at <code class="inline">cf-cache-status</code> (HIT/MISS/DYNAMIC) and the TTL headers.</div>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+  <script>
+    async function check(){
+      var out = document.getElementById('hdr'); out.textContent='Fetching…';
+      try{ var res = await fetch(location.href, {cache:'no-store'});
+        var keys=['cf-cache-status','age','cache-control','cloudflare-cdn-cache-control','last-modified','etag','cf-ray'];
+        var lines=[]; keys.forEach(function(k){ var v=res.headers.get(k); if(v) lines.push(k+': '+v); });
+        out.textContent = lines.length ? lines.join('\n') : '(no cache headers readable)';
+      }catch(e){ out.textContent='Error: '+e.message; }
+    }
+    document.getElementById('go').addEventListener('click', check); check();
+  </script>
+</body>
+</html>

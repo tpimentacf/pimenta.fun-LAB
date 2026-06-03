@@ -1,0 +1,71 @@
+/* Shared styling for Pimenta lab test pages. Served at /assets/lab.css */
+:root {
+  --bg: #0b1020;
+  --panel: #131a30;
+  --panel2: #0f1528;
+  --accent: #f6821f;
+  --accent2: #ff6b6b;
+  --green: #36d399;
+  --blue: #5b8def;
+  --text: #e8edf7;
+  --muted: #9aa6c0;
+  --border: #233056;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: radial-gradient(1100px 500px at 20% -10%, #1b2547 0%, var(--bg) 55%);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+header.lab {
+  padding: 18px 6vw;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.lab .brand { font-size: 1.2rem; font-weight: 700; }
+.lab .brand span { color: var(--accent); }
+.lab nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: 0.92rem; }
+.lab nav a:hover { color: var(--text); }
+main.lab { max-width: 820px; margin: 0 auto; padding: 48px 6vw 80px; }
+.crumb { color: var(--muted); font-size: 0.82rem; margin-bottom: 14px; }
+.crumb a { color: var(--accent); text-decoration: none; }
+.tag {
+  display: inline-block; background: rgba(246,130,31,0.12); color: var(--accent);
+  border: 1px solid rgba(246,130,31,0.4); padding: 4px 12px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px;
+}
+h1 { font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 1.15; margin-bottom: 14px; }
+h1 .grad { background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+h2 { font-size: 1.25rem; margin: 26px 0 12px; }
+p { color: var(--muted); margin-bottom: 14px; }
+p.lead { color: var(--text); font-size: 1.05rem; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; margin: 18px 0; }
+.note { background: rgba(91,141,239,0.1); border: 1px solid rgba(91,141,239,0.35); color: #bcd3ff; border-radius: 12px; padding: 14px 16px; font-size: 0.9rem; margin: 16px 0; }
+.warn { background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.35); color: #ffc4c4; border-radius: 12px; padding: 14px 16px; font-size: 0.9rem; margin: 16px 0; }
+.ok   { background: rgba(54,211,153,0.1); border: 1px solid rgba(54,211,153,0.4); color: #b6f5dc; border-radius: 12px; padding: 14px 16px; font-size: 0.9rem; margin: 16px 0; }
+ul.bullets { color: var(--muted); margin: 0 0 14px 20px; }
+ul.bullets li { margin: 5px 0; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+code.inline { background: #1b2547; padding: 2px 6px; border-radius: 5px; font-size: 0.85rem; color: #d7e2f7; }
+pre { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 0.85rem; color: #d7e2f7; white-space: pre-wrap; word-break: break-word; }
+.btn { display: inline-block; background: var(--accent); color: #1a1205; border: none; padding: 11px 18px; border-radius: 9px; font-weight: 700; font-size: 0.95rem; cursor: pointer; text-decoration: none; font-family: inherit; }
+.btn:hover { filter: brightness(1.05); }
+.btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+label { display: block; font-size: 0.82rem; color: var(--muted); margin: 14px 0 6px; }
+input, textarea, select {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  border-radius: 9px; padding: 11px 13px; font-size: 0.95rem; font-family: inherit;
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+.big-code { font-size: clamp(4rem, 14vw, 8rem); font-weight: 800; line-height: 1; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.center { text-align: center; }
+.metrics { display: flex; gap: 14px; flex-wrap: wrap; margin: 16px 0; }
+.metric { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; min-width: 120px; }
+.metric .n { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+.metric .l { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.4px; }
+footer.lab { border-top: 1px solid var(--border); padding: 22px 6vw; color: var(--muted); font-size: 0.82rem; text-align: center; }
+footer.lab a { color: var(--accent); text-decoration: none; }

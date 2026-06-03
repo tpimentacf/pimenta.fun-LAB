@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upload to R2 &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Content Scanning / Upload to R2</div>
+    <span class="tag">Content Scanning</span>
+    <h1>Upload to <span class="grad">R2</span></h1>
+    <p class="lead">Upload a file to exercise Cloudflare WAF Content Scanning.</p>
+    <form class="panel" id="f">
+      <label>Choose a file</label><input id="file" type="file" />
+      <br /><br /><button class="btn" type="submit">Upload</button>
+    </form>
+    <div id="result"></div>
+    <div class="note">Try the EICAR test file to see Content Scanning flag a malicious upload.</div>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+  <script>
+    document.getElementById('f').addEventListener('submit', function(e){ e.preventDefault();
+      var f=document.getElementById('file').files[0];
+      var r=document.getElementById('result'); r.className='ok';
+      r.textContent = f ? ('Selected: '+f.name+' ('+f.size+' bytes). Wire to a Worker/R2 to upload.') : 'Pick a file first.'; });
+  </script>
+</body>
+</html>

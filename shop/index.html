@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pimenta Shop</title>
+  <meta name="description" content="Pimenta.fun shop — products, login, and support chatbot." />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a30;
+      --accent: #f6821f;
+      --accent2: #ff6b6b;
+      --green: #36d399;
+      --text: #e8edf7;
+      --muted: #9aa6c0;
+      --border: #233056;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      padding: 20px 5vw;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: rgba(11,16,32,0.92);
+      backdrop-filter: blur(8px);
+      z-index: 50;
+    }
+    .brand { font-size: 1.3rem; font-weight: 700; }
+    .brand span { color: var(--accent); }
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      margin-left: 20px;
+      font-size: 0.95rem;
+    }
+    nav a:hover { color: var(--text); }
+    .btn {
+      background: var(--accent);
+      color: #1a1205;
+      border: none;
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .btn:hover { filter: brightness(1.05); }
+    .hero {
+      padding: 50px 5vw 20px;
+    }
+    .hero h1 { font-size: 2.2rem; margin-bottom: 8px; }
+    .hero p { color: var(--muted); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 22px;
+      padding: 30px 5vw 100px;
+    }
+    .product {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .product:hover { transform: translateY(-4px); border-color: var(--accent); }
+    .product .thumb {
+      height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+      background: linear-gradient(135deg, #1b2547, #131a30);
+    }
+    .product .body { padding: 16px; flex: 1; display: flex; flex-direction: column; }
+    .product h3 { font-size: 1.05rem; margin-bottom: 6px; }
+    .product .desc { color: var(--muted); font-size: 0.85rem; flex: 1; margin-bottom: 12px; }
+    .product .row { display: flex; align-items: center; justify-content: space-between; }
+    .price { color: var(--green); font-weight: 700; font-size: 1.1rem; }
+    .add {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 6px 12px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .add:hover { background: var(--accent); color: #1a1205; }
+
+    /* Cart link + badge */
+    .cart-link { position: relative; display: inline-flex; align-items: center; }
+    .cart-badge {
+      position: absolute;
+      top: -8px;
+      right: -12px;
+      background: var(--accent2);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+    .cart-badge.show { display: inline-flex; }
+    #auth-nav { display: inline-flex; align-items: center; margin-left: 20px; gap: 12px; }
+    #auth-nav .who { color: var(--text); font-size: 0.9rem; }
+    #auth-nav .who b { color: var(--accent); font-weight: 600; }
+    #auth-nav a { margin-left: 0; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--green);
+      color: #06281c;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s, transform 0.25s;
+      z-index: 200;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Chatbot */
+    #chat-toggle {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #1a1205;
+      border: none;
+      font-size: 1.6rem;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 100;
+    }
+    #chat-box {
+      position: fixed;
+      bottom: 96px;
+      right: 24px;
+      width: 340px;
+      max-width: calc(100vw - 48px);
+      height: 460px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      z-index: 100;
+    }
+    #chat-box.open { display: flex; }
+    .chat-head {
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      color: #1a1205;
+      padding: 14px 16px;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .chat-head small { display: block; font-weight: 500; font-size: 0.75rem; opacity: 0.8; }
+    .chat-close { background: none; border: none; cursor: pointer; font-size: 1.1rem; color: #1a1205; }
+    .chat-log {
+      flex: 1;
+      padding: 14px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .msg { padding: 9px 13px; border-radius: 12px; font-size: 0.9rem; max-width: 80%; line-height: 1.4; }
+    .msg.bot { background: #1b2547; align-self: flex-start; border-bottom-left-radius: 3px; }
+    .msg.user { background: var(--accent); color: #1a1205; align-self: flex-end; border-bottom-right-radius: 3px; }
+    .chat-input {
+      display: flex;
+      border-top: 1px solid var(--border);
+      padding: 10px;
+      gap: 8px;
+    }
+    .chat-input input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.9rem;
+    }
+    .chat-input input:focus { outline: none; border-color: var(--accent); }
+    .chat-input button {
+      background: var(--accent);
+      border: none;
+      color: #1a1205;
+      border-radius: 8px;
+      padding: 0 14px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">pimenta<span>.fun</span> shop</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://api.pimenta.fun">API</a>
+      <a class="cart-link" href="checkout.html" aria-label="View cart">
+        &#128722; Cart<span class="cart-badge" id="cart-badge">0</span>
+      </a>
+      <a href="orders.html">Orders</a>
+      <span id="auth-nav"></span>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <h1>Shop Items</h1>
+    <p>Fresh-pressed goods from the Pimenta lab. Add to cart, then sign in to check out.</p>
+  </section>
+
+  <section class="grid" id="product-grid"></section>
+
+  <div id="toast"></div>
+
+  <!-- Chatbot widget -->
+  <button id="chat-toggle" aria-label="Open chat">&#128172;</button>
+  <div id="chat-box">
+    <div class="chat-head">
+      <div>Pimenta Support Bot <small>Ask about products or your order</small></div>
+      <button class="chat-close" id="chat-close" aria-label="Close chat">&times;</button>
+    </div>
+    <div class="chat-log" id="chat-log"></div>
+    <form class="chat-input" id="chat-form">
+      <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off" />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+
+  <script>
+    // ---- Live backend ----
+    const API_BASE = "https://api.pimenta.fun";   // real pimenta API
+    const TOKEN_KEY = "pimenta_api_token";          // shared JWT (login + checkout + API console)
+
+    // ---- Auth state in the nav ("Signed in as …" / Logout) ----
+    function decodeJwtEmail(token) {
+      try {
+        const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        const payload = JSON.parse(decodeURIComponent(escape(atob(part))));
+        return payload.email || null;
+      } catch (e) { return null; }
+    }
+    function renderAuthNav() {
+      const el = document.getElementById("auth-nav");
+      const token = (localStorage.getItem(TOKEN_KEY) || "").trim();
+      const email = token ? decodeJwtEmail(token) : null;
+      if (token && email) {
+        el.innerHTML = '<span class="who">&#128100; Signed in as <b>' + esc(email) + '</b></span>' +
+                       '<a href="#" id="logout-link">Logout</a>';
+        document.getElementById("logout-link").addEventListener("click", (e) => {
+          e.preventDefault();
+          localStorage.removeItem(TOKEN_KEY);
+          renderAuthNav();
+        });
+      } else {
+        el.innerHTML = '<a class="btn" href="login.html">Login</a>';
+      }
+    }
+
+    // ---- Cart model (shared with checkout.html via localStorage) ----
+    const CART_KEY = "pimenta_cart";
+    function getCart() {
+      try { return JSON.parse(localStorage.getItem(CART_KEY)) || {}; }
+      catch (e) { return {}; }
+    }
+    function saveCart(cart) { localStorage.setItem(CART_KEY, JSON.stringify(cart)); }
+    function cartCount(cart) {
+      return Object.values(cart).reduce((n, item) => n + item.qty, 0);
+    }
+    function updateBadge() {
+      const badge = document.getElementById("cart-badge");
+      const n = cartCount(getCart());
+      badge.textContent = n;
+      badge.classList.toggle("show", n > 0);
+    }
+    function addToCart(product) {
+      const cart = getCart();
+      if (cart[product.id]) {
+        cart[product.id].qty += 1;
+      } else {
+        cart[product.id] = { id: product.id, name: product.name, price: product.price, emoji: product.emoji, qty: 1 };
+      }
+      saveCart(cart);
+      updateBadge();
+      showToast(product.name + " added to cart");
+    }
+
+    let toastTimer;
+    function showToast(text) {
+      const t = document.getElementById("toast");
+      t.textContent = text;
+      t.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+    }
+
+    // ---- Load products from the live API ----
+    const grid = document.getElementById("product-grid");
+
+    function esc(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    function renderProducts(products) {
+      grid.innerHTML = "";
+      products.forEach(p => {
+        // Normalise to the cart's shape (API products use numeric ids + 'description').
+        const item = {
+          id: p.id,
+          name: p.name,
+          price: Number(p.price),
+          emoji: p.emoji || "🧃",
+          desc: p.description || ""
+        };
+        const card = document.createElement("div");
+        card.className = "product";
+        card.innerHTML =
+          '<div class="thumb">' + esc(item.emoji) + '</div>' +
+          '<div class="body">' +
+            '<h3>' + esc(item.name) + '</h3>' +
+            '<div class="desc">' + esc(item.desc) + '</div>' +
+            '<div class="row">' +
+              '<span class="price">$' + item.price.toFixed(2) + '</span>' +
+              '<button class="add">Add to cart</button>' +
+            '</div>' +
+          '</div>';
+        card.querySelector(".add").addEventListener("click", () => addToCart(item));
+        grid.appendChild(card);
+      });
+    }
+
+    async function loadProducts() {
+      grid.innerHTML = '<p style="color:var(--muted);padding:10px;">Loading products…</p>';
+      try {
+        const res = await fetch(API_BASE + "/api/Products");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const json = await res.json();
+        const products = json.data || json || [];
+        if (!products.length) {
+          grid.innerHTML = '<p style="color:var(--muted);padding:10px;">No products available.</p>';
+          return;
+        }
+        renderProducts(products);
+      } catch (err) {
+        grid.innerHTML =
+          '<p style="color:#ffc4c4;padding:10px;">Could not load products from ' +
+          esc(API_BASE) + '/api/Products (' + esc(err.message) + ').<br>' +
+          'Check the backend service is running.</p>';
+      }
+    }
+
+    loadProducts();
+    updateBadge();
+    renderAuthNav();
+
+    // ---- Chatbot ----
+    const toggle = document.getElementById("chat-toggle");
+    const box = document.getElementById("chat-box");
+    const closeBtn = document.getElementById("chat-close");
+    const log = document.getElementById("chat-log");
+    const form = document.getElementById("chat-form");
+    const input = document.getElementById("chat-input");
+
+    function addMsg(text, who) {
+      const m = document.createElement("div");
+      m.className = "msg " + who;
+      m.textContent = text;
+      log.appendChild(m);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function botReply(text) {
+      const t = text.toLowerCase();
+      if (t.includes("hour") || t.includes("open")) return "We're open 24/7 — it's a lab!";
+      if (t.includes("price") || t.includes("cost")) return "Prices range from $0.99 to $2999. Check the grid above.";
+      if (t.includes("ship") || t.includes("deliver")) return "Shipping is instant and virtual. No real juice, sorry.";
+      if (t.includes("login") || t.includes("account")) return "Head to the login page from the top-right button to sign in.";
+      if (t.includes("api")) return "Our API lives at api.pimenta.fun — powered by OWASP Juice Shop.";
+      if (t.includes("hello") || t.includes("hi") || t.includes("hey")) return "Hey there! How can I help you today?";
+      if (t.includes("juice")) return "All our juices are fresh-pressed. Try the Apple Juice — a classic!";
+      return "I'm a simple demo bot. Try asking about prices, login, shipping, or the API.";
+    }
+
+    toggle.addEventListener("click", () => {
+      box.classList.toggle("open");
+      if (box.classList.contains("open") && log.children.length === 0) {
+        addMsg("Hi! I'm the Pimenta support bot. Ask me anything about the shop.", "bot");
+      }
+    });
+    closeBtn.addEventListener("click", () => box.classList.remove("open"));
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      addMsg(text, "user");
+      input.value = "";
+      setTimeout(() => addMsg(botReply(text), "bot"), 400);
+    });
+  </script>
+</body>
+</html>

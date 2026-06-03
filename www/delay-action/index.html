@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delay Action &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Bot Management / Delay-action</div>
+    <span class="tag">Bot Management</span>
+    <h1>Bot <span class="grad">Delay</span> Action</h1>
+    <p class="lead">Simulates a delayed response, used to slow down suspected bots without blocking.</p>
+    <button class="btn" id="go">Request with delay</button>
+    <pre id="out">…</pre>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+  <script>
+    document.getElementById('go').addEventListener('click', function(){
+      var o=document.getElementById('out'); o.textContent='waiting 3s…';
+      var t0=Date.now(); setTimeout(function(){ o.textContent='responded after '+(Date.now()-t0)+' ms'; }, 3000);
+    });
+  </script>
+</body>
+</html>

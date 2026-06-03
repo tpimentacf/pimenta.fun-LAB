@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pimenta API Console &mdash; OWASP Juice Shop</title>
+  <meta name="description" content="api.pimenta.fun — interactive OWASP Juice Shop API console. Run calls with and without a JWT." />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a30;
+      --panel2: #0f1528;
+      --accent: #f6821f;
+      --green: #36d399;
+      --blue: #5b8def;
+      --red: #ff6b6b;
+      --purple: #b48cff;
+      --text: #e8edf7;
+      --muted: #9aa6c0;
+      --border: #233056;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+    header {
+      padding: 20px 5vw;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand { font-size: 1.3rem; font-weight: 700; }
+    .brand span { color: var(--accent); }
+    nav a { color: var(--muted); text-decoration: none; margin-left: 20px; font-size: 0.95rem; }
+    nav a:hover { color: var(--text); }
+    .hero { padding: 40px 5vw 6px; max-width: 900px; }
+    .hero h1 { font-size: 2rem; margin-bottom: 8px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); max-width: 680px; font-size: 0.98rem; }
+
+    .warn {
+      background: rgba(255,107,107,0.1);
+      border: 1px solid rgba(255,107,107,0.35);
+      color: #ffc4c4;
+      padding: 12px 16px;
+      border-radius: 12px;
+      margin: 16px 5vw;
+      font-size: 0.88rem;
+      max-width: 900px;
+    }
+
+    /* Auth / config bar */
+    .authbar {
+      margin: 16px 5vw;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px 18px;
+      max-width: 1100px;
+    }
+    @media (max-width: 760px) { .authbar { grid-template-columns: 1fr; } }
+    .authbar .full { grid-column: 1 / -1; }
+    .field label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
+    .field input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem;
+      font-family: monospace;
+    }
+    .field input:focus { outline: none; border-color: var(--accent); }
+    .row-btns { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 9px 14px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      transition: border-color 0.15s, background 0.15s;
+    }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); color: #1a1205; border-color: var(--accent); }
+    button.primary:hover { filter: brightness(1.05); }
+    .token-state { font-size: 0.85rem; font-family: monospace; }
+    .token-state.has { color: var(--green); }
+    .token-state.no { color: var(--muted); }
+
+    section.endpoints { padding: 10px 5vw 80px; }
+    h2 { font-size: 1.15rem; margin: 28px 0 12px; color: var(--text); }
+
+    .ep {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .ep-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .method {
+      font-family: monospace; font-weight: 700; font-size: 0.78rem;
+      padding: 4px 10px; border-radius: 6px; min-width: 56px; text-align: center;
+    }
+    .get  { background: rgba(91,141,239,0.15); color: var(--blue);  border: 1px solid rgba(91,141,239,0.4); }
+    .post { background: rgba(54,211,153,0.15); color: var(--green); border: 1px solid rgba(54,211,153,0.4); }
+    .put  { background: rgba(180,140,255,0.15);color: var(--purple);border: 1px solid rgba(180,140,255,0.4); }
+    .del  { background: rgba(255,107,107,0.15); color: var(--red);  border: 1px solid rgba(255,107,107,0.4); }
+    .path { font-family: monospace; font-size: 0.92rem; color: var(--text); }
+    .ep .desc { color: var(--muted); font-size: 0.82rem; margin-left: auto; }
+    .auth-hint { font-size: 0.7rem; color: var(--accent); border: 1px solid rgba(246,130,31,0.4); padding: 2px 8px; border-radius: 999px; }
+
+    .ep-inputs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+    .ep-inputs .pinput { display: flex; flex-direction: column; gap: 4px; }
+    .ep-inputs label { font-size: 0.72rem; color: var(--muted); font-family: monospace; }
+    .ep-inputs input {
+      background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 7px; padding: 7px 10px; font-size: 0.85rem; font-family: monospace; min-width: 160px;
+    }
+    .ep-inputs input:focus { outline: none; border-color: var(--accent); }
+    textarea.body {
+      width: 100%; margin-top: 12px; min-height: 90px; resize: vertical;
+      background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 10px 12px; font-family: monospace; font-size: 0.85rem; line-height: 1.5;
+    }
+    textarea.body:focus { outline: none; border-color: var(--accent); }
+
+    .ep-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+
+    .ep-out { margin-top: 12px; display: none; }
+    .ep-out.show { display: block; }
+    .out-block { margin-top: 10px; }
+    .out-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 5px; display: flex; align-items: center; gap: 8px; }
+    pre {
+      background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px 14px; overflow-x: auto; font-family: monospace; font-size: 0.82rem;
+      color: #d7e2f7; white-space: pre-wrap; word-break: break-word;
+    }
+    pre.req { color: #cfe3ff; }
+    .status-pill { font-family: monospace; font-weight: 700; font-size: 0.78rem; padding: 2px 9px; border-radius: 6px; }
+    .s2 { background: rgba(54,211,153,0.15); color: var(--green); }
+    .s4 { background: rgba(246,130,31,0.15); color: var(--accent); }
+    .s5 { background: rgba(255,107,107,0.15); color: var(--red); }
+    .s0 { background: rgba(154,166,192,0.15); color: var(--muted); }
+    .ran-as { font-size: 0.72rem; color: var(--muted); }
+    .ran-as b { color: var(--text); }
+
+    footer { padding: 22px 5vw; color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--border); }
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">api.pimenta<span>.fun</span></div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://shop.pimenta.fun">Shop</a>
+      <a href="https://owasp.org/www-project-juice-shop/">OWASP</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <h1>Pimenta <span>API Console</span></h1>
+    <p>
+      Interactive console for the OWASP Juice Shop API. Run each endpoint
+      <strong>with</strong> or <strong>without</strong> a JWT and see the exact request that was
+      sent (as a curl command) alongside the live response.
+    </p>
+  </section>
+
+  <div class="warn">
+    &#9888; <strong>Intentionally vulnerable &amp; for authorized lab testing only.</strong>
+    Calls are sent from your browser to the Base URL below. Open this page from
+    <code>https://api.pimenta.fun</code> so requests are same-origin (no CORS issues).
+  </div>
+
+  <!-- Auth / config -->
+  <div class="authbar">
+    <div class="field">
+      <label for="base-url">Base URL</label>
+      <input id="base-url" value="https://api.pimenta.fun" />
+    </div>
+    <div class="field">
+      <label for="token">Bearer token (JWT)</label>
+      <input id="token" placeholder="paste a JWT, or use Login below" />
+    </div>
+
+    <div class="field">
+      <label for="login-email">Login email</label>
+      <input id="login-email" value="admin@juice-sh.op" />
+    </div>
+    <div class="field">
+      <label for="login-pass">Login password</label>
+      <input id="login-pass" value="admin123" />
+    </div>
+
+    <div class="full row-btns">
+      <button class="primary" id="btn-login">Login &amp; capture token</button>
+      <button id="btn-clear-token">Clear token</button>
+      <span class="token-state no" id="token-state">No token set</span>
+    </div>
+  </div>
+
+  <section class="endpoints" id="endpoints"></section>
+
+  <footer>
+    Powered by <a href="https://owasp.org/www-project-juice-shop/">OWASP Juice Shop</a>.
+    Full API reference at <a href="https://pwning.owasp-juice.shop/">pwning.owasp-juice.shop</a>.
+  </footer>
+
+  <script>
+    // ---------------------------------------------------------------------
+    // Endpoint catalogue. {tokens} in a path become editable inputs.
+    // body (object) becomes an editable JSON textarea.
+    // authRecommended just shows a hint badge.
+    // ---------------------------------------------------------------------
+    const GROUPS = [
+      { title: "Authentication", items: [
+        { method:"POST", path:"/rest/user/login", desc:"Authenticate & receive JWT", authRecommended:false,
+          body:{ email:"admin@juice-sh.op", password:"admin123" } },
+        { method:"POST", path:"/api/Users", desc:"Register a new user", authRecommended:false,
+          body:{ email:"tester@pimenta.fun", password:"Passw0rd!" } },
+        { method:"GET", path:"/rest/user/whoami", desc:"Current session identity", authRecommended:true }
+      ]},
+      { title: "Products", items: [
+        { method:"GET", path:"/api/Products", desc:"List all products", authRecommended:false },
+        { method:"GET", path:"/api/Products/{id}", desc:"Single product", authRecommended:false, params:{ id:"1" } },
+        { method:"GET", path:"/rest/products/search?q={term}", desc:"Search products", authRecommended:false, params:{ term:"apple" } },
+        { method:"PUT", path:"/api/Products/{id}", desc:"Update a product (auth)", authRecommended:true, params:{ id:"1" },
+          body:{ description:"Updated by the Pimenta lab console.", price:9.99 } }
+      ]},
+      { title: "Basket & Orders", items: [
+        { method:"GET", path:"/rest/basket/{id}", desc:"View basket (id from token)", authRecommended:true, params:{ id:"0" } },
+        { method:"POST", path:"/api/BasketItems", desc:"Add item to basket", authRecommended:true,
+          body:{ ProductId:1, quantity:1 } },
+        { method:"POST", path:"/rest/basket/{id}/checkout", desc:"Place an order", authRecommended:true, params:{ id:"0" } },
+        { method:"GET", path:"/api/Orders", desc:"Current user's order history", authRecommended:true }
+      ]},
+      { title: "Feedback & Users", items: [
+        { method:"GET", path:"/api/Feedbacks", desc:"List feedback", authRecommended:false },
+        { method:"POST", path:"/api/Feedbacks", desc:"Submit feedback", authRecommended:false,
+          body:{ comment:"Great lab!", rating:5 } },
+        { method:"GET", path:"/api/Users/{id}", desc:"User details (IDOR target, auth)", authRecommended:true, params:{ id:"1" } }
+      ]},
+      { title: "Utility", items: [
+        { method:"GET", path:"/health", desc:"Service status, uptime & row counts", authRecommended:false },
+        { method:"GET", path:"/rest/admin/application-version", desc:"App version", authRecommended:false }
+      ]}
+    ];
+
+    const TOKEN_KEY = "pimenta_api_token";
+    const $ = (id) => document.getElementById(id);
+    const baseEl = $("base-url");
+    const tokenEl = $("token");
+    const tokenState = $("token-state");
+
+    // Restore saved token
+    tokenEl.value = localStorage.getItem(TOKEN_KEY) || "";
+    refreshTokenState();
+
+    tokenEl.addEventListener("input", () => {
+      localStorage.setItem(TOKEN_KEY, tokenEl.value.trim());
+      refreshTokenState();
+    });
+    function refreshTokenState() {
+      const t = tokenEl.value.trim();
+      if (t) {
+        tokenState.className = "token-state has";
+        tokenState.textContent = "Token set (" + t.slice(0, 12) + "…, " + t.length + " chars)";
+      } else {
+        tokenState.className = "token-state no";
+        tokenState.textContent = "No token set";
+      }
+    }
+
+    function baseUrl() { return baseEl.value.trim().replace(/\/+$/, ""); }
+    function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+    // ---- Build a request object from an endpoint + its live inputs ----
+    function buildRequest(ep, ui, useAuth) {
+      let path = ep.path;
+      if (ep.params) {
+        Object.keys(ep.params).forEach(name => {
+          const val = ui.inputs[name].value;
+          path = path.replace("{" + name + "}", encodeURIComponent(val));
+        });
+      }
+      const url = baseUrl() + path;
+      const headers = {};
+      let body = null;
+      if (ui.bodyEl) {
+        headers["Content-Type"] = "application/json";
+        body = ui.bodyEl.value;
+      }
+      const token = tokenEl.value.trim();
+      if (useAuth && token) headers["Authorization"] = "Bearer " + token;
+      return { method: ep.method, url, headers, body, useAuth, hasToken: !!token };
+    }
+
+    function toCurl(req) {
+      let c = "curl -X " + req.method + " '" + req.url + "'";
+      Object.entries(req.headers).forEach(([k, v]) => {
+        const shown = (k === "Authorization") ? "Bearer " + maskToken(v.replace("Bearer ", "")) : v;
+        c += " \\\n  -H '" + k + ": " + shown + "'";
+      });
+      if (req.body) c += " \\\n  -d '" + req.body.replace(/\n\s*/g, "") + "'";
+      return c;
+    }
+    function maskToken(t) { return t.length > 16 ? t.slice(0, 8) + "…" + t.slice(-4) : t; }
+
+    function statusClass(code) {
+      if (code === 0) return "s0";
+      if (code >= 500) return "s5";
+      if (code >= 400) return "s4";
+      return "s2";
+    }
+
+    async function runEndpoint(ep, ui, useAuth) {
+      const req = buildRequest(ep, ui, useAuth);
+      ui.out.classList.add("show");
+
+      const ranAs = useAuth
+        ? (req.hasToken ? "<b>with token</b>" : "<b>with token</b> (none set &rarr; sent anonymously)")
+        : "<b>without token</b>";
+
+      ui.reqEl.textContent = toCurl(req);
+      ui.ranEl.innerHTML = "Ran " + ranAs + " &middot; " + new Date().toLocaleTimeString();
+      ui.resEl.innerHTML = '<span class="status-pill s0">…</span> sending request';
+      ui.hdrEl.textContent = "…";
+
+      const opts = { method: req.method, headers: req.headers };
+      if (req.body) opts.body = req.body;
+
+      const t0 = performance.now();
+      try {
+        const res = await fetch(req.url, opts);
+        const ms = Math.round(performance.now() - t0);
+        const ct = res.headers.get("content-type") || "";
+        let text = await res.text();
+        let pretty = text;
+        if (ct.includes("application/json")) {
+          try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+        }
+        if (pretty.length > 4000) pretty = pretty.slice(0, 4000) + "\n… (truncated)";
+        const cls = statusClass(res.status);
+        ui.resEl.innerHTML =
+          '<span class="status-pill ' + cls + '">' + res.status + " " + esc(res.statusText) + '</span>' +
+          ' <span class="ran-as">' + ms + ' ms &middot; ' + esc(ct.split(";")[0] || "—") + '</span>' +
+          '<pre>' + esc(pretty || "(empty body)") + '</pre>';
+
+        // Raw response headers (status line + each header).
+        const hdrLines = [req.method.toUpperCase() + " → " + res.status + " " + res.statusText];
+        let hdrCount = 0;
+        res.headers.forEach((value, key) => { hdrLines.push(key + ": " + value); hdrCount++; });
+        if (hdrCount === 0) {
+          hdrLines.push("(no headers readable — cross-origin responses only expose");
+          hdrLines.push(" CORS-safelisted headers unless Access-Control-Expose-Headers is set)");
+        }
+        ui.hdrEl.textContent = hdrLines.join("\n");
+
+        // Auto-capture token from a successful login.
+        if (ep.path.indexOf("/rest/user/login") === 0) {
+          try {
+            const j = JSON.parse(text);
+            const tok = j && j.authentication && j.authentication.token;
+            if (tok) {
+              tokenEl.value = tok;
+              localStorage.setItem(TOKEN_KEY, tok);
+              refreshTokenState();
+              ui.ranEl.innerHTML += ' &middot; <span style="color:var(--green)">token captured &#10003;</span>';
+            }
+          } catch (e) {}
+        }
+      } catch (err) {
+        ui.resEl.innerHTML =
+          '<span class="status-pill s0">network error</span>' +
+          '<pre>' + esc(err.message) +
+          '\n\nIf this is a CORS or "Failed to fetch" error, open this page from the same\norigin as the Base URL (https://api.pimenta.fun), or check the backend is up.</pre>';
+        ui.hdrEl.textContent = "(no response — request failed before headers were received)";
+      }
+    }
+
+    // ---- Render all endpoints ----
+    const container = $("endpoints");
+    GROUPS.forEach(group => {
+      const h = document.createElement("h2");
+      h.textContent = group.title;
+      container.appendChild(h);
+
+      group.items.forEach(ep => {
+        const card = document.createElement("div");
+        card.className = "ep";
+
+        // Top row
+        const top = document.createElement("div");
+        top.className = "ep-top";
+        top.innerHTML =
+          '<span class="method ' + ep.method.toLowerCase() + '">' + ep.method + '</span>' +
+          '<span class="path">' + esc(ep.path) + '</span>' +
+          (ep.authRecommended ? '<span class="auth-hint">token recommended</span>' : '') +
+          '<span class="desc">' + esc(ep.desc) + '</span>';
+        card.appendChild(top);
+
+        const ui = { inputs: {}, bodyEl: null };
+
+        // Param inputs
+        if (ep.params) {
+          const pwrap = document.createElement("div");
+          pwrap.className = "ep-inputs";
+          Object.entries(ep.params).forEach(([name, def]) => {
+            const f = document.createElement("div");
+            f.className = "pinput";
+            const lab = document.createElement("label");
+            lab.textContent = "{" + name + "}";
+            const inp = document.createElement("input");
+            inp.value = def;
+            f.appendChild(lab); f.appendChild(inp);
+            pwrap.appendChild(f);
+            ui.inputs[name] = inp;
+          });
+          card.appendChild(pwrap);
+        }
+
+        // Body textarea
+        if (ep.body) {
+          const ta = document.createElement("textarea");
+          ta.className = "body";
+          ta.spellcheck = false;
+          ta.value = JSON.stringify(ep.body, null, 2);
+          card.appendChild(ta);
+          ui.bodyEl = ta;
+        }
+
+        // Action buttons
+        const actions = document.createElement("div");
+        actions.className = "ep-actions";
+        const bNo = document.createElement("button");
+        bNo.textContent = "Run without token";
+        const bYes = document.createElement("button");
+        bYes.className = "primary";
+        bYes.textContent = "Run with token";
+        actions.appendChild(bNo);
+        actions.appendChild(bYes);
+        card.appendChild(actions);
+
+        // Output area
+        const out = document.createElement("div");
+        out.className = "ep-out";
+        out.innerHTML =
+          '<div class="ran-as"></div>' +
+          '<div class="out-block"><div class="out-label">Request</div><pre class="req"></pre></div>' +
+          '<div class="out-block"><div class="out-label">Response status &amp; body</div><div class="res"></div></div>' +
+          '<div class="out-block"><div class="out-label">Response headers</div><pre class="hdr"></pre></div>';
+        card.appendChild(out);
+
+        ui.out = out;
+        ui.ranEl = out.querySelector(".ran-as");
+        ui.reqEl = out.querySelector(".req");
+        ui.resEl = out.querySelector(".res");
+        ui.hdrEl = out.querySelector(".hdr");
+
+        bNo.addEventListener("click", () => runEndpoint(ep, ui, false));
+        bYes.addEventListener("click", () => runEndpoint(ep, ui, true));
+
+        container.appendChild(card);
+      });
+    });
+
+    // ---- Login helper (top bar) ----
+    $("btn-login").addEventListener("click", async () => {
+      const email = $("login-email").value.trim();
+      const password = $("login-pass").value;
+      const url = baseUrl() + "/rest/user/login";
+      const btn = $("btn-login");
+      btn.disabled = true; btn.textContent = "Logging in…";
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json().catch(() => ({}));
+        const tok = data && data.authentication && data.authentication.token;
+        if (res.ok && tok) {
+          tokenEl.value = tok;
+          localStorage.setItem(TOKEN_KEY, tok);
+          refreshTokenState();
+          tokenState.textContent += "  — login OK ✓";
+        } else {
+          tokenState.className = "token-state no";
+          tokenState.textContent = "Login failed (" + res.status + ")";
+        }
+      } catch (err) {
+        tokenState.className = "token-state no";
+        tokenState.textContent = "Login error: " + err.message;
+      } finally {
+        btn.disabled = false; btn.textContent = "Login & capture token";
+      }
+    });
+
+    $("btn-clear-token").addEventListener("click", () => {
+      tokenEl.value = "";
+      localStorage.removeItem(TOKEN_KEY);
+      refreshTokenState();
+    });
+  </script>
+</body>
+</html>

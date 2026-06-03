@@ -1,0 +1,9 @@
+# Pimenta.fun security lab — security.txt (RFC 9116)
+# https://www.rfc-editor.org/rfc/rfc9116
+
+Contact: mailto:security@pimenta.fun
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: en, pt
+Canonical: https://www.pimenta.fun/.well-known/security.txt
+Policy: https://www.pimenta.fun/security-solutions/
+# This is a lab environment. Findings are welcome but no bounty is offered.

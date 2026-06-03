@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login with JWT &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / API Shield / Login with JWT</div>
+    <span class="tag">API Shield</span>
+    <h1>Login with <span class="grad">JWT</span></h1>
+    <p class="lead">Authenticate against the live API and receive a JWT.</p>
+    <form class="panel" id="f">
+      <label>Email</label><input id="e" type="email" value="admin@juice-sh.op" />
+      <label>Password</label><input id="p" type="password" value="admin123" />
+      <br /><br /><button class="btn" type="submit">Get token</button>
+    </form>
+    <h2>Token</h2>
+    <pre id="out">(none yet)</pre>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+  <script>
+    document.getElementById('f').addEventListener('submit', async function(e){ e.preventDefault();
+      var out=document.getElementById('out'); out.textContent='Requesting…';
+      try{ var res= await fetch('https://api.pimenta.fun/rest/user/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('e').value,password:document.getElementById('p').value})});
+        var j= await res.json(); out.textContent = (j.authentication && j.authentication.token) ? j.authentication.token : JSON.stringify(j); }
+      catch(err){ out.textContent='Error: '+err.message; } });
+  </script>
+</body>
+</html>
