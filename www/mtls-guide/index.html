@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mTLS Implementation Guide &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 22px 0; }
+    .node {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px 18px; flex: 1; min-width: 170px; text-align: center;
+    }
+    .node b { color: var(--text); display: block; margin-bottom: 4px; }
+    .node small { color: var(--muted); }
+    .leg { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 10px; min-width: 150px; }
+    .leg .arrow { color: var(--accent); font-size: 1.4rem; line-height: 1; }
+    .leg small { color: var(--green); font-size: 0.72rem; text-align: center; margin-top: 4px; }
+    .step { display: flex; gap: 14px; margin: 16px 0; }
+    .step .num {
+      flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%;
+      background: var(--accent); color: #1a1205; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; font-size: 0.9rem;
+    }
+    .step .body { flex: 1; }
+    .step .body h3 { font-size: 1.05rem; margin-bottom: 4px; color: var(--text); }
+    .pill { display:inline-block; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; padding:2px 8px; border-radius:999px; margin-left:6px; }
+    .pill.dash { background: rgba(246,130,31,0.15); color: var(--accent); border:1px solid rgba(246,130,31,0.4); }
+    .pill.cli  { background: rgba(91,141,239,0.15); color: var(--blue); border:1px solid rgba(91,141,239,0.4); }
+    .toc { columns: 2; gap: 24px; }
+    .toc a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
+    @media (max-width: 600px){ .toc { columns: 1; } }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+      <a href="https://www.pimenta.fun/challenges/mtls/">mTLS Test</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Challenges / mTLS / Implementation guide</div>
+    <span class="tag">Guide</span>
+    <h1>Implementing <span class="grad">mTLS</span> end-to-end</h1>
+    <p class="lead">Two independent TLS legs, each with mutual authentication: the client proves itself to Cloudflare, and Cloudflare proves itself to your origin.</p>
+
+    <!-- Flow diagram -->
+    <div class="flow">
+      <div class="node"><b>Client</b><small>browser / app / API caller</small></div>
+      <div class="leg"><span class="arrow">&#8594;</span><small>Leg 1<br>client cert &rarr; Cloudflare</small></div>
+      <div class="node"><b>Cloudflare</b><small>edge / API Shield</small></div>
+      <div class="leg"><span class="arrow">&#8594;</span><small>Leg 2<br>CF cert &rarr; origin (AOP)</small></div>
+      <div class="node"><b>Origin</b><small>your Apache server</small></div>
+    </div>
+
+    <div class="note">
+      <strong>Leg 1 &mdash; Client &rarr; Cloudflare:</strong> Cloudflare requests &amp; verifies a client certificate
+      against a CA you control.<br>
+      <strong>Leg 2 &mdash; Cloudflare &rarr; Origin (Authenticated Origin Pulls):</strong> Cloudflare presents a client
+      certificate that your origin verifies, so the origin only accepts traffic from Cloudflare.
+    </div>
+
+    <div class="panel">
+      <strong>Contents</strong>
+      <div class="toc">
+        <p><a href="#prereq">0. Prerequisites</a></p>
+        <p><a href="#leg1">Part 1 &mdash; Client &rarr; Cloudflare</a></p>
+        <p><a href="#leg2">Part 2 &mdash; Cloudflare &rarr; Origin</a></p>
+        <p><a href="#mode">3. Encryption mode</a></p>
+        <p><a href="#verify">4. Verify end-to-end</a></p>
+        <p><a href="#trouble">5. Troubleshooting</a></p>
+      </div>
+    </div>
+
+    <!-- ================= Prereqs ================= -->
+    <h2 id="prereq">0. Prerequisites</h2>
+    <ul class="bullets">
+      <li>A zone on Cloudflare (e.g. <code class="inline">pimenta.fun</code>) with the hostname proxied (orange cloud).</li>
+      <li><code class="inline">openssl</code> available locally to mint a CA and certificates.</li>
+      <li>Access to the origin's web-server config (Apache here) and Cloudflare dashboard / API token.</li>
+      <li>SSL/TLS mode at least <strong>Full</strong>; <strong>Full (Strict)</strong> recommended.</li>
+    </ul>
+
+    <!-- ================= LEG 1 ================= -->
+    <h2 id="leg1">Part 1 &mdash; Client &rarr; Cloudflare (client certificate auth)</h2>
+    <p>Cloudflare challenges the client for a certificate during the TLS handshake and verifies it against a CA you register (API Shield &rarr; mTLS).</p>
+
+    <div class="step">
+      <div class="num">1</div>
+      <div class="body">
+        <h3>Create a CA &amp; client certificate <span class="pill cli">CLI</span></h3>
+        <p>Generate your own CA, then issue a client cert signed by it:</p>
+        <pre># 1a. Root CA
+openssl genrsa -out ca.key 4096
+openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 \
+  -subj "/CN=Pimenta Lab Client CA" -out ca.pem
+
+# 1b. Client key + CSR
+openssl genrsa -out client.key 2048
+openssl req -new -key client.key -subj "/CN=lab-client" -out client.csr
+
+# 1c. Sign the client cert with the CA
+openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key \
+  -CAcreateserial -days 365 -sha256 -out client.crt
+
+# 1d. (optional) bundle for browsers
+openssl pkcs12 -export -inkey client.key -in client.crt \
+  -certfile ca.pem -out client.p12</pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div class="body">
+        <h3>Register the CA with Cloudflare <span class="pill dash">Dashboard</span> <span class="pill cli">API</span></h3>
+        <p>Dashboard: <em>SSL/TLS &rarr; Client Certificates</em> (or <em>Security &rarr; API Shield &rarr; mTLS</em>) &rarr;
+        <strong>Add mTLS certificate</strong> &rarr; paste the contents of <code class="inline">ca.pem</code>.</p>
+        <p>Or via API (upload the CA to the mTLS certificate store):</p>
+        <pre>curl -X POST \
+  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/certificate_authorities/hostname_associations" \
+  -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+  --data '{"certificates":["<paste ca.pem PEM here>"]}'</pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div class="body">
+        <h3>Associate the hostname &amp; require mTLS <span class="pill dash">Dashboard</span></h3>
+        <p>Enable mTLS for the hostname (e.g. <code class="inline">mtls.pimenta.fun</code>), then enforce it with a
+        WAF custom rule so unverified clients are blocked:</p>
+        <pre># Expression (Security -> WAF -> Custom rules)
+(http.host eq "mtls.pimenta.fun" and not cf.tls_client_auth.cert_verified)
+
+# Action: Block   (or "Skip" the rule to allow only when verified)</pre>
+        <div class="note">Fields you can use in rules:
+          <code class="inline">cf.tls_client_auth.cert_verified</code>,
+          <code class="inline">cf.tls_client_auth.cert_presented</code>,
+          <code class="inline">cf.tls_client_auth.cert_subject_dn</code>.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">4</div>
+      <div class="body">
+        <h3>Test the client leg <span class="pill cli">CLI</span></h3>
+        <pre># Without a cert -> blocked (403)
+curl -i https://mtls.pimenta.fun/
+
+# With the client cert -> allowed
+curl -i --cert client.crt --key client.key https://mtls.pimenta.fun/</pre>
+        <p>Browsers: import <code class="inline">client.p12</code> into the OS/keychain; the browser prompts to send it.</p>
+      </div>
+    </div>
+
+    <!-- ================= LEG 2 ================= -->
+    <h2 id="leg2">Part 2 &mdash; Cloudflare &rarr; Origin (Authenticated Origin Pulls)</h2>
+    <p>Authenticated Origin Pulls (AOP) makes Cloudflare present a client certificate to your origin. Your origin verifies it, so it accepts traffic <em>only</em> from Cloudflare.</p>
+
+    <div class="step">
+      <div class="num">1</div>
+      <div class="body">
+        <h3>Choose a mode &amp; enable AOP <span class="pill dash">Dashboard</span></h3>
+        <ul class="bullets">
+          <li><strong>Zone-level</strong>: <em>SSL/TLS &rarr; Origin Server &rarr; Authenticated Origin Pulls &rarr; On</em>.
+            Cloudflare presents its <em>shared</em> origin-pull certificate; your origin trusts Cloudflare's origin-pull CA.</li>
+          <li><strong>Per-hostname</strong>: upload your own client cert/key via API and bind it to the hostname &mdash; stronger isolation per zone.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div class="body">
+        <h3>Get the CA the origin should trust <span class="pill cli">CLI</span></h3>
+        <p>For <strong>zone-level</strong> AOP, download Cloudflare's origin-pull CA and place it on the origin:</p>
+        <pre>sudo mkdir -p /etc/apache2/cloudflare
+sudo curl -fsSL \
+  https://developers.cloudflare.com/ssl/static/authenticated_origin_pull_ca.pem \
+  -o /etc/apache2/cloudflare/origin-pull-ca.pem</pre>
+        <p>For <strong>per-hostname</strong> AOP, trust the CA that signed the cert you uploaded instead.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div class="body">
+        <h3>Require &amp; verify the client cert on the origin (Apache)</h3>
+        <p>Add to your origin's <code class="inline">:443</code> vhost so Apache demands Cloudflare's certificate:</p>
+        <pre>&lt;VirtualHost *:443&gt;
+    ServerName mtls.pimenta.fun
+    SSLEngine on
+    SSLCertificateFile    /etc/letsencrypt/live/mtls.pimenta.fun/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/mtls.pimenta.fun/privkey.pem
+
+    # --- Authenticated Origin Pulls ---
+    SSLVerifyClient        require
+    SSLVerifyDepth         1
+    SSLCACertificateFile   /etc/apache2/cloudflare/origin-pull-ca.pem
+&lt;/VirtualHost&gt;</pre>
+        <p>nginx equivalent: <code class="inline">ssl_client_certificate</code> + <code class="inline">ssl_verify_client on;</code></p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">4</div>
+      <div class="body">
+        <h3>Reload &amp; lock down <span class="pill cli">CLI</span></h3>
+        <pre>sudo apache2ctl configtest && sudo systemctl reload apache2</pre>
+        <p>Optionally restrict the origin firewall to Cloudflare IP ranges so direct (non-CF) traffic can't reach it.</p>
+      </div>
+    </div>
+
+    <!-- ================= Mode ================= -->
+    <h2 id="mode">3. Set the SSL/TLS encryption mode</h2>
+    <p>Use <strong>Full (Strict)</strong> (<em>SSL/TLS &rarr; Overview</em>) so Cloudflare validates the origin certificate as well. Combined with AOP you get verified TLS in both directions on Leg 2.</p>
+
+    <!-- ================= Verify ================= -->
+    <h2 id="verify">4. Verify end-to-end</h2>
+    <pre># Leg 1: client must present a verified cert
+curl -i --cert client.crt --key client.key https://mtls.pimenta.fun/
+
+# Leg 2: hitting the origin directly (bypassing CF) should now FAIL,
+# because the origin requires Cloudflare's client certificate:
+curl -i --resolve mtls.pimenta.fun:443:&lt;ORIGIN_IP&gt; https://mtls.pimenta.fun/
+#   -> expect: 400 No required SSL certificate was sent</pre>
+    <p>The lab's <a href="https://www.pimenta.fun/challenges/mtls/">mTLS test page</a> also surfaces the
+    <code class="inline">cf-client-cert-*</code> headers when Leg 1 is configured.</p>
+
+    <!-- ================= Troubleshooting ================= -->
+    <h2 id="trouble">5. Troubleshooting</h2>
+    <ul class="bullets">
+      <li><strong>Browser never prompts for a cert (Leg 1):</strong> the hostname isn't associated for mTLS, or the cert isn't imported into the OS store.</li>
+      <li><strong>Everyone gets through (Leg 1):</strong> you registered the CA but didn't add the enforcing WAF rule (<code class="inline">not cf.tls_client_auth.cert_verified</code>).</li>
+      <li><strong>525/526 errors (Leg 2):</strong> origin cert invalid for Full (Strict), or AOP CA mismatch.</li>
+      <li><strong>400 "No required SSL certificate" for normal visitors (Leg 2):</strong> AOP is required on the origin but not enabled in Cloudflare, so CF isn't sending its cert.</li>
+      <li><strong>Direct-to-origin still works:</strong> add a Cloudflare-IP allowlist at the origin firewall.</li>
+    </ul>
+
+    <p style="margin-top:24px"><a class="btn" href="https://www.pimenta.fun/challenges/mtls/">Go to the mTLS test page &rarr;</a></p>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+</body>
+</html>
