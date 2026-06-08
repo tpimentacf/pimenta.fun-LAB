@@ -34,7 +34,7 @@ sudo systemctl enable --now apache2
 
 ```bash
 sudo mkdir -p /var/www/pimenta
-sudo cp -r www shop api /var/www/pimenta/
+sudo cp -r www shop api aop /var/www/pimenta/
 sudo chown -R www-data:www-data /var/www/pimenta
 sudo find /var/www/pimenta -type d -exec chmod 755 {} \;
 sudo find /var/www/pimenta -type f -exec chmod 644 {} \;
@@ -54,13 +54,35 @@ sudo a2enconf pimenta-ssl-stapling
 
 ## 4. Install the virtual hosts
 
+Easiest — use the helper (installs snippets, modules, fetches the AOP CA,
+enables all four sites, runs configtest):
+
+```bash
+cd apache && sudo ./enable-sites.sh
+```
+
+Or manually:
+
 ```bash
 sudo cp apache/www.pimenta.fun.conf  /etc/apache2/sites-available/
 sudo cp apache/shop.pimenta.fun.conf /etc/apache2/sites-available/
 sudo cp apache/api.pimenta.fun.conf  /etc/apache2/sites-available/
+sudo cp apache/aop.pimenta.fun.conf  /etc/apache2/sites-available/
 
-sudo a2ensite www.pimenta.fun shop.pimenta.fun api.pimenta.fun
+sudo a2ensite www.pimenta.fun shop.pimenta.fun api.pimenta.fun aop.pimenta.fun
 sudo a2dissite 000-default.conf      # optional: drop the default site
+```
+
+### 4b. Download the Cloudflare origin-pull CA (required by aop.pimenta.fun)
+
+The `aop` vhost verifies Cloudflare's client certificate, so this CA must exist
+or Apache won't start:
+
+```bash
+sudo mkdir -p /etc/apache2/cloudflare
+sudo curl -fsSL \
+  https://developers.cloudflare.com/ssl/static/authenticated_origin_pull_ca.pem \
+  -o /etc/apache2/cloudflare/origin-pull-ca.pem
 ```
 
 ## 5. Enable required modules
@@ -112,19 +134,21 @@ sudo systemctl reload apache2
 
 ## 7. DNS
 
-Point all three records at your server's public IP:
+Point the records at your server's public IP. Keep them **proxied (orange
+cloud)** so Cloudflare features (WAF, mTLS, AOP, cache) apply:
 
 ```
-www    A   <SERVER_IP>
-shop   A   <SERVER_IP>
-api    A   <SERVER_IP>
+www    A   <SERVER_IP>   (proxied)
+shop   A   <SERVER_IP>   (proxied)
+api    A   <SERVER_IP>   (proxied)
+aop    A   <SERVER_IP>   (proxied — required for Authenticated Origin Pulls)
 @      A   <SERVER_IP>   (optional, for the bare pimenta.fun)
 ```
 
 For local-only testing, add to `/etc/hosts`:
 
 ```
-<SERVER_IP>  www.pimenta.fun shop.pimenta.fun api.pimenta.fun pimenta.fun
+<SERVER_IP>  www.pimenta.fun shop.pimenta.fun api.pimenta.fun aop.pimenta.fun pimenta.fun
 ```
 
 ---
@@ -143,6 +167,7 @@ sudo certbot certonly --webroot -w /var/www/pimenta/www \
   -d www.pimenta.fun -d pimenta.fun
 sudo certbot certonly --webroot -w /var/www/pimenta/shop -d shop.pimenta.fun
 sudo certbot certonly --webroot -w /var/www/pimenta/api  -d api.pimenta.fun
+sudo certbot certonly --webroot -w /var/www/pimenta/aop  -d aop.pimenta.fun
 
 sudo apache2ctl configtest && sudo systemctl reload apache2
 ```
@@ -174,18 +199,41 @@ openssl s_client -connect www.pimenta.fun:443 -status </dev/null 2>/dev/null | g
 
 ---
 
+## 8b. Enable Authenticated Origin Pulls (aop.pimenta.fun)
+
+1. The origin is ready: the `aop` vhost runs `SSLVerifyClient optional` and
+   trusts `/etc/apache2/cloudflare/origin-pull-ca.pem` (step 4b).
+2. In Cloudflare for the zone: **SSL/TLS → Origin Server → Authenticated Origin
+   Pulls → On** (zone-level). Ensure the `aop` record is **proxied**.
+3. Verify:
+
+```bash
+# Through Cloudflare: CF presents its client cert -> SUCCESS
+curl -sI https://aop.pimenta.fun/ | grep -i x-aop-client-verify
+#   -> X-AOP-Client-Verify: SUCCESS
+
+# Direct to origin (no CF cert): NONE (optional) — or 400 if you switch to "require"
+curl -sI --resolve aop.pimenta.fun:443:<ORIGIN_IP> https://aop.pimenta.fun/ | head
+```
+
+Or just open <https://aop.pimenta.fun/> — the page reports SUCCESS / NONE / FAILED.
+
+---
+
 ## 9. Verify
 
 ```bash
 curl -I http://www.pimenta.fun
 curl -I http://shop.pimenta.fun
-curl    http://api.pimenta.fun/rest/admin/application-version   # Juice Shop JSON
+curl    https://api.pimenta.fun/rest/admin/application-version   # {"status":"success","version":"1.0.0",...}
+curl -sI https://aop.pimenta.fun/ | grep -i x-aop-client-verify  # AOP status
 ```
 
 Then browse:
-- http://www.pimenta.fun
-- http://shop.pimenta.fun  (open the chat bubble bottom-right; click **Login**)
-- http://api.pimenta.fun
+- https://www.pimenta.fun
+- https://shop.pimenta.fun  (open the chat bubble bottom-right; click **Login**)
+- https://api.pimenta.fun
+- https://aop.pimenta.fun
 
 ---
 

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AOP Test &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .status-card { border-radius: 14px; padding: 22px 24px; margin: 18px 0; border: 1px solid var(--border); }
+    .status-card.green { background: rgba(54,211,153,0.1);  border-color: rgba(54,211,153,0.45); }
+    .status-card.amber { background: rgba(246,130,31,0.1);  border-color: rgba(246,130,31,0.45); }
+    .status-card.red   { background: rgba(255,107,107,0.1); border-color: rgba(255,107,107,0.45); }
+    .status-card h2 { margin: 0 0 6px; }
+    .status-card.green h2 { color: var(--green); }
+    .status-card.amber h2 { color: var(--accent); }
+    .status-card.red   h2 { color: var(--accent2); }
+    .kv { display: grid; grid-template-columns: 180px 1fr; gap: 6px 14px; margin-top: 12px; font-size: 0.9rem; }
+    .kv .k { color: var(--muted); }
+    .kv .v { font-family: ui-monospace, monospace; color: var(--text); word-break: break-all; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+      <a href="https://www.pimenta.fun/mtls-guide/">mTLS Guide</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Origin Security / Authenticated Origin Pulls</div>
+    <span class="tag">AOP</span>
+    <h1>Authenticated Origin Pulls <span class="grad">(AOP)</span></h1>
+    <p class="lead">Checks whether Cloudflare presented a valid client certificate to this origin &mdash; i.e. whether AOP is active for <code class="inline">aop.pimenta.fun</code>.</p>
+
+    <div class="note">
+      The origin runs Apache with <code class="inline">SSLVerifyClient optional</code> and exposes the verification
+      result via response headers (<code class="inline">X-AOP-Client-Verify</code>). This page reads them and reports below.
+      With <code class="inline">SSLVerifyClient require</code>, non-Cloudflare traffic is rejected outright (400).
+    </div>
+
+    <button class="btn" id="recheck">&#8635; Re-check AOP</button>
+
+    <div id="status" class="status-card amber">
+      <h2>Checking…</h2>
+      <p>Reading origin TLS client-auth headers.</p>
+    </div>
+
+    <h2>Details</h2>
+    <div class="kv" id="kv">
+      <div class="k">X-AOP-Client-Verify</div><div class="v" id="d-verify">…</div>
+      <div class="k">Client cert subject</div><div class="v" id="d-subject">…</div>
+      <div class="k">Client cert issuer</div><div class="v" id="d-issuer">…</div>
+      <div class="k">CF-Ray</div><div class="v" id="d-ray">…</div>
+    </div>
+
+    <h2>Test from the CLI</h2>
+    <pre># Through Cloudflare (AOP on): Cloudflare presents its cert -> origin accepts
+curl -sI https://aop.pimenta.fun/ | grep -i x-aop-client-verify
+#   -> X-AOP-Client-Verify: SUCCESS
+
+# Direct to the origin, bypassing Cloudflare: no CF client cert is sent
+curl -sI --resolve aop.pimenta.fun:443:&lt;ORIGIN_IP&gt; https://aop.pimenta.fun/ | head
+#   optional mode -> X-AOP-Client-Verify: NONE
+#   require  mode -> 400 No required SSL certificate was sent</pre>
+
+    <h2>What the result means</h2>
+    <ul class="bullets">
+      <li><strong>SUCCESS</strong> &mdash; Cloudflare presented a certificate the origin trusts. AOP is working.</li>
+      <li><strong>NONE</strong> &mdash; no client cert was presented: AOP is off in Cloudflare, the record isn't proxied (grey cloud), or you reached the origin directly.</li>
+      <li><strong>FAILED / mismatch</strong> &mdash; a cert was sent but didn't validate against the configured origin-pull CA.</li>
+    </ul>
+
+    <p style="margin-top:22px">
+      <a class="btn" href="https://www.pimenta.fun/mtls-guide/#leg2">AOP setup steps &rarr;</a>
+    </p>
+  </main>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+
+  <script>
+    const card = document.getElementById("status");
+    const set = (id, v) => { document.getElementById(id).textContent = v || "—"; };
+
+    async function check() {
+      card.className = "status-card amber";
+      card.innerHTML = "<h2>Checking…</h2><p>Reading origin TLS client-auth headers.</p>";
+      try {
+        const res = await fetch(location.href, { cache: "no-store" });
+        const verify  = res.headers.get("x-aop-client-verify");
+        const subject = res.headers.get("x-aop-client-subject");
+        const issuer  = res.headers.get("x-aop-client-issuer");
+        const ray     = res.headers.get("cf-ray");
+
+        set("d-verify", verify);
+        set("d-subject", subject);
+        set("d-issuer", issuer);
+        set("d-ray", ray);
+
+        if (verify === "SUCCESS") {
+          card.className = "status-card green";
+          card.innerHTML = "<h2>&#10003; AOP verified</h2><p>Cloudflare presented a valid origin-pull client certificate. The origin accepts traffic from Cloudflare only.</p>";
+        } else if (!verify || verify === "NONE") {
+          card.className = "status-card amber";
+          card.innerHTML = "<h2>&#9888; No client certificate</h2><p>AOP isn't active for this request. Enable Authenticated Origin Pulls in Cloudflare and make sure the record is <strong>proxied</strong> (orange cloud). If you connected directly to the origin, that's expected.</p>";
+        } else {
+          card.className = "status-card red";
+          card.innerHTML = "<h2>&#10007; Verification failed</h2><p>A client certificate was presented but did not validate (<code>" + verify + "</code>). Check the origin-pull CA on the origin.</p>";
+        }
+      } catch (e) {
+        card.className = "status-card red";
+        card.innerHTML = "<h2>&#10007; Request failed</h2><p>" + e.message +
+          " &mdash; if the origin enforces <code>SSLVerifyClient require</code> and no CF cert was sent, the connection is rejected by design.</p>";
+        set("d-verify", "—"); set("d-subject", "—"); set("d-issuer", "—"); set("d-ray", "—");
+      }
+    }
+    document.getElementById("recheck").addEventListener("click", check);
+    check();
+  </script>
+</body>
+</html>

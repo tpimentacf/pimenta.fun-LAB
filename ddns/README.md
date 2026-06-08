@@ -1,7 +1,9 @@
 # Cloudflare Dynamic DNS for GCP VM
 
-Keeps `www.pimenta.fun` and `shop.pimenta.fun` pointed at the **current public IP**
-of this GCP VM, updated daily via cron.
+Keeps the lab hostnames (`www`, `shop`, `api`, `aop`) pointed at the **current
+public IP** of this GCP VM, updated daily via cron. Edit `RECORDS` in the env
+file to change the list. Keep these **proxied** (`PROXIED="true"`) so Cloudflare
+features — WAF, mTLS, Authenticated Origin Pulls — apply.
 
 Files:
 - `cf-ddns.sh` — the update script (IP detection + Cloudflare API sync)
