@@ -19,11 +19,26 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONF_AVAIL="/etc/apache2/conf-available"
 SITES_AVAIL="/etc/apache2/sites-available"
 
-SITES=(www.pimenta.fun shop.pimenta.fun api.pimenta.fun)
+SITES=(www.pimenta.fun shop.pimenta.fun api.pimenta.fun aop.pimenta.fun)
 SNIPPETS=(pimenta-security-headers.conf pimenta-ssl-params.conf pimenta-ssl-stapling.conf)
+AOP_CA="/etc/apache2/cloudflare/origin-pull-ca.pem"
+AOP_CA_URL="https://developers.cloudflare.com/ssl/static/authenticated_origin_pull_ca.pem"
 
 echo "==> Enabling required modules"
 a2enmod ssl headers rewrite proxy proxy_http socache_shmcb >/dev/null
+
+echo "==> Ensuring Cloudflare origin-pull CA exists (for aop.pimenta.fun)"
+if [ ! -f "$AOP_CA" ]; then
+  mkdir -p "$(dirname "$AOP_CA")"
+  if curl -fsSL "$AOP_CA_URL" -o "$AOP_CA"; then
+    echo "    downloaded $AOP_CA"
+  else
+    echo "    WARNING: could not download the origin-pull CA. The aop vhost references" >&2
+    echo "    $AOP_CA and Apache will fail configtest until it exists." >&2
+  fi
+else
+  echo "    present: $AOP_CA"
+fi
 
 echo "==> Installing shared snippets to ${CONF_AVAIL}"
 for s in "${SNIPPETS[@]}"; do
