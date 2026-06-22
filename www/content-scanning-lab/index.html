@@ -5,6 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Content Scanning Lab &mdash; Pimenta Lab</title>
   <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    /* page-specific styling layered on /assets/lab.css */
+    .diagram { background:#fff; border:1px solid var(--border); border-radius:14px; padding:16px; margin:18px 0 6px; overflow-x:auto; }
+    .diagram img, .diagram svg { display:block; width:100%; max-width:100%; min-width:560px; height:auto; }
+    figcaption { color:var(--muted); font-size:0.82rem; text-align:center; margin:10px 0 4px; }
+    main.lab code { background:#1b2547; padding:2px 6px; border-radius:5px; font-size:0.85rem; color:#d7e2f7; }
+    main.lab pre code { background:none; padding:0; color:inherit; }
+    .badge { display:inline-block; vertical-align:middle; margin-left:8px; padding:3px 10px; border-radius:999px;
+             font-size:0.66rem; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; }
+    .badge.info { background:rgba(91,141,239,0.14); color:#9cc0ff; border:1px solid rgba(91,141,239,0.45); }
+    .badge.malware { background:rgba(255,107,107,0.14); color:#ffb0b0; border:1px solid rgba(255,107,107,0.45); }
+    .panel h2 { margin-top:0; font-size:1.1rem; }
+    .btn.danger { background:var(--accent2); color:#2a0a0a; }
+    .result-box { margin-top:14px; background:var(--panel2); border:1px solid var(--border); border-radius:10px;
+                  padding:12px 14px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:0.82rem;
+                  color:#cdd8ef; white-space:pre-wrap; word-break:break-word; min-height:42px; }
+    .result-box.clean   { border-color:rgba(54,211,153,0.55); color:#b6f5dc; background:rgba(54,211,153,0.07); }
+    .result-box.blocked { border-color:rgba(255,107,107,0.55); color:#ffc4c4; background:rgba(255,107,107,0.07); }
+    .fields-table { width:100%; border-collapse:collapse; margin-top:6px; font-size:0.84rem; }
+    .fields-table th, .fields-table td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+    .fields-table thead th { color:var(--accent); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px; }
+    .fields-table tbody td:first-child { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#9cc0ff; white-space:nowrap; }
+    .fields-table tbody td:nth-child(2) { color:var(--muted); white-space:nowrap; }
+    .cs-cols { display:grid; grid-template-columns:1fr 1fr; gap:22px; margin-top:6px; }
+    .cs-cols h3 { font-size:0.95rem; margin:0 0 6px; color:var(--text); }
+    @media (max-width:640px){ .cs-cols { grid-template-columns:1fr; } }
+  </style>
 </head>
 <body>
   <header class="lab">
@@ -16,26 +43,226 @@
   </header>
 
   <main class="lab">
-    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Content Scanning / Lab</div>
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Application Security / Content Scanning</div>
     <span class="tag">Content Scanning</span>
     <h1>Content Scanning <span class="grad">Lab</span></h1>
-    <p class="lead">Upload a file to exercise Cloudflare WAF Content Scanning.</p>
-    <form class="panel" id="f">
-      <label>Choose a file</label><input id="file" type="file" />
-      <br /><br /><button class="btn" type="submit">Upload</button>
-    </form>
-    <div id="result"></div>
-    <div class="note">Try the EICAR test file to see Content Scanning flag a malicious upload.</div>
+    <p class="lead">Exercise Cloudflare WAF Content Scanning: upload files that trigger the
+      <code>cf.waf.content_scan.*</code> fields and watch how WAF custom rules react.</p>
+
+    <div class="warn"><strong>Use at your own risk.</strong> This lab was built by TPimenta LAB for hands-on testing.
+      Always consult the official Cloudflare documentation for accurate, up-to-date guidance.</div>
+
+    <div class="note"><strong>Before you start:</strong> disable the Cloudflare WARP client so your test traffic hits the
+      zone directly. Content Scanning requires <strong>Malicious Uploads Detection</strong> enabled on the zone
+      (Enterprise plan + add-on).</div>
+
+    <!-- ── HOW IT WORKS (diagram hero) ── -->
+    <h2>How it works</h2>
+    <figure class="diagram">
+      <img src="content-scanning-workflow.svg"
+           alt="Cloudflare WAF Content Scanning workflow: clients send uploads, the Cloudflare edge detects content objects by heuristics, the antivirus engine scans them, results populate cf.waf.content_scan fields, and WAF custom rules block, challenge, log, or allow before traffic reaches the origin." />
+      <figcaption>Request flow &mdash; object detection &rarr; AV scan &rarr; verdict &rarr; WAF rule decision &rarr; origin.</figcaption>
+    </figure>
+
+    <!-- ── TEST 1: Standard file upload ── -->
+    <div class="panel">
+      <h2>Test 1 &mdash; Standard File Upload <span class="badge info">multipart/form-data</span></h2>
+      <p>Upload any file. If a WAF custom rule is set to <strong>Block</strong> on
+        <code>cf.waf.content_scan.has_malicious_obj</code>, infected files return 403. Clean files reach the origin.</p>
+      <form id="form-upload" action="/content-scanning-lab/upload" method="POST" enctype="multipart/form-data">
+        <label for="file-upload">Choose file to upload</label>
+        <input type="file" id="file-upload" name="file" />
+        <label for="endpoint-upload">Target endpoint (relative or absolute)</label>
+        <input type="text" id="endpoint-upload" value="/content-scanning-lab/upload" />
+        <br /><br /><button class="btn" type="submit">Upload file</button>
+      </form>
+      <div class="result-box" id="result-upload">Waiting for upload&hellip;</div>
+    </div>
+
+    <!-- ── TEST 2: EICAR test file ── -->
+    <div class="panel">
+      <h2>Test 2 &mdash; EICAR Antivirus Test String <span class="badge malware">should block</span></h2>
+      <p>The <strong>EICAR test file</strong> is an industry-standard, harmless string universally recognised as malware
+        by AV engines. Cloudflare's scanner flags it as <em>infected</em>. Expect a <strong>403</strong> if a block rule exists.</p>
+      <form id="form-eicar" action="/content-scanning-lab/upload" method="POST" enctype="multipart/form-data">
+        <label for="endpoint-eicar">Target endpoint</label>
+        <input type="text" id="endpoint-eicar" value="/content-scanning-lab/upload" />
+        <br /><br /><button type="button" id="btn-eicar" class="btn danger">Send EICAR test file</button>
+      </form>
+      <div class="result-box" id="result-eicar">Waiting for EICAR test&hellip;</div>
+    </div>
+
+    <!-- ── TEST 3: Base64-encoded payload (JSON body) ── -->
+    <div class="panel">
+      <h2>Test 3 &mdash; Base64-Encoded File in JSON Body <span class="badge info">custom scan expression</span></h2>
+      <p>Some APIs receive files as Base64 strings inside JSON. Configure a <strong>custom scan expression</strong> such as
+        <code>lookup_json_string(http.request.body.raw, "file")</code> so the scanner knows where to look.</p>
+      <label for="json-endpoint">Target endpoint</label>
+      <input type="text" id="json-endpoint" value="/content-scanning-lab/upload" />
+      <label for="json-body">JSON payload (edit the "file" value)</label>
+      <textarea id="json-body" rows="3">{"filename":"test.pdf","file":"&lt;BASE64_HERE&gt;"}</textarea>
+      <label>EICAR as Base64 (paste into "file"):</label>
+      <code>WDVPIVAlQEFQWzRcUFpYNTQoUF4pN0NDKTd9JEVJQ0FSLVNUQU5EQVJELUFOVElWSVJVUy1URVNULUZJTEUhJEgrSCo=</code>
+      <br /><br /><button type="button" id="btn-json" class="btn">Send JSON payload</button>
+      <div class="result-box" id="result-json">Waiting for JSON test&hellip;</div>
+    </div>
+
+    <!-- ── TEST 4: Multiple files ── -->
+    <div class="panel">
+      <h2>Test 4 &mdash; Multiple Files in One Request <span class="badge info">num_obj</span></h2>
+      <p><code>cf.waf.content_scan.num_obj</code> counts all content objects. Use rules like
+        <code>cf.waf.content_scan.num_obj &gt; 2</code> to limit bulk uploads.</p>
+      <form id="form-multi" action="/content-scanning-lab/upload" method="POST" enctype="multipart/form-data">
+        <label for="files-multi">Select multiple files</label>
+        <input type="file" id="files-multi" name="files" multiple />
+        <label for="endpoint-multi">Target endpoint</label>
+        <input type="text" id="endpoint-multi" value="/content-scanning-lab/upload" />
+        <br /><br /><button class="btn" type="submit">Upload multiple files</button>
+      </form>
+      <div class="result-box" id="result-multi">Waiting for multi-file upload&hellip;</div>
+    </div>
+
+    <!-- ── FIELDS REFERENCE ── -->
+    <h2>Content Scanning fields reference</h2>
+    <div class="panel">
+      <table class="fields-table">
+        <thead>
+          <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>cf.waf.content_scan.has_obj</td><td>Boolean</td><td>Request contains at least one content object</td></tr>
+          <tr><td>cf.waf.content_scan.has_malicious_obj</td><td>Boolean</td><td>At least one object is malicious (infected / suspicious)</td></tr>
+          <tr><td>cf.waf.content_scan.num_obj</td><td>Integer</td><td>Total number of content objects detected</td></tr>
+          <tr><td>cf.waf.content_scan.num_malicious_obj</td><td>Integer</td><td>Number of malicious content objects</td></tr>
+          <tr><td>cf.waf.content_scan.obj_sizes</td><td>Array&lt;Integer&gt;</td><td>File sizes (bytes) in detection order</td></tr>
+          <tr><td>cf.waf.content_scan.obj_types</td><td>Array&lt;String&gt;</td><td>MIME types in detection order</td></tr>
+          <tr><td>cf.waf.content_scan.obj_results</td><td>Array&lt;String&gt;</td><td>Scan results: <code>clean</code> | <code>suspicious</code> | <code>infected</code> | <code>not scanned</code></td></tr>
+          <tr><td>cf.waf.content_scan.has_failed</td><td>Boolean</td><td>AV scanner timed out or could not scan an object</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── DETAILS ── -->
+    <h2>What Content Scanning does</h2>
+    <div class="panel">
+      <div class="cs-cols">
+        <div>
+          <h3>What counts as a content object?</h3>
+          <p>Any payload that is <strong>not</strong> <code>text/html</code>, <code>text/x-shellscript</code>,
+            <code>application/json</code>, <code>text/csv</code>, or <code>text/xml</code>. Includes executables,
+            documents, archives, images, and audio/video. Detection is by heuristics &mdash; the <code>Content-Type</code>
+            header is <strong>ignored</strong> since it can be spoofed.</p>
+        </div>
+        <div>
+          <h3>Key limits &amp; behaviours</h3>
+          <ul class="bullets">
+            <li>Files scanned up to <strong>50 MB</strong> (first 50 MB for larger objects)</li>
+            <li>Password-protected archives: <strong>not scanned</strong></li>
+            <li>Archives with &gt;3 recursion levels or &gt;300 files: skipped</li>
+            <li>PGP-encrypted files: not scanned</li>
+            <li>Scanning adds latency (proportional to object size)</li>
+            <li>Detection only &mdash; you must create rules to block</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <h2>Example WAF custom rule expressions</h2>
+    <pre># Block all malicious uploads
+(cf.waf.content_scan.has_malicious_obj)
+
+# Block malicious uploads to a specific endpoint
+(cf.waf.content_scan.has_malicious_obj and http.request.uri.path contains "/upload")
+
+# Block if the scanner could not scan (fail-closed posture)
+(cf.waf.content_scan.has_failed)
+
+# Block more than 2 objects in a single request
+(cf.waf.content_scan.num_obj &gt; 2 and http.request.uri.path eq "/upload")
+
+# Block bots uploading files
+(cf.waf.content_scan.has_obj and cf.bot_management.score lt 10)
+
+# Custom scan expression for Base64 in JSON
+# (configure in Dashboard -&gt; Security -&gt; Settings -&gt; Malicious uploads detection)
+lookup_json_string(http.request.body.raw, "file")</pre>
   </main>
 
   <footer class="lab">
-    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a> &middot;
+    <a href="https://developers.cloudflare.com/waf/" target="_blank" rel="noopener">WAF docs</a> &middot;
+    <a href="https://developers.cloudflare.com/waf/detections/malicious-uploads/" target="_blank" rel="noopener">Malicious uploads detection</a>
   </footer>
+
   <script>
-    document.getElementById('f').addEventListener('submit', function(e){ e.preventDefault();
-      var f=document.getElementById('file').files[0];
-      var r=document.getElementById('result'); r.className='ok';
-      r.textContent = f ? ('Selected: '+f.name+' ('+f.size+' bytes). Wire to a Worker/R2 to upload.') : 'Pick a file first.'; });
+    /* ── helpers ── */
+    function setResult(id, text, cls) {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.className = 'result-box' + (cls ? ' ' + cls : '');
+    }
+
+    async function doFetch(id, request) {
+      setResult(id, 'Sending request…');
+      try {
+        const res = await fetch(request);
+        const body = await res.text().catch(() => '');
+        const status = res.status;
+        const cls = status === 403 ? 'blocked' : status < 400 ? 'clean' : '';
+        setResult(id,
+          `HTTP ${status} ${res.statusText}\n` +
+          `URL: ${res.url}\n\n` +
+          (body.slice(0, 400) || '(empty body)'),
+          cls
+        );
+      } catch (err) {
+        setResult(id, `Network error: ${err.message}\n\nNote: if the origin is unreachable, a blocked response (403) from Cloudflare still demonstrates content scanning working correctly.`);
+      }
+    }
+
+    /* ── Test 1: standard upload ── */
+    document.getElementById('form-upload').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const file = document.getElementById('file-upload').files[0];
+      if (!file) { setResult('result-upload', 'No file selected.'); return; }
+      const fd = new FormData();
+      fd.append('file', file);
+      const endpoint = document.getElementById('endpoint-upload').value || '/upload';
+      doFetch('result-upload', new Request(endpoint, { method: 'POST', body: fd }));
+    });
+
+    /* ── Test 2: EICAR ── */
+    document.getElementById('btn-eicar').addEventListener('click', () => {
+      // EICAR test string split to avoid local AV flagging this source file
+      const eicarStr = 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR' + '-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*';
+      const blob = new Blob([eicarStr], { type: 'application/octet-stream' });
+      const fd = new FormData();
+      fd.append('file', blob, 'eicar.com');
+      const endpoint = document.getElementById('endpoint-eicar').value || '/upload';
+      doFetch('result-eicar', new Request(endpoint, { method: 'POST', body: fd }));
+    });
+
+    /* ── Test 3: JSON with Base64 ── */
+    document.getElementById('btn-json').addEventListener('click', () => {
+      const body = document.getElementById('json-body').value;
+      const endpoint = document.getElementById('json-endpoint').value || '/api/upload';
+      doFetch('result-json', new Request(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      }));
+    });
+
+    /* ── Test 4: multiple files ── */
+    document.getElementById('form-multi').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const files = document.getElementById('files-multi').files;
+      if (!files.length) { setResult('result-multi', 'No files selected.'); return; }
+      const fd = new FormData();
+      for (const f of files) fd.append('files', f);
+      const endpoint = document.getElementById('endpoint-multi').value || '/upload-multi';
+      doFetch('result-multi', new Request(endpoint, { method: 'POST', body: fd }));
+    });
   </script>
 </body>
 </html>

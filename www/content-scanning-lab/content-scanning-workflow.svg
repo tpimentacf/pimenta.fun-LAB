@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" width="1400" height="900" role="img" aria-label="Cloudflare WAF Content Scanning workflow">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+      text { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #1A1A1A; }
+      .t-title { font-size: 30px; font-weight: 700; }
+      .t-sub { font-size: 16px; fill: #6B7280; }
+      .t-zone { font-size: 13px; font-weight: 600; fill: #1A6FD4; }
+      .t-box { font-size: 13px; font-weight: 600; }
+      .t-small { font-size: 10.5px; fill: #6B7280; }
+      .t-node { font-size: 12px; font-weight: 500; }
+      .t-mut { font-size: 11px; fill: #6B7280; }
+      .t-leg-title { font-size: 14px; font-weight: 600; }
+      .t-leg { font-size: 12.5px; }
+      .mono { font-weight: 600; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#F6821F"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="900" fill="#FFFFFF"/>
+
+  <!-- Title -->
+  <text x="700" y="50" text-anchor="middle" class="t-title">Cloudflare WAF Content Scanning</text>
+  <text x="700" y="80" text-anchor="middle" class="t-sub">Workflow &amp; logic for detecting malicious file uploads at the edge</text>
+
+  <!-- ================= CLIENTS ZONE ================= -->
+  <rect x="40" y="140" width="200" height="300" rx="8" fill="none" stroke="#1A6FD4" stroke-width="1.5" stroke-dasharray="8 4"/>
+  <text x="140" y="432" text-anchor="middle" class="t-zone">Clients uploading files</text>
+
+  <!-- end user -->
+  <g transform="translate(95,200)" stroke="#1A6FD4" stroke-width="2" fill="none">
+    <circle cx="0" cy="-7" r="6"/>
+    <path d="M-11,11 C-11,2 11,2 11,11"/>
+  </g>
+  <text x="120" y="208" class="t-node">End user</text>
+  <text x="120" y="224" class="t-mut">multipart/form-data</text>
+
+  <!-- api client -->
+  <g transform="translate(95,280)" stroke="#1A6FD4" stroke-width="2" fill="none">
+    <rect x="-13" y="-11" width="26" height="22" rx="3"/>
+    <text x="0" y="5" text-anchor="middle" font-size="11" fill="#1A6FD4" stroke="none" font-weight="600">&lt;/&gt;</text>
+  </g>
+  <text x="120" y="284" class="t-node">API client</text>
+  <text x="120" y="300" class="t-mut">JSON + Base64</text>
+
+  <!-- bot -->
+  <g transform="translate(95,360)" stroke="#1A6FD4" stroke-width="2" fill="none">
+    <rect x="-11" y="-6" width="22" height="18" rx="4"/>
+    <line x1="0" y1="-6" x2="0" y2="-13"/>
+    <circle cx="0" cy="-15" r="2" fill="#1A6FD4"/>
+    <circle cx="-4" cy="3" r="1.6" fill="#1A6FD4" stroke="none"/>
+    <circle cx="4" cy="3" r="1.6" fill="#1A6FD4" stroke="none"/>
+  </g>
+  <text x="120" y="364" class="t-node">Automated bot</text>
+  <text x="120" y="380" class="t-mut">scripted upload</text>
+
+  <!-- ================= CLOUDFLARE EDGE ZONE ================= -->
+  <rect x="300" y="120" width="790" height="360" rx="8" fill="none" stroke="#1A6FD4" stroke-width="1.5" stroke-dasharray="8 4"/>
+  <text x="695" y="468" text-anchor="middle" class="t-zone">Cloudflare global network — WAF runs at the edge, before your origin</text>
+
+  <!-- CF hub cloud -->
+  <g transform="translate(345,168)">
+    <g fill="#F6821F" stroke="none">
+      <ellipse cx="-8" cy="3" rx="9" ry="7"/>
+      <ellipse cx="5" cy="1" rx="11" ry="9"/>
+      <ellipse cx="-2" cy="-4" rx="8" ry="7"/>
+      <rect x="-16" y="3" width="29" height="8" rx="4"/>
+    </g>
+  </g>
+  <text x="345" y="196" text-anchor="middle" class="t-mut">Cloudflare</text>
+
+  <!-- client -> box1 arrows (start at zone edge to avoid clipping labels) -->
+  <path d="M248,232 L351,290" fill="none" stroke="#F6821F" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M248,300 L351,312" fill="none" stroke="#F6821F" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M248,368 L351,334" fill="none" stroke="#F6821F" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Pipeline boxes -->
+  <!-- Box 1 Detect -->
+  <rect x="355" y="240" width="160" height="145" rx="8" fill="#F5F7FA" stroke="#D1D9E0" stroke-width="1.5"/>
+  <g transform="translate(435,272)" stroke="#1A6FD4" stroke-width="2" fill="none">
+    <circle cx="-2" cy="-2" r="8"/>
+    <line x1="4" y1="4" x2="11" y2="11"/>
+  </g>
+  <text x="435" y="304" text-anchor="middle" class="t-box">1 · Detect objects</text>
+  <text x="435" y="324" text-anchor="middle" class="t-small">heuristics —</text>
+  <text x="435" y="338" text-anchor="middle" class="t-small">ignores Content-Type</text>
+
+  <!-- Box 2 AV scan -->
+  <rect x="535" y="240" width="160" height="145" rx="8" fill="#F5F7FA" stroke="#D1D9E0" stroke-width="1.5"/>
+  <g transform="translate(615,272)" stroke="#1A6FD4" stroke-width="2" fill="none">
+    <path d="M0,-12 L11,-7 V2 C11,9 0,13 0,13 C0,13 -11,9 -11,2 V-7 Z"/>
+    <path d="M-4,-1 L-1,3 L5,-5"/>
+  </g>
+  <text x="615" y="304" text-anchor="middle" class="t-box">2 · AV scan</text>
+  <text x="615" y="324" text-anchor="middle" class="t-small">engine shared with</text>
+  <text x="615" y="338" text-anchor="middle" class="t-small">Zero Trust · ≤ 50 MB</text>
+
+  <!-- Box 3 Verdict -->
+  <rect x="715" y="240" width="160" height="145" rx="8" fill="#F5F7FA" stroke="#D1D9E0" stroke-width="1.5"/>
+  <g transform="translate(795,272)" stroke="#1A6FD4" stroke-width="2" fill="none">
+    <rect x="-10" y="-11" width="20" height="22" rx="2"/>
+    <line x1="-6" y1="-5" x2="6" y2="-5"/>
+    <line x1="-6" y1="0" x2="6" y2="0"/>
+    <line x1="-6" y1="5" x2="2" y2="5"/>
+  </g>
+  <text x="795" y="304" text-anchor="middle" class="t-box">3 · Verdict</text>
+  <text x="795" y="324" text-anchor="middle" class="t-small">clean / suspicious /</text>
+  <text x="795" y="338" text-anchor="middle" class="t-small">infected / not scanned</text>
+
+  <!-- Box 4 WAF rules -->
+  <rect x="895" y="240" width="160" height="145" rx="8" fill="#F5F7FA" stroke="#D1D9E0" stroke-width="1.5"/>
+  <g transform="translate(975,272)" stroke="#1A6FD4" stroke-width="2" fill="none">
+    <path d="M-11,-9 H11 L3,2 V11 L-3,8 V2 Z"/>
+  </g>
+  <text x="975" y="304" text-anchor="middle" class="t-box">4 · WAF rules</text>
+  <text x="975" y="324" text-anchor="middle" class="t-small">evaluate fields →</text>
+  <text x="975" y="338" text-anchor="middle" class="t-small">block / log / allow</text>
+
+  <!-- arrows between boxes -->
+  <path d="M515,312 L535,312" fill="none" stroke="#F6821F" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M695,312 L715,312" fill="none" stroke="#F6821F" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M875,312 L895,312" fill="none" stroke="#F6821F" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ================= DECISION + OUTCOMES ================= -->
+  <rect x="1245" y="160" width="125" height="320" rx="8" fill="none" stroke="#1A6FD4" stroke-width="1.5" stroke-dasharray="8 4"/>
+  <text x="1307" y="468" text-anchor="middle" class="t-zone">Rule outcome</text>
+
+  <!-- decision diamond -->
+  <polygon points="1160,262 1220,312 1160,362 1100,312" fill="#FFFFFF" stroke="#1A6FD4" stroke-width="1.5"/>
+  <text x="1160" y="309" text-anchor="middle" class="t-mut" style="font-weight:600">malicious</text>
+  <text x="1160" y="323" text-anchor="middle" class="t-mut" style="font-weight:600">object?</text>
+
+  <!-- box4 -> diamond -->
+  <path d="M1055,312 L1100,312" fill="none" stroke="#F6821F" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- diamond -> block (true) -->
+  <path d="M1160,262 L1160,228 L1283,228" fill="none" stroke="#F6821F" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="1168" y="220" class="t-mut">True → block</text>
+  <!-- diamond -> origin (false) -->
+  <path d="M1160,362 L1160,400 L1283,400" fill="none" stroke="#F6821F" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="1168" y="392" class="t-mut">False → allow</text>
+
+  <!-- block node -->
+  <g transform="translate(1307,228)" stroke="#1A6FD4" stroke-width="2" fill="none">
+    <circle cx="0" cy="0" r="11"/>
+    <line x1="-7.5" y1="-7.5" x2="7.5" y2="7.5"/>
+  </g>
+  <text x="1307" y="258" text-anchor="middle" class="t-node">Block / Managed</text>
+  <text x="1307" y="273" text-anchor="middle" class="t-node">Challenge · Log</text>
+
+  <!-- origin node -->
+  <g transform="translate(1307,400)" stroke="#1A6FD4" stroke-width="2" fill="none">
+    <rect x="-13" y="-11" width="26" height="9" rx="2"/>
+    <rect x="-13" y="1" width="26" height="9" rx="2"/>
+    <circle cx="-8" cy="-6.5" r="1.5" fill="#1A6FD4" stroke="none"/>
+    <circle cx="-8" cy="5.5" r="1.5" fill="#1A6FD4" stroke="none"/>
+  </g>
+  <text x="1307" y="428" text-anchor="middle" class="t-node">Origin server</text>
+  <text x="1307" y="443" text-anchor="middle" class="t-mut">clean file delivered</text>
+
+  <!-- ================= LOGGING / VISIBILITY ================= -->
+  <path d="M795,385 L795,503" fill="none" stroke="#F6821F" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="355" y="505" width="700" height="70" rx="8" fill="#F5F7FA" stroke="#D1D9E0" stroke-width="1.5"/>
+  <text x="705" y="532" text-anchor="middle" class="t-box">Visibility &amp; validation</text>
+  <text x="705" y="554" text-anchor="middle" class="t-mut">Security Analytics · Security Events · HTTP logs — verdict, obj_types, obj_sizes · validate with the EICAR test file</text>
+
+  <!-- ================= LEGEND: FIELDS ================= -->
+  <rect x="40" y="625" width="655" height="245" rx="8" fill="#F5F7FA" stroke="#D1D9E0" stroke-width="1.5"/>
+  <text x="60" y="652" class="t-leg-title">Fields exposed to WAF rules — <tspan class="mono" fill="#1A6FD4">cf.waf.content_scan.*</tspan></text>
+  <text x="60" y="682" class="t-leg"><tspan class="mono">has_obj</tspan> — request contains ≥ 1 content object (Boolean)</text>
+  <text x="60" y="706" class="t-leg"><tspan class="mono">has_malicious_obj</tspan> — ≥ 1 malicious / suspicious object (Boolean)</text>
+  <text x="60" y="730" class="t-leg"><tspan class="mono">num_obj</tspan> / <tspan class="mono">num_malicious_obj</tspan> — object counts (Integer)</text>
+  <text x="60" y="754" class="t-leg"><tspan class="mono">has_failed</tspan> — scanner could not scan an object (Boolean)</text>
+  <text x="60" y="778" class="t-leg"><tspan class="mono">obj_results[]</tspan> — clean · suspicious · infected · not scanned</text>
+  <text x="60" y="802" class="t-leg"><tspan class="mono">obj_types[]</tspan> — detected file types (Array)</text>
+  <text x="60" y="826" class="t-leg"><tspan class="mono">obj_sizes[]</tspan> — file sizes in bytes (Array)</text>
+
+  <!-- ================= LEGEND: LOGIC / LIMITS ================= -->
+  <rect x="715" y="625" width="645" height="245" rx="8" fill="#F5F7FA" stroke="#D1D9E0" stroke-width="1.5"/>
+  <text x="735" y="652" class="t-leg-title">Key logic, limits &amp; examples</text>
+  <text x="735" y="682" class="t-leg">• Detection uses heuristics — independent of the Content-Type header</text>
+  <text x="735" y="706" class="t-leg">• Skipped as structured data: application/json, text/csv, text/xml</text>
+  <text x="735" y="730" class="t-leg">• AV scanner is the same engine used in Cloudflare Zero Trust</text>
+  <text x="735" y="754" class="t-leg">• Objects ≤ 50 MB are fully scanned; larger objects scanned partially</text>
+  <text x="735" y="778" class="t-leg">• Custom scan expressions locate files (e.g. Base64 inside JSON)</text>
+  <text x="735" y="802" class="t-leg">• Block rule: <tspan class="mono" fill="#1A6FD4">(cf.waf.content_scan.has_malicious_obj)</tspan></text>
+  <text x="735" y="826" class="t-leg">• Bots: <tspan class="mono" fill="#1A6FD4">(…has_obj and cf.bot_management.score lt 10)</tspan></text>
+</svg>
