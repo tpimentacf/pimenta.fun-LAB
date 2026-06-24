@@ -144,8 +144,8 @@
           impl:"Static page + Rate Limiting rule with action = Throttle." },
         { name:"Rate Limit by Worker", href:"/ratelimiting/worker-rl/", prod:"Workers Rate Limiting binding",
           badges:["worker"],
-          desc:"A Worker enforces the limit programmatically using the Rate Limiting binding.",
-          impl:"Worker bound to the route, using the native Rate Limiting binding to return 429s." }
+          desc:"A Worker enforces the limit programmatically using the Rate Limiting binding; page includes full code + Cloudflare setup steps.",
+          impl:"Worker in <code class=\"inline\">workers/rate-limit/</code> using the native [[ratelimits]] binding (5/60s) bound to the route; returns 429 on excess. Requires Wrangler &ge; 4.36.0." }
       ]},
 
       { title: "Turnstile", desc: "Cloudflare's privacy-first CAPTCHA alternative.", items: [

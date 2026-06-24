@@ -26,7 +26,9 @@
       <h2>Responses (newest first)</h2>
       <div id="log"></div>
     </div>
-    <div class="note">Watch for HTTP <code class="inline">429 Too Many Requests</code> once the configured threshold is exceeded.</div>
+    <div class="note">Watch for HTTP <code class="inline">429 Too Many Requests</code> once the configured threshold is exceeded.
+      Each line also shows the serving Cloudflare data center <code class="inline">[colo XXX]</code> (from <code class="inline">cf-ray</code>) &mdash;
+      relevant because rate limits are enforced per colo.</div>
   </main>
 
   <footer class="lab">
@@ -39,15 +41,16 @@
       var idx = n;
       var t0 = performance.now();
       fetch(location.href, { cache: 'no-store' }).then(function (r) {
-        log(idx, r.status, Math.round(performance.now() - t0));
-      }).catch(function (e) { log(idx, 'ERR', '-'); });
+        var ray = r.headers.get('cf-ray');
+        var colo = ray ? ray.split('-').pop() : 'n/a';
+        log(idx, r.status, Math.round(performance.now() - t0), colo);
+      }).catch(function (e) { log(idx, 'ERR', '-', 'n/a'); });
     }
     function burst(k) { for (var i = 0; i < k; i++) hit(); }
-    function log(idx, status, ms) {
-      var cls = (status === 429) ? 'warn' : 'ok';
+    function log(idx, status, ms, colo) {
       var el = document.getElementById('log');
       var line = document.createElement('div');
-      line.textContent = '#' + idx + '  ->  ' + status + '  (' + ms + ' ms)';
+      line.textContent = '#' + idx + '  ->  ' + status + '  (' + ms + ' ms)  [colo ' + colo + ']';
       line.style.color = (status === 429) ? '#ffc4c4' : '#b6f5dc';
       el.prepend(line);
     }
