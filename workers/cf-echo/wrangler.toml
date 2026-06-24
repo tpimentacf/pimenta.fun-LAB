@@ -1,0 +1,13 @@
+name = "cf-echo"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# Route the Worker so the lab page can call it same-origin at /cf-echo/echo.
+# Adjust the zone_name to your zone. Comment this out to deploy to
+# cf-echo.<your-subdomain>.workers.dev instead.
+routes = [
+  { pattern = "www.pimenta.fun/cf-echo/echo*", zone_name = "pimenta.fun" }
+]
+
+# Optional: enable a workers.dev preview URL while testing.
+workers_dev = true
