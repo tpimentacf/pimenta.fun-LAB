@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CF Echo &mdash; Pimenta Lab</title>
+  <meta name="description" content="Live echo of the Cloudflare request.cf object and all edge-injected request headers, via a Cloudflare Worker." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    /* page-specific styling layered on /assets/lab.css */
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+    .row-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+
+    .kv { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .kv th, .kv td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .kv thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kv tbody td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #9cc0ff; white-space: nowrap; }
+    .kv tbody td .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #d7e2f7; word-break: break-word; }
+    .kv tbody tr:last-child td { border-bottom: none; }
+    .kv tr.hl td:first-child { color: #f6a85f; }
+
+    .geo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 6px 0 0; }
+    .geo-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .geo-card .l { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .geo-card .n { font-size: 1.05rem; font-weight: 700; color: var(--accent); margin-top: 4px; word-break: break-word; }
+    .geo-card .n .flag { font-size: 1.3rem; margin-right: 6px; }
+
+    details.raw { margin-top: 6px; }
+    details.raw summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; font-weight: 600; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+    .copied { color: var(--green); font-size: 0.8rem; opacity: 0; transition: opacity 0.2s; }
+    .copied.show { opacity: 1; }
+    .status { font-size: 0.82rem; }
+    .status.ok { color: var(--green); }
+    .status.err { color: #ffb0b0; }
+    #not-deployed { display: none; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Network &amp; Edge / CF Echo</div>
+    <span class="tag">CF Echo</span>
+    <h1>Cloudflare <span class="grad">request.cf</span> Echo</h1>
+    <p class="lead">A Cloudflare Worker reflects your request back exactly as the edge sees it &mdash; including the
+      <code class="inline">request.cf</code> object and the headers Cloudflare injects that
+      <strong>client-side JavaScript can never read</strong>.</p>
+
+    <div class="note"><strong>Companion to the <a href="/edge-inspector/" style="color:var(--accent);">Edge Inspector</a>.</strong>
+      That page reads what the browser can see (<code class="inline">/cdn-cgi/trace</code> + response headers).
+      This page asks a Worker server-side, so you also get <code class="inline">CF-Connecting-IP</code>,
+      <code class="inline">CF-IPCountry</code>, ASN, TLS cipher, bot score, and the rest of <code class="inline">request.cf</code>.</div>
+
+    <div class="warn"><strong>Use at your own risk.</strong> This lab was built by TPimenta LAB for hands-on testing.
+      Always consult the official Cloudflare documentation for accurate, up-to-date guidance.</div>
+
+    <!-- ── ENDPOINT CONTROL ── -->
+    <div class="panel">
+      <h2>Echo endpoint</h2>
+      <p class="sub">Defaults to the same-origin route bound by <code class="inline">wrangler.toml</code>. If you deployed
+        the Worker to a <code class="inline">workers.dev</code> URL instead, paste it here.</p>
+      <label for="endpoint">Worker URL</label>
+      <input type="text" id="endpoint" value="/cf-echo/echo" />
+      <div class="row-actions" style="margin-top:14px;">
+        <button class="btn" id="btn-fetch">Fetch echo</button>
+        <button class="btn ghost" id="btn-copy">Copy JSON</button>
+        <span class="copied" id="copied-msg">Copied&nbsp;&check;</span>
+        <span class="status" id="status"></span>
+      </div>
+    </div>
+
+    <!-- ── NOT DEPLOYED HELP ── -->
+    <div class="warn" id="not-deployed">
+      <strong>Worker not reachable at that URL.</strong> The endpoint didn't return the expected JSON
+      (got HTML or an error &mdash; usually a 404 because the route isn't bound yet). Deploy the Worker:
+      <pre style="margin-top:10px;">cd workers/cf-echo
+npx wrangler login
+npx wrangler deploy</pre>
+      Source &amp; route config: <code class="inline">workers/cf-echo/</code> in the repo. Then re-fetch, or paste the
+      <code class="inline">workers.dev</code> preview URL above.
+    </div>
+
+    <!-- ── SUMMARY CARDS ── -->
+    <div class="panel" id="panel-summary" style="display:none;">
+      <h2>request.cf highlights</h2>
+      <p class="sub">The fields people reach for most. Full object is in the table below.</p>
+      <div class="geo-grid">
+        <div class="geo-card"><div class="l">Country</div><div class="n" id="c-country">&hellip;</div></div>
+        <div class="geo-card"><div class="l">City / Region</div><div class="n" id="c-city">&hellip;</div></div>
+        <div class="geo-card"><div class="l">Data center</div><div class="n" id="c-colo">&hellip;</div></div>
+        <div class="geo-card"><div class="l">ASN</div><div class="n" id="c-asn">&hellip;</div></div>
+        <div class="geo-card"><div class="l">HTTP</div><div class="n" id="c-http">&hellip;</div></div>
+        <div class="geo-card"><div class="l">TLS</div><div class="n" id="c-tls">&hellip;</div></div>
+      </div>
+    </div>
+
+    <!-- ── request.cf TABLE ── -->
+    <div class="panel" id="panel-cf" style="display:none;">
+      <h2><code class="inline">request.cf</code> &mdash; full object</h2>
+      <p class="sub">Server-side edge metadata. Availability of some fields (e.g. <code class="inline">botManagement</code>)
+        depends on your plan and product entitlements.</p>
+      <table class="kv">
+        <thead><tr><th style="width:230px;">Property</th><th>Value</th></tr></thead>
+        <tbody id="cf-body"></tbody>
+      </table>
+    </div>
+
+    <!-- ── HEADERS TABLE ── -->
+    <div class="panel" id="panel-hdr" style="display:none;">
+      <h2>Request headers <span class="muted-small">(as the Worker received them)</span></h2>
+      <p class="sub">Cloudflare-injected headers are <span style="color:#f6a85f;">highlighted</span> &mdash; these never reach client JS.</p>
+      <table class="kv">
+        <thead><tr><th style="width:230px;">Header</th><th>Value</th></tr></thead>
+        <tbody id="hdr-body"></tbody>
+      </table>
+    </div>
+
+    <!-- ── RAW ── -->
+    <div class="panel" id="panel-raw" style="display:none;">
+      <details class="raw">
+        <summary>Raw JSON response</summary>
+        <pre id="raw-json"></pre>
+      </details>
+    </div>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;
+    <a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+
+  <script>
+    const CF_INJECTED = new Set([
+      "cf-connecting-ip","cf-connecting-ipv6","true-client-ip","cf-ray","cf-ipcountry",
+      "cf-visitor","cf-worker","x-forwarded-for","x-forwarded-proto","x-real-ip","cdn-loop"
+    ]);
+    const CF_HL = ["country","city","region","colo","asn","asOrganization","httpProtocol","tlsVersion","tlsCipher","clientTcpRtt","timezone"];
+
+    function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+    function setText(id,html){const el=document.getElementById(id);if(el)el.innerHTML=html;}
+    function show(id,on){const el=document.getElementById(id);if(el)el.style.display=on?"":"none";}
+    function flag(cc){if(!cc||cc.length!==2||cc==="XX")return "";const A=0x1F1E6;return String.fromCodePoint(A+cc.charCodeAt(0)-65,A+cc.charCodeAt(1)-65);}
+
+    let lastJson="";
+
+    function renderSummary(cf){
+      if(!cf){return;}
+      const cc=(cf.country||"").toUpperCase();
+      setText("c-country", cc?('<span class="flag">'+flag(cc)+"</span>"+cc):"&mdash;");
+      const city=[cf.city,cf.region].filter(Boolean).join(", ");
+      setText("c-city", city?esc(city):"&mdash;");
+      setText("c-colo", cf.colo?esc(cf.colo):"&mdash;");
+      setText("c-asn", cf.asn?("AS"+esc(cf.asn)+(cf.asOrganization?' <span class="muted-small">'+esc(cf.asOrganization)+"</span>":"")):"&mdash;");
+      setText("c-http", cf.httpProtocol?esc(cf.httpProtocol):"&mdash;");
+      setText("c-tls", cf.tlsVersion?esc(cf.tlsVersion):"&mdash;");
+    }
+
+    function flatten(obj, prefix){
+      // one level of nesting for readability (e.g. botManagement.score)
+      const rows=[];
+      Object.keys(obj).forEach(k=>{
+        const v=obj[k];
+        if(v && typeof v==="object" && !Array.isArray(v)){
+          Object.keys(v).forEach(k2=>{
+            rows.push([k+"."+k2, typeof v[k2]==="object"?JSON.stringify(v[k2]):v[k2]]);
+          });
+        } else {
+          rows.push([k, Array.isArray(v)?JSON.stringify(v):v]);
+        }
+      });
+      return rows;
+    }
+
+    function renderCf(cf){
+      if(!cf){setText("cf-body",'<tr><td colspan="2" class="muted-small">request.cf was empty.</td></tr>');return;}
+      const rows=flatten(cf).sort((a,b)=>{
+        const ai=CF_HL.indexOf(a[0]), bi=CF_HL.indexOf(b[0]);
+        if(ai>-1||bi>-1){return (ai<0?99:ai)-(bi<0?99:bi);}
+        return a[0].localeCompare(b[0]);
+      });
+      setText("cf-body", rows.map(([k,v])=>{
+        const hl=CF_HL.includes(k)?" class=\"hl\"":"";
+        return "<tr"+hl+"><td>"+esc(k)+'</td><td><span class="val">'+esc(v)+"</span></td></tr>";
+      }).join(""));
+    }
+
+    function renderHeaders(headers){
+      const keys=Object.keys(headers||{}).sort((a,b)=>{
+        const ax=CF_INJECTED.has(a)?0:1, bx=CF_INJECTED.has(b)?0:1;
+        return ax-bx || a.localeCompare(b);
+      });
+      setText("hdr-body", keys.map(k=>{
+        const hl=CF_INJECTED.has(k)?" class=\"hl\"":"";
+        return "<tr"+hl+"><td>"+esc(k)+'</td><td><span class="val">'+esc(headers[k])+"</span></td></tr>";
+      }).join("") || '<tr><td colspan="2" class="muted-small">No headers returned.</td></tr>');
+    }
+
+    function showResult(on){
+      ["panel-summary","panel-cf","panel-hdr","panel-raw"].forEach(id=>show(id,on));
+      show("not-deployed", !on);
+    }
+
+    async function fetchEcho(){
+      const url=document.getElementById("endpoint").value.trim()||"/cf-echo/echo";
+      const st=document.getElementById("status");
+      st.className="status"; st.textContent="Fetching\u2026";
+      try{
+        const sep=url.includes("?")?"&":"?";
+        const res=await fetch(url+sep+"format=json",{cache:"no-store",headers:{accept:"application/json"}});
+        const ct=res.headers.get("content-type")||"";
+        if(!ct.includes("application/json")){
+          throw new Error("non-JSON response (HTTP "+res.status+", "+(ct||"no content-type")+")");
+        }
+        const data=await res.json();
+        lastJson=JSON.stringify(data,null,2);
+        renderSummary(data.cf);
+        renderCf(data.cf);
+        renderHeaders(data.headers);
+        setText("raw-json", esc(lastJson));
+        showResult(true);
+        st.className="status ok"; st.textContent="OK \u2713 served "+ (data.serverTime||"");
+      }catch(e){
+        showResult(false);
+        st.className="status err"; st.textContent="Failed: "+e.message;
+      }
+    }
+
+    document.getElementById("btn-fetch").addEventListener("click", fetchEcho);
+    document.getElementById("btn-copy").addEventListener("click", async ()=>{
+      try{ await navigator.clipboard.writeText(lastJson||"(nothing fetched yet)");
+        const m=document.getElementById("copied-msg"); m.classList.add("show"); setTimeout(()=>m.classList.remove("show"),1500);
+      }catch(_){}
+    });
+
+    fetchEcho();
+  </script>
+</body>
+</html>
