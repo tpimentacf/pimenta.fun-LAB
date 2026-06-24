@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Waiting Room &mdash; Pimenta Lab</title>
+  <meta name="description" content="Cloudflare Waiting Room lab: detect your queue cookie/status, understand queueing mechanics, and configure a virtual waiting room." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+    .kv { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .kv th, .kv td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .kv thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kv tbody td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #9cc0ff; white-space: nowrap; }
+    .kv tbody td .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #d7e2f7; word-break: break-word; }
+    .kv tbody tr:last-child td { border-bottom: none; }
+    .kv td.desc { color: var(--muted); }
+    .statebox { display:flex; align-items:center; gap:14px; background: var(--panel2); border:1px solid var(--border);
+                border-radius:12px; padding:16px 18px; }
+    .dot { width:14px; height:14px; border-radius:50%; flex:none; }
+    .dot.admitted { background:var(--green); box-shadow:0 0 12px rgba(54,211,153,0.6); }
+    .dot.queued   { background:var(--accent); box-shadow:0 0 12px rgba(246,130,31,0.6); }
+    .dot.none     { background:var(--muted); }
+    .statebox .t { font-weight:700; } .statebox .d { color:var(--muted); font-size:0.85rem; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Traffic / Waiting Room</div>
+    <span class="tag">Waiting Room</span>
+    <h1>Cloudflare <span class="grad">Waiting Room</span></h1>
+    <p class="lead">A virtual queue that protects your origin during traffic spikes (sales, ticket drops, launches).
+      Cloudflare admits users at a sustainable rate and holds the rest on a branded waiting page.</p>
+
+    <div class="note"><strong>Configure first:</strong> Dashboard &rarr; <em>Traffic &rarr; Waiting Room</em>, then bind it
+      to a host/path (e.g. this page). The status check below reads the waiting-room cookie the edge sets once you've
+      passed through the queue.</div>
+
+    <div class="warn"><strong>Use at your own risk.</strong> This lab was built by TPimenta LAB for hands-on testing.
+      Always consult the official Cloudflare documentation for accurate, up-to-date guidance.</div>
+
+    <!-- ── STATUS ── -->
+    <div class="panel">
+      <h2>Your waiting-room status</h2>
+      <p class="sub">Detected from the <code class="inline">__cf_waitingroom</code> cookie (a signed JWT the edge issues
+        after admission). Client JS can see the cookie's presence, not decode it.</p>
+      <div class="statebox" id="statebox">
+        <span class="dot none" id="dot"></span>
+        <div>
+          <div class="t" id="state-title">Checking&hellip;</div>
+          <div class="d" id="state-desc"></div>
+        </div>
+      </div>
+      <button class="btn" id="btn-recheck" style="margin-top:14px;">Re-check</button>
+    </div>
+
+    <!-- ── MECHANICS ── -->
+    <div class="panel">
+      <h2>How the queue works</h2>
+      <table class="kv">
+        <thead><tr><th style="width:210px;">Setting</th><th>What it controls</th></tr></thead>
+        <tbody>
+          <tr><td>Total active users</td><td class="desc">Max concurrent users allowed past the room.</td></tr>
+          <tr><td>New users per minute</td><td class="desc">Admission rate &mdash; how fast queued users are let in.</td></tr>
+          <tr><td>Session duration</td><td class="desc">How long an admitted session stays valid without activity.</td></tr>
+          <tr><td>Queueing method</td><td class="desc">FIFO (first-in-first-out), Random, Passthrough, or Reject.</td></tr>
+          <tr><td>Queue-all toggle</td><td class="desc">Force everyone into the queue (great for testing the room).</td></tr>
+          <tr><td>JSON response</td><td class="desc">Return queue state as JSON for SPAs/native apps instead of HTML.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── CUSTOM PAGE VARS ── -->
+    <div class="panel">
+      <h2>Custom waiting page</h2>
+      <p class="sub">Override the default page with HTML using Handlebars-style variables:</p>
+      <pre>{{waitTimeKnown}}      &mdash; is an estimate available?
+{{waitTime}}           &mdash; estimated minutes remaining
+{{queueIsFull}}        &mdash; room at capacity
+{{lastUpdated}}        &mdash; timestamp of the estimate
+{{refreshIntervalSeconds}}  &mdash; auto-refresh cadence</pre>
+      <p class="muted-small">Tip: enable <strong>Queue-all</strong> temporarily to preview your custom page, then disable it.</p>
+    </div>
+
+    <!-- ── TESTING ── -->
+    <div class="panel">
+      <h2>Testing tips</h2>
+      <ul class="bullets">
+        <li>Set <strong>Total active users</strong> and <strong>New users per minute</strong> to very low values to force a queue.</li>
+        <li>Use multiple browsers / incognito windows to simulate concurrent visitors.</li>
+        <li>Enable <strong>Queue-all</strong> to see the room immediately without generating load.</li>
+        <li>Disable the <strong>WARP</strong> client so each session looks like a distinct visitor.</li>
+      </ul>
+      <p class="muted-small">Docs:
+        <a href="https://developers.cloudflare.com/waiting-room/" style="color:var(--accent);">Waiting Room</a>.</p>
+    </div>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;<a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+
+  <script>
+    function hasCookie(name){
+      return document.cookie.split(";").some(c=>c.trim().startsWith(name+"="));
+    }
+    function render(){
+      const dot=document.getElementById("dot");
+      const admitted = hasCookie("__cf_waitingroom");
+      if(admitted){
+        dot.className="dot admitted";
+        document.getElementById("state-title").textContent="Admitted";
+        document.getElementById("state-desc").innerHTML="A <code class=\"inline\">__cf_waitingroom</code> cookie is present \u2014 you've passed the queue and hold an active session.";
+      } else {
+        // We can't be on the waiting page itself (the edge serves that before our HTML),
+        // so absence means either no room is bound or you were let straight through.
+        dot.className="dot none";
+        document.getElementById("state-title").textContent="No active queue session";
+        document.getElementById("state-desc").innerHTML="No <code class=\"inline\">__cf_waitingroom</code> cookie. Either no waiting room is bound to this path, or you were admitted without queueing.";
+      }
+    }
+    document.getElementById("btn-recheck").addEventListener("click", render);
+    render();
+  </script>
+</body>
+</html>

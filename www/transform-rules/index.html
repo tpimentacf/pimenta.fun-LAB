@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transform Rules &mdash; Pimenta Lab</title>
+  <meta name="description" content="Test Cloudflare Transform Rules: URL rewrite, request header modification, response header modification, and Managed Transforms." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+    .row-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+    .kv { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .kv th, .kv td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .kv thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kv tbody td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #9cc0ff; white-space: nowrap; }
+    .kv tbody td .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #d7e2f7; word-break: break-word; }
+    .kv tbody tr:last-child td { border-bottom: none; }
+    .kv td.desc { color: var(--muted); }
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+    .pill.found { background: rgba(54,211,153,0.14); color: #6ee7b7; border: 1px solid rgba(54,211,153,0.45); }
+    .pill.absent{ background: rgba(154,166,192,0.12); color: var(--muted); border: 1px solid var(--border); }
+    .types { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 12px; }
+    .type-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .type-card h3 { font-size: 0.95rem; margin: 0 0 6px; color: var(--accent); }
+    .type-card p { font-size: 0.84rem; margin: 0; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+    .status { font-size: 0.82rem; } .status.ok { color: var(--green); } .status.err { color: #ffb0b0; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Rules / Transform Rules</div>
+    <span class="tag">Transform Rules</span>
+    <h1>Cloudflare <span class="grad">Transform Rules</span></h1>
+    <p class="lead">Rewrite URLs and add, change, or remove HTTP headers at the edge &mdash; without touching your
+      origin. Three transform types plus one-click Managed Transforms.</p>
+
+    <div class="types" style="margin:6px 0 18px;">
+      <div class="type-card"><h3>URL Rewrite</h3><p>Rewrite the path/query sent to origin. Invisible to the visitor (unlike a redirect).</p></div>
+      <div class="type-card"><h3>Request Header Modification</h3><p>Add/set/remove headers on the request <em>before</em> it reaches origin.</p></div>
+      <div class="type-card"><h3>Response Header Modification</h3><p>Add/set/remove headers on the response sent back to the visitor.</p></div>
+    </div>
+
+    <div class="note"><strong>Configure first:</strong> Dashboard &rarr; <em>Rules &rarr; Transform Rules</em>.
+      Response-header changes are visible to the browser (tested below). Request-header and URL-rewrite changes are only
+      visible at the origin &mdash; see them on <a href="/cf-echo/" style="color:var(--accent);">CF Echo</a>.</div>
+
+    <div class="warn"><strong>Use at your own risk.</strong> This lab was built by TPimenta LAB for hands-on testing.
+      Always consult the official Cloudflare documentation for accurate, up-to-date guidance.</div>
+
+    <!-- ── RESPONSE HEADER TEST ── -->
+    <div class="panel">
+      <h2>Response header check</h2>
+      <p class="sub">Fetch this page and look for a header your Response Header Modification rule adds. Default probes a
+        demo header plus common security headers (often set via Managed Transforms).</p>
+      <label for="hname">Header name to check</label>
+      <input type="text" id="hname" value="x-pimenta-transform" />
+      <div class="row-actions" style="margin-top:14px;">
+        <button class="btn" id="btn-check">Check header</button>
+        <span class="status" id="status"></span>
+      </div>
+      <table class="kv" style="margin-top:14px;">
+        <thead><tr><th style="width:240px;">Header</th><th>Value</th></tr></thead>
+        <tbody id="hdr-body"><tr><td colspan="2" class="muted-small">Run a check.</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- ── EXAMPLES ── -->
+    <div class="panel">
+      <h2>Example rules</h2>
+      <p class="muted-small">URL Rewrite &mdash; serve <code class="inline">/promo</code> from <code class="inline">/campaigns/2026/</code> invisibly:</p>
+      <pre>Type:        Rewrite URL
+Expression:  (http.request.uri.path eq "/promo")
+Path:        Rewrite to  /campaigns/2026/index.html  (static)</pre>
+      <p class="muted-small">Response Header Modification &mdash; add a security header:</p>
+      <pre>Type:        Modify Response Header
+Expression:  true
+Action:      Set static
+Header:      X-Frame-Options = SAMEORIGIN</pre>
+      <p class="muted-small">Request Header Modification &mdash; forward a dynamic value to origin:</p>
+      <pre>Type:        Modify Request Header
+Expression:  true
+Action:      Set dynamic
+Header:      X-Client-Country = ip.src.country</pre>
+    </div>
+
+    <!-- ── MANAGED TRANSFORMS ── -->
+    <div class="panel">
+      <h2>Managed Transforms</h2>
+      <p class="sub">Toggle-based shortcuts (no expression needed). Dashboard &rarr; <em>Rules &rarr; Settings</em>.</p>
+      <table class="kv">
+        <thead><tr><th>Managed Transform</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td>Add visitor location headers</td><td class="desc">Adds <code class="inline">CF-IPCountry</code>, <code class="inline">CF-IPCity</code>, lat/long, etc. to the request to origin.</td></tr>
+          <tr><td>Add security headers</td><td class="desc">Sends HSTS and other hardening headers in responses.</td></tr>
+          <tr><td>Remove "X-Powered-By"</td><td class="desc">Strips framework fingerprint headers from responses.</td></tr>
+          <tr><td>Add true client IP headers</td><td class="desc">Adds <code class="inline">True-Client-IP</code> for origins that expect it.</td></tr>
+        </tbody>
+      </table>
+      <p class="muted-small" style="margin-top:12px;">Docs:
+        <a href="https://developers.cloudflare.com/rules/transform/" style="color:var(--accent);">Transform Rules</a>.</p>
+    </div>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;<a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+
+  <script>
+    const COMMON = ["x-frame-options","strict-transport-security","x-content-type-options",
+                    "referrer-policy","content-security-policy","permissions-policy"];
+    function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+    function setText(id,h){const e=document.getElementById(id);if(e)e.innerHTML=h;}
+
+    async function check(){
+      const want=document.getElementById("hname").value.trim().toLowerCase();
+      const st=document.getElementById("status");
+      st.className="status"; st.textContent="Checking\u2026";
+      try{
+        const res=await fetch(location.href,{cache:"no-store"});
+        const names=[want].concat(COMMON.filter(h=>h!==want));
+        const rows=names.map(h=>{
+          const v=res.headers.get(h);
+          const cell=v!=null ? '<span class="val">'+esc(v)+"</span>"
+                             : '<span class="pill absent">not set</span>';
+          const star=h===want ? ' <span class="muted-small">(probed)</span>' : "";
+          return "<tr><td>"+esc(h)+star+"</td><td>"+cell+"</td></tr>";
+        });
+        setText("hdr-body", rows.join(""));
+        const present=res.headers.get(want)!=null;
+        st.className="status "+(present?"ok":"");
+        st.textContent = present ? "Found '"+want+"' \u2713" : "'"+want+"' not present (rule may be off)";
+      }catch(e){
+        setText("hdr-body",'<tr><td colspan="2" class="muted-small">Error: '+esc(e.message)+"</td></tr>");
+        st.className="status err"; st.textContent="Failed";
+      }
+    }
+    document.getElementById("btn-check").addEventListener("click", check);
+    check();
+  </script>
+</body>
+</html>

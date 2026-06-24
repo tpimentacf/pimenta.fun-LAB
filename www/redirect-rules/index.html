@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redirect Rules &mdash; Pimenta Lab</title>
+  <meta name="description" content="Test Cloudflare Redirect Rules (dynamic redirects) and Bulk Redirects: follow a path and observe the status code and final URL." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+    .row-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+    .kv { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .kv th, .kv td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .kv thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kv tbody td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #9cc0ff; white-space: nowrap; }
+    .kv tbody td .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #d7e2f7; word-break: break-word; }
+    .kv tbody tr:last-child td { border-bottom: none; }
+    .kv td.desc { color: var(--muted); }
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+    .pill.yes { background: rgba(54,211,153,0.14); color: #6ee7b7; border: 1px solid rgba(54,211,153,0.45); }
+    .pill.no  { background: rgba(154,166,192,0.12); color: var(--muted); border: 1px solid var(--border); }
+    .quick { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .quick button { font-size: 0.82rem; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+    .status { font-size: 0.82rem; }
+    .status.ok { color: var(--green); } .status.err { color: #ffb0b0; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Rules / Redirect Rules</div>
+    <span class="tag">Redirect Rules</span>
+    <h1>Cloudflare <span class="grad">Redirect Rules</span></h1>
+    <p class="lead">Dynamic redirects evaluated at the edge before a request reaches your origin. Define a
+      matching expression and a target with status code, query handling, and even dynamic
+      <code class="inline">concat()</code> expressions.</p>
+
+    <div class="note"><strong>Configure first:</strong> Dashboard &rarr; <em>Rules &rarr; Redirect Rules</em>.
+      The live test below follows whatever rules you've created on this zone. With no rule, paths just hit the origin.</div>
+
+    <div class="warn"><strong>Use at your own risk.</strong> This lab was built by TPimenta LAB for hands-on testing.
+      Always consult the official Cloudflare documentation for accurate, up-to-date guidance.</div>
+
+    <!-- ── LIVE TEST ── -->
+    <div class="panel">
+      <h2>Live redirect test</h2>
+      <p class="sub">The browser follows redirects and reports the final URL and whether a redirect occurred.
+        (With <code class="inline">redirect: "manual"</code> the <code class="inline">Location</code> header is opaque to JS,
+        so we follow and read <code class="inline">response.redirected</code> + <code class="inline">response.url</code>.)</p>
+      <label for="path">Path or URL to test</label>
+      <input type="text" id="path" value="/redirect-rules/sample" />
+      <div class="quick">
+        <button class="btn ghost" data-p="/redirect-rules/sample">/sample</button>
+        <button class="btn ghost" data-p="/redirect-rules/old-blog">/old-blog</button>
+        <button class="btn ghost" data-p="/redirect-rules/go/docs">/go/docs</button>
+      </div>
+      <div class="row-actions" style="margin-top:14px;">
+        <button class="btn" id="btn-test">Test redirect</button>
+        <span class="status" id="status"></span>
+      </div>
+      <table class="kv" style="margin-top:14px;">
+        <tbody id="result-body">
+          <tr><td colspan="2" class="muted-small">Run a test to see the result.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── STATUS CODES ── -->
+    <div class="panel">
+      <h2>Redirect status codes</h2>
+      <table class="kv">
+        <thead><tr><th style="width:90px;">Code</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>301</td><td class="desc">Moved Permanently &mdash; cached by browsers/SEO. Method may change to GET.</td></tr>
+          <tr><td>302</td><td class="desc">Found (temporary). Method may change to GET. Default for most redirects.</td></tr>
+          <tr><td>307</td><td class="desc">Temporary Redirect &mdash; preserves the original HTTP method and body.</td></tr>
+          <tr><td>308</td><td class="desc">Permanent Redirect &mdash; preserves method/body; permanent variant of 307.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── EXAMPLES ── -->
+    <div class="panel">
+      <h2>Example rules</h2>
+      <p class="sub">Static target, query preservation, and a dynamic target built from the path.</p>
+      <p class="muted-small">Static redirect (When incoming requests match&hellip;):</p>
+      <pre>Expression:  (http.request.uri.path eq "/old-blog")
+Target:      https://www.pimenta.fun/blog/
+Status:      301
+Preserve query string: on</pre>
+      <p class="muted-small">Dynamic redirect with <code class="inline">concat()</code> &mdash; map <code class="inline">/go/&lt;slug&gt;</code> to docs:</p>
+      <pre>Expression:  starts_with(http.request.uri.path, "/go/")
+Target:      concat("https://developers.cloudflare.com/",
+                     substring(http.request.uri.path, 4))
+Status:      302
+Expression mode: Dynamic</pre>
+    </div>
+
+    <!-- ── BULK ── -->
+    <div class="panel">
+      <h2>Redirect Rules vs Bulk Redirects</h2>
+      <table class="kv">
+        <thead><tr><th style="width:170px;">Use case</th><th>Pick</th></tr></thead>
+        <tbody>
+          <tr><td>A handful of pattern-based redirects</td><td class="desc"><strong>Redirect Rules</strong> &mdash; expression engine, dynamic targets, per-zone.</td></tr>
+          <tr><td>Thousands of 1:1 URL mappings</td><td class="desc"><strong>Bulk Redirects</strong> &mdash; account-level lists (CSV), great for migrations.</td></tr>
+        </tbody>
+      </table>
+      <p class="muted-small" style="margin-top:12px;">Docs:
+        <a href="https://developers.cloudflare.com/rules/url-forwarding/" style="color:var(--accent);">URL forwarding</a>.</p>
+    </div>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;<a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+
+  <script>
+    function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+    function setText(id,h){const e=document.getElementById(id);if(e)e.innerHTML=h;}
+
+    async function test(){
+      const path=document.getElementById("path").value.trim()||"/";
+      const st=document.getElementById("status");
+      st.className="status"; st.textContent="Testing\u2026";
+      try{
+        const res=await fetch(path,{cache:"no-store",redirect:"follow"});
+        const redirected=res.redirected;
+        const rows=[
+          ["Requested", '<span class="val">'+esc(new URL(path,location.href).href)+"</span>"],
+          ["Redirected", '<span class="pill '+(redirected?"yes":"no")+'">'+(redirected?"YES":"NO")+"</span>"],
+          ["Final URL", '<span class="val">'+esc(res.url)+"</span>"],
+          ["Final status", '<span class="val">'+esc(res.status+" "+res.statusText)+"</span>"]
+        ];
+        setText("result-body", rows.map(r=>"<tr><td>"+r[0]+"</td><td>"+r[1]+"</td></tr>").join(""));
+        st.className="status ok";
+        st.textContent = redirected ? "Redirect followed \u2713" : "No redirect (reached origin)";
+      }catch(e){
+        setText("result-body",'<tr><td colspan="2" class="muted-small">Error: '+esc(e.message)+"</td></tr>");
+        st.className="status err"; st.textContent="Failed";
+      }
+    }
+    document.getElementById("btn-test").addEventListener("click", test);
+    document.querySelectorAll(".quick button").forEach(b=>b.addEventListener("click",()=>{
+      document.getElementById("path").value=b.dataset.p; test();
+    }));
+  </script>
+</body>
+</html>

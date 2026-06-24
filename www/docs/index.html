@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Discovery &amp; Implementations &mdash; Pimenta Lab</title>
+  <meta name="description" content="Discovery document for the Pimenta.fun Cloudflare lab: every implementation cataloged with what it demonstrates and how it is built." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .legend { display:flex; flex-wrap:wrap; gap:10px; margin:8px 0 4px; }
+    .b { display:inline-block; padding:2px 9px; border-radius:999px; font-size:0.68rem; font-weight:700;
+         text-transform:uppercase; letter-spacing:0.4px; border:1px solid var(--border); }
+    .b.origin { background:rgba(54,211,153,0.14); color:#6ee7b7; border-color:rgba(54,211,153,0.45); }
+    .b.worker { background:rgba(91,141,239,0.15); color:#9cc0ff; border-color:rgba(91,141,239,0.45); }
+    .b.config { background:rgba(246,130,31,0.14); color:#f6a85f; border-color:rgba(246,130,31,0.45); }
+    .b.addon  { background:rgba(255,107,107,0.14); color:#ffb0b0; border-color:rgba(255,107,107,0.45); }
+    .b.guide  { background:rgba(180,140,255,0.16); color:#cdb4ff; border-color:rgba(180,140,255,0.5); }
+    .b.ext    { background:rgba(154,166,192,0.12); color:var(--muted); }
+
+    .filter-wrap { position:sticky; top:0; background:linear-gradient(180deg, var(--bg) 70%, rgba(11,16,32,0)); padding:14px 0 10px; z-index:5; }
+    #filter { max-width:420px; }
+    .count { color:var(--muted); font-size:0.82rem; margin-left:10px; }
+
+    .sec { margin-top:26px; }
+    .sec > h2 { font-size:1.15rem; margin:0 0 4px; }
+    .sec > .sd { color:var(--muted); font-size:0.85rem; margin:0 0 12px; }
+
+    .item { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px 18px; margin:10px 0; }
+    .item .top { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .item .name { font-size:1.02rem; font-weight:700; color:var(--text); text-decoration:none; }
+    .item .name:hover { color:var(--accent); }
+    .item .badges { display:flex; gap:6px; flex-wrap:wrap; margin-left:auto; }
+    .item .desc { color:var(--muted); font-size:0.9rem; margin:8px 0 0; }
+    .item .meta { font-size:0.8rem; color:#9cc0ff; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; margin-top:8px; }
+    .item .meta .prod { color:var(--muted); }
+    .item .impl { color:var(--muted); font-size:0.84rem; margin-top:6px; }
+    .item .impl strong { color:var(--text); font-weight:600; }
+    .hidden { display:none !important; }
+    .no-results { color:var(--muted); font-size:0.9rem; padding:20px 0; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+      <a href="https://www.pimenta.fun/#docs">Docs</a>
+    </nav>
+  </header>
+
+  <main class="lab" style="max-width:920px;">
+    <div class="crumb"><a href="https://www.pimenta.fun/#docs">Docs</a> / Discovery &amp; Implementations</div>
+    <span class="tag">Discovery</span>
+    <h1>Lab <span class="grad">Discovery</span> &amp; Implementation Guide</h1>
+    <p class="lead">Every implementation in the Pimenta.fun Cloudflare lab, in one place &mdash; what each one
+      demonstrates and how it is wired up. Use the filter to jump to a feature.</p>
+
+    <div class="note"><strong>Architecture.</strong> The lab runs on a single origin (Ubuntu + Apache) behind
+      Cloudflare across three hostnames &mdash; <code class="inline">www</code> (this site / tests),
+      <code class="inline">shop</code> (OWASP Juice Shop storefront) and <code class="inline">api</code> (Juice Shop API).
+      Most pages are static origin files; the Cloudflare behaviour they exercise is configured in the dashboard,
+      with a few Workers doing edge logic. See the
+      <a href="/DEPLOY.md" style="color:var(--accent);">deployment guide</a>.</div>
+
+    <p style="margin-bottom:4px;"><strong>How each implementation is built &mdash; badge legend:</strong></p>
+    <div class="legend">
+      <span class="b origin">Origin page</span><span class="muted-small" style="color:var(--muted);font-size:0.8rem;">static HTML on Apache</span>
+    </div>
+    <div class="legend">
+      <span class="b worker">Worker</span><span class="muted-small" style="color:var(--muted);font-size:0.8rem;">Cloudflare Worker does edge logic</span>
+    </div>
+    <div class="legend">
+      <span class="b config">Dashboard</span><span class="muted-small" style="color:var(--muted);font-size:0.8rem;">configured via Cloudflare dashboard (WAF/Rules/etc.)</span>
+    </div>
+    <div class="legend">
+      <span class="b addon">Add-on / plan</span><span class="muted-small" style="color:var(--muted);font-size:0.8rem;">needs a paid add-on or higher plan</span>
+    </div>
+    <div class="legend">
+      <span class="b guide">Guide</span><span class="muted-small" style="color:var(--muted);font-size:0.8rem;">documentation / runbook</span>
+    </div>
+
+    <div class="filter-wrap">
+      <input type="text" id="filter" placeholder="Filter implementations (e.g. cache, mTLS, worker, content scanning)&hellip;" />
+      <span class="count" id="count"></span>
+    </div>
+
+    <div id="catalogue"></div>
+    <div class="no-results hidden" id="no-results">No implementations match that filter.</div>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;<a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+
+  <script>
+    // ------------------------------------------------------------------
+    // Implementation catalogue. badges: origin | worker | config | addon | guide | ext
+    // ------------------------------------------------------------------
+    const SECTIONS = [
+      { title: "Network & Edge", desc: "Surface the Cloudflare edge metadata behind every request.", items: [
+        { name:"Edge Inspector", href:"/edge-inspector/", prod:"cdn-cgi/trace",
+          badges:["origin"],
+          desc:"Live read of your connection: data center (colo), geolocation, HTTP version, TLS version, WARP status, and the response headers the browser can read.",
+          impl:"Static page that fetches <code class=\"inline\">/cdn-cgi/trace</code> (automatic on any proxied zone) and reads same-origin response headers via the Headers API. No config required." },
+        { name:"CF Echo (request.cf)", href:"/cf-echo/", prod:"Workers",
+          badges:["worker","origin"],
+          desc:"Reflects the full request.cf object and every CF-injected request header (CF-Connecting-IP, CF-Ray, CF-IPCountry\u2026) that client-side JS can never see.",
+          impl:"A Worker (<code class=\"inline\">workers/cf-echo/</code>) returns the request as JSON; the lab page renders it. Deploy with <code class=\"inline\">wrangler deploy</code> and bind a route." }
+      ]},
+
+      { title: "Challenges", desc: "WAF custom rules with challenge / validation actions.", items: [
+        { name:"Managed Challenge", href:"/challenges/managed/", prod:"WAF",
+          badges:["config","origin"],
+          desc:"Path guarded by a WAF custom rule using the Managed Challenge action \u2014 Cloudflare picks the lowest-friction challenge for the visitor.",
+          impl:"Static page; a WAF custom rule with action = Managed Challenge matches the path." },
+        { name:"JS Challenge", href:"/challenges/javascript/", prod:"WAF",
+          badges:["config","origin"],
+          desc:"Non-interactive JavaScript challenge that runs a browser computation before allowing access.",
+          impl:"Static page + WAF custom rule with action = JS Challenge." },
+        { name:"Interactive Challenge", href:"/challenges/interactive/", prod:"WAF",
+          badges:["config","origin"],
+          desc:"Classic click-through interactive challenge.",
+          impl:"Static page + WAF custom rule with action = Interactive Challenge." },
+        { name:"mTLS Challenge", href:"/challenges/mtls/", prod:"API Shield (mTLS)",
+          badges:["config","addon"],
+          desc:"Requires a valid client X.509 certificate before the endpoint is reachable.",
+          impl:"mTLS enabled on the zone; a WAF/API Shield rule requires a valid client cert (<code class=\"inline\">cf.tls_client_auth.cert_verified</code>)." },
+        { name:"JWT Validation", href:"/challenges/jwt/", prod:"API Shield",
+          badges:["config","addon"],
+          desc:"Validates a JSON Web Token on the request before it is allowed through.",
+          impl:"API Shield JWT/token validation configured against the endpoint." }
+      ]},
+
+      { title: "Rate Limiting", desc: "Throttle or block abusive request rates.", items: [
+        { name:"5 Requests / 1 Minute", href:"/ratelimiting/5r1m/", prod:"Rate Limiting Rules",
+          badges:["config","origin"],
+          desc:"Fire requests at the path; the 6th within 60 seconds is blocked with HTTP 429.",
+          impl:"Static page + a Rate Limiting rule (5 req / 60s, action = Block)." },
+        { name:"5 Req / 1 Min (Throttle)", href:"/ratelimiting/throttle/", prod:"Rate Limiting Rules",
+          badges:["config","origin"],
+          desc:"Same threshold but the Throttle action slows excess requests instead of blocking outright.",
+          impl:"Static page + Rate Limiting rule with action = Throttle." },
+        { name:"Rate Limit by Worker", href:"/ratelimiting/worker-rl/", prod:"Workers Rate Limiting binding",
+          badges:["worker"],
+          desc:"A Worker enforces the limit programmatically using the Rate Limiting binding.",
+          impl:"Worker bound to the route, using the native Rate Limiting binding to return 429s." }
+      ]},
+
+      { title: "Turnstile", desc: "Cloudflare's privacy-first CAPTCHA alternative.", items: [
+        { name:"Managed widget", href:"/turnstile/managed/", prod:"Turnstile",
+          badges:["origin","config"],
+          desc:"Turnstile widget in managed mode; solving it returns a token to verify server-side.",
+          impl:"Static page embedding the Turnstile widget with a sitekey; the secret key verifies tokens at the backend." },
+        { name:"Non-interactive widget", href:"/turnstile/non-interactive/", prod:"Turnstile",
+          badges:["origin","config"],
+          desc:"Runs silently with no user interaction in most cases.",
+          impl:"Same as managed, widget configured for non-interactive mode." },
+        { name:"Invisible widget", href:"/turnstile/invisible/", prod:"Turnstile",
+          badges:["origin","config"],
+          desc:"Fully invisible challenge that issues a token in the background.",
+          impl:"Static page with an invisible-mode Turnstile widget." },
+        { name:"Turnstile Login", href:"/turnstile/login/", prod:"Turnstile",
+          badges:["origin","config"],
+          desc:"Login form protected by Turnstile before submission.",
+          impl:"Static login page embedding the widget; token verified on submit." }
+      ]},
+
+      { title: "Error Pages", desc: "Custom error responses and the block experience.", items: [
+        { name:"403 / 404 / 406 / 502", href:"/error/error403/", prod:"Custom Error Responses",
+          badges:["origin","config"],
+          desc:"Branded pages for common HTTP error statuses, used as custom error responses.",
+          impl:"Static pages wired up as Cloudflare Custom Pages / served by rules on the matching status." },
+        { name:"CF default block page", href:"/error/block/", prod:"WAF",
+          badges:["origin"],
+          desc:"Reproduces the Cloudflare block experience shown by a WAF Block action.",
+          impl:"Static page mimicking the default Cloudflare block screen." },
+        { name:"204 No Content", href:"/error/error204/", prod:"Origin / Rules",
+          badges:["origin","config"],
+          desc:"Returns an empty 204 \u2014 handy for maintenance and keepalive tests.",
+          impl:"Origin route configured to return HTTP 204 (or a rule that does)." }
+      ]},
+
+      { title: "Page Shield", desc: "Client-side script & supply-chain monitoring (Magecart).", items: [
+        { name:"Page Shield (scripts)", href:"/page-shield/", prod:"Page Shield",
+          badges:["origin","config"],
+          desc:"Loads a third-party script so Page Shield has something to inventory and monitor for changes.",
+          impl:"Static page including an external script; Page Shield enabled on the zone builds the script inventory." },
+        { name:"Page Shield (Login)", href:"/page-shield-login/", prod:"Page Shield",
+          badges:["origin","config"],
+          desc:"A login form monitored for skimmer/Magecart-style script tampering.",
+          impl:"Static login page with Page Shield monitoring active." }
+      ]},
+
+      { title: "API Shield", desc: "Schema validation, mTLS, JWT, and sequence protection for APIs.", items: [
+        { name:"API Shield dashboard", href:"/api-shield/", prod:"API Shield",
+          badges:["origin","addon"],
+          desc:"Overview of the lab API and the API Shield protections you can exercise against it.",
+          impl:"Static overview page; protections (schema, mTLS, JWT, sequence) configured under API Shield." },
+        { name:"API sequence (3 steps)", href:"/api-shield/sequence/page1/", prod:"API Shield Sequences",
+          badges:["origin","config","addon"],
+          desc:"A three-step flow used to demonstrate Sequence Mitigation / sequence analytics.",
+          impl:"Three static pages defining an expected request order; Sequence rules enforce it." }
+      ]},
+
+      { title: "Bot Management", desc: "Detect and slow automated traffic.", items: [
+        { name:"Delay Action", href:"/delay-action/", prod:"Bot Management / Rules",
+          badges:["origin","config"],
+          desc:"Simulates a delayed response to slow suspected bots without an outright block.",
+          impl:"Static page; a rule keyed on bot score adds latency to suspicious requests." },
+        { name:"Support Chatbot", href:"https://shop.pimenta.fun/", prod:"Shop",
+          badges:["ext"],
+          desc:"The storefront's embedded chatbot \u2014 a target for bot/automation testing.",
+          impl:"Hosted on the shop vhost (OWASP Juice Shop)." }
+      ]},
+
+      { title: "Cache", desc: "Edge caching behaviour and overrides.", items: [
+        { name:"Cloudflare-CDN-Cache-Control", href:"/cache/cloudflare-cdn-cache-control/", prod:"Cache",
+          badges:["origin"],
+          desc:"Tests the Cloudflare-specific edge TTL header, independent of the browser's Cache-Control.",
+          impl:"Origin sets <code class=\"inline\">Cloudflare-CDN-Cache-Control</code> so the edge and browser TTLs differ." },
+        { name:"Override via Workers", href:"/cache/cache-worker/", prod:"Workers Cache API",
+          badges:["worker"],
+          desc:"A Worker rewrites Cache-Control / cache keys for the route.",
+          impl:"Worker bound to the route manipulating cache headers / the Cache API." }
+      ]},
+
+      { title: "Rules", desc: "The Cloudflare Rules engine \u2014 redirects and transforms.", items: [
+        { name:"Redirect Rules", href:"/redirect-rules/", prod:"Redirect Rules",
+          badges:["config","origin"],
+          desc:"Dynamic edge redirects with status codes, query handling, and concat() targets; live follow-test included.",
+          impl:"Static test page; Redirect Rules (Rules \u2192 Redirect Rules) define the matches." },
+        { name:"Transform Rules", href:"/transform-rules/", prod:"Transform Rules",
+          badges:["config","origin"],
+          desc:"URL rewrites and request/response header modification at the edge; response-header checker included.",
+          impl:"Static test page; Transform Rules + Managed Transforms applied on the zone." }
+      ]},
+
+      { title: "Traffic", desc: "Protect the origin during demand spikes.", items: [
+        { name:"Waiting Room", href:"/waiting-room/", prod:"Waiting Room",
+          badges:["config","addon"],
+          desc:"Virtual queue that admits users at a sustainable rate; detects your __cf_waitingroom session.",
+          impl:"Static page bound to a Waiting Room (Traffic \u2192 Waiting Room) with capacity/admission settings." }
+      ]},
+
+      { title: "Analytics & Tags", desc: "Edge-loaded third-party tooling and consent.", items: [
+        { name:"Zaraz", href:"/zaraz/", prod:"Zaraz",
+          badges:["config","origin"],
+          desc:"Loads third-party tools from the edge; the page talks to the live window.zaraz API (track / consent).",
+          impl:"Zaraz configured in the dashboard injects zaraz.js; the static page calls track()/consent APIs." }
+      ]},
+
+      { title: "Forms", desc: "Form endpoints for protection testing.", items: [
+        { name:"Contact form", href:"/forms/contact.html", prod:"Forms",
+          badges:["origin"],
+          desc:"A contact form used as a target for spam/abuse protections.",
+          impl:"Static HTML form on the origin." },
+        { name:"Signup Protection", href:"/forms/signup/", prod:"Turnstile / Rate Limiting",
+          badges:["origin","config"],
+          desc:"Signup flow hardened against automated account creation.",
+          impl:"Static page combined with Turnstile and/or rate-limiting rules." },
+        { name:"Login with JWT", href:"/forms/login-jwt.html", prod:"API Shield",
+          badges:["origin","config"],
+          desc:"Login that issues/uses a JWT, paired with API Shield token validation.",
+          impl:"Static page; JWT validated by API Shield on the API host." },
+        { name:"Login demo", href:"/login-demo/", prod:"Forms",
+          badges:["origin"],
+          desc:"A standalone login page for auth-flow testing.",
+          impl:"Static origin page." }
+      ]},
+
+      { title: "Maintenance", desc: "Serve maintenance experiences different ways.", items: [
+        { name:"From origin", href:"/maintenance/", prod:"Origin",
+          badges:["origin"],
+          desc:"A maintenance page served directly by the origin.",
+          impl:"Static HTML returned by the origin." },
+        { name:"From Snippets", href:"/maintenance-snippets/", prod:"Snippets",
+          badges:["config"],
+          desc:"Maintenance response generated at the edge by a Cloudflare Snippet \u2014 no origin hit.",
+          impl:"A Snippet (Rules \u2192 Snippets) intercepts the path and returns the maintenance response." }
+      ]},
+
+      { title: "Content Scanning", desc: "WAF file-upload malware scanning.", items: [
+        { name:"Upload to R2", href:"/media/upload/", prod:"R2 / Workers",
+          badges:["origin","worker"],
+          desc:"Uploads a file to exercise upload handling and Content Scanning.",
+          impl:"Upload page backed by R2 (via Worker/backend) to accept the file." },
+        { name:"Content Scanning Lab", href:"/content-scanning-lab/", prod:"WAF Content Scanning",
+          badges:["config","addon"],
+          desc:"Upload files (incl. the EICAR test string) that trigger cf.waf.content_scan.* fields and WAF rules.",
+          impl:"Malicious Uploads Detection enabled (Enterprise add-on) + WAF custom rules on the scan fields." }
+      ]},
+
+      { title: "Security Solutions", desc: "Broader security tooling and write-ups.", items: [
+        { name:"WAF Testing (GoTestWAF)", href:"/gotestwaf/", prod:"WAF",
+          badges:["origin","guide"],
+          desc:"Run the open-source GoTestWAF tool against the lab to score WAF coverage.",
+          impl:"Guide page; the tool runs externally and targets the zone's WAF." },
+        { name:"Response headers", href:"/response-headers.html", prod:"Transform / Managed Transforms",
+          badges:["origin","config"],
+          desc:"Inspect security and custom response headers in one place.",
+          impl:"Static page; headers applied via Transform Rules / Managed Transforms." },
+        { name:"security.txt", href:"/.well-known/security.txt", prod:"Origin",
+          badges:["origin"],
+          desc:"RFC 9116 security contact file at the well-known path.",
+          impl:"Static file served from <code class=\"inline\">/.well-known/</code>." },
+        { name:"Password spraying protection", href:"/security-solutions/password-spraying/", prod:"WAF / Leaked Credentials",
+          badges:["config","origin"],
+          desc:"Detect and stop credential-stuffing / password-spraying against login endpoints.",
+          impl:"Static write-up + rules using leaked-credential checks and rate limiting." },
+        { name:"E-commerce features", href:"/security-solutions/e-commerce/", prod:"Various",
+          badges:["guide"],
+          desc:"Cloudflare features useful for protecting online stores.",
+          impl:"Documentation page." },
+        { name:"Firewall for AI & LLMs", href:"/security-solutions/firewall-for-ai-llm/", prod:"Firewall for AI",
+          badges:["config","guide"],
+          desc:"Guardrails for AI/LLM-backed endpoints (prompt abuse, PII, rate).",
+          impl:"Write-up + Firewall for AI configuration on the relevant endpoints." }
+      ]},
+
+      { title: "Guides & Operations", desc: "Runbooks and implementation walkthroughs.", items: [
+        { name:"mTLS Implementation Guide", href:"/mtls-guide/", prod:"API Shield / Origin",
+          badges:["guide"],
+          desc:"End-to-end mutual TLS: client\u2194Cloudflare and Cloudflare\u2194origin, as two independent legs.",
+          impl:"Step-by-step guide page." },
+        { name:"Authenticated Origin Pulls", href:"https://aop.pimenta.fun/", prod:"AOP",
+          badges:["config","guide"],
+          desc:"Origin only accepts connections that present Cloudflare's client certificate.",
+          impl:"AOP enabled on the zone; origin validates the Cloudflare client cert (see aop/ in repo)." },
+        { name:"Cloudflare Dynamic DNS", href:"/ddns/README.md", prod:"DNS API",
+          badges:["guide"],
+          desc:"Cron job that syncs www & shop A records to the origin VM's changing public IP.",
+          impl:"Script + cron calling the Cloudflare DNS API (see ddns/)." },
+        { name:"Apache Deployment Guide", href:"/DEPLOY.md", prod:"Origin",
+          badges:["guide"],
+          desc:"Set up the three vhosts on Ubuntu + Apache with HTTPS via Certbot.",
+          impl:"Operational runbook for the origin." }
+      ]}
+    ];
+
+    const BADGE_LABEL = { origin:"Origin page", worker:"Worker", config:"Dashboard", addon:"Add-on / plan", guide:"Guide", ext:"External" };
+
+    function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+    function abs(href){ return href.startsWith("http") ? href : ("https://www.pimenta.fun"+href); }
+
+    const cat = document.getElementById("catalogue");
+    let total = 0;
+    SECTIONS.forEach(sec => {
+      const wrap = document.createElement("section");
+      wrap.className = "sec";
+      let html = "<h2>"+esc(sec.title)+"</h2><p class=\"sd\">"+esc(sec.desc)+"</p>";
+      sec.items.forEach(it => {
+        total++;
+        const badges = (it.badges||[]).map(b => '<span class="b '+b+'">'+esc(BADGE_LABEL[b]||b)+"</span>").join("");
+        const hay = (it.name+" "+it.desc+" "+(it.prod||"")+" "+(it.badges||[]).join(" ")).toLowerCase();
+        html += '<div class="item" data-h="'+esc(hay)+'">'
+          + '<div class="top"><a class="name" href="'+esc(abs(it.href))+'">'+esc(it.name)+"</a>"
+          + '<span class="badges">'+badges+"</span></div>"
+          + '<div class="desc">'+it.desc+"</div>"
+          + (it.prod ? '<div class="meta"><span class="prod">product:</span> '+esc(it.prod)+' &middot; <span class="prod">url:</span> '+esc(it.href)+"</div>" : "")
+          + '<div class="impl"><strong>Implementation:</strong> '+it.impl+"</div>"
+          + "</div>";
+      });
+      wrap.innerHTML = html;
+      cat.appendChild(wrap);
+    });
+
+    const countEl = document.getElementById("count");
+    countEl.textContent = total + " implementations";
+
+    const filter = document.getElementById("filter");
+    const noRes = document.getElementById("no-results");
+    filter.addEventListener("input", () => {
+      const q = filter.value.trim().toLowerCase();
+      let shown = 0;
+      document.querySelectorAll(".sec").forEach(sec => {
+        let secShown = 0;
+        sec.querySelectorAll(".item").forEach(it => {
+          const match = !q || it.dataset.h.includes(q);
+          it.classList.toggle("hidden", !match);
+          if (match) { secShown++; shown++; }
+        });
+        sec.classList.toggle("hidden", secShown === 0);
+      });
+      countEl.textContent = shown + (q ? " match" + (shown===1?"":"es") : " implementations");
+      noRes.classList.toggle("hidden", shown !== 0);
+    });
+  </script>
+</body>
+</html>
