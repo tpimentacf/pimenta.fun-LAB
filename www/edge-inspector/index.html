@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Edge Inspector &mdash; Pimenta Lab</title>
+  <meta name="description" content="Live Cloudflare edge metadata: /cdn-cgi/trace, geolocation, data center (colo), TLS, HTTP version, WARP status, and response headers." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    /* page-specific styling layered on /assets/lab.css */
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+    .row-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 0; }
+
+    /* summary metric grid */
+    .geo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 6px 0 0; }
+    .geo-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .geo-card .l { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .geo-card .n { font-size: 1.25rem; font-weight: 700; color: var(--accent); margin-top: 4px; word-break: break-word; }
+    .geo-card .n.sm { font-size: 0.98rem; color: var(--text); }
+    .geo-card .n .flag { font-size: 1.4rem; margin-right: 6px; }
+
+    /* key/value tables */
+    .kv { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .kv th, .kv td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .kv thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kv tbody td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #9cc0ff; white-space: nowrap; }
+    .kv tbody td.desc { color: var(--muted); }
+    .kv tbody td .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #d7e2f7; word-break: break-word; }
+    .kv tbody tr:last-child td { border-bottom: none; }
+
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+    .pill.on  { background: rgba(54,211,153,0.14); color: #6ee7b7; border: 1px solid rgba(54,211,153,0.45); }
+    .pill.off { background: rgba(154,166,192,0.12); color: var(--muted); border: 1px solid var(--border); }
+    .pill.hit { background: rgba(54,211,153,0.14); color: #6ee7b7; border: 1px solid rgba(54,211,153,0.45); }
+    .pill.miss{ background: rgba(255,107,107,0.14); color: #ffb0b0; border: 1px solid rgba(255,107,107,0.45); }
+    .pill.warn{ background: rgba(246,130,31,0.14); color: #f6a85f; border: 1px solid rgba(246,130,31,0.45); }
+
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+    .copied { color: var(--green); font-size: 0.8rem; margin-left: 8px; opacity: 0; transition: opacity 0.2s; }
+    .copied.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Network &amp; Edge / Edge Inspector</div>
+    <span class="tag">Edge Inspector</span>
+    <h1>Cloudflare <span class="grad">Edge Inspector</span></h1>
+    <p class="lead">See exactly how your request reaches Cloudflare: which data center (colo) served you,
+      your geolocation, HTTP protocol, TLS version, WARP status, and the response headers the edge adds &mdash;
+      all read live from your own connection.</p>
+
+    <div class="note"><strong>How it works:</strong> this page reads
+      <code class="inline">/cdn-cgi/trace</code> (served automatically on every Cloudflare zone) and inspects
+      same-origin response headers via the browser <code class="inline">Headers</code> API. No origin, Worker, or
+      add-on is required &mdash; it works on any zone proxied through Cloudflare.</div>
+
+    <div class="warn"><strong>Use at your own risk.</strong> This lab was built by TPimenta LAB for hands-on testing.
+      Always consult the official Cloudflare documentation for accurate, up-to-date guidance.</div>
+
+    <!-- ── SUMMARY CARDS ── -->
+    <div class="panel">
+      <h2>Your edge connection</h2>
+      <p class="sub">A quick read of the most useful fields. Re-run to refresh (e.g. after toggling WARP).</p>
+      <div class="geo-grid" id="geo-grid">
+        <div class="geo-card"><div class="l">Country</div><div class="n sm" id="g-country">&hellip;</div></div>
+        <div class="geo-card"><div class="l">Data center</div><div class="n sm" id="g-colo">&hellip;</div></div>
+        <div class="geo-card"><div class="l">Your IP</div><div class="n sm" id="g-ip">&hellip;</div></div>
+        <div class="geo-card"><div class="l">HTTP</div><div class="n sm" id="g-http">&hellip;</div></div>
+        <div class="geo-card"><div class="l">TLS</div><div class="n sm" id="g-tls">&hellip;</div></div>
+        <div class="geo-card"><div class="l">WARP</div><div class="n sm" id="g-warp">&hellip;</div></div>
+      </div>
+      <div class="row-actions" style="margin-top:16px;">
+        <button class="btn" id="btn-refresh">Re-run inspection</button>
+        <button class="btn ghost" id="btn-copy">Copy raw trace</button>
+        <span class="copied" id="copied-msg">Copied&nbsp;&check;</span>
+      </div>
+    </div>
+
+    <!-- ── RAW TRACE TABLE ── -->
+    <div class="panel">
+      <h2><code class="inline">/cdn-cgi/trace</code> &mdash; parsed</h2>
+      <p class="sub">Every key Cloudflare returns from the trace endpoint, decoded.</p>
+      <table class="kv">
+        <thead><tr><th style="width:120px;">Field</th><th>Value</th><th style="width:42%;">Meaning</th></tr></thead>
+        <tbody id="trace-body">
+          <tr><td colspan="3" class="muted-small">Loading trace&hellip;</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── RESPONSE HEADERS ── -->
+    <div class="panel">
+      <h2>Response headers <span class="muted-small">(same-origin fetch)</span></h2>
+      <p class="sub">Cloudflare-relevant headers the browser is allowed to read from this page's own response.
+        Some headers (e.g. <code class="inline">CF-Connecting-IP</code>) are request-only and never visible to client JS.</p>
+      <table class="kv">
+        <thead><tr><th style="width:200px;">Header</th><th>Value</th></tr></thead>
+        <tbody id="hdr-body">
+          <tr><td colspan="2" class="muted-small">Reading headers&hellip;</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── REFERENCE ── -->
+    <div class="panel">
+      <h2>Reference &mdash; Cloudflare request headers</h2>
+      <p class="sub">Headers Cloudflare adds to requests <em>before they reach your origin</em>. These are not
+        readable from client JavaScript &mdash; log them at the origin or echo them via a Worker to confirm.</p>
+      <table class="kv">
+        <thead><tr><th style="width:230px;">Request header</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>CF-Connecting-IP</td><td class="desc">The original client IP address. Use this at the origin instead of the proxy IP.</td></tr>
+          <tr><td>CF-Connecting-IPv6</td><td class="desc">IPv6 form of the client address, when applicable.</td></tr>
+          <tr><td>True-Client-IP</td><td class="desc">Enterprise equivalent of CF-Connecting-IP (same value, alternate name).</td></tr>
+          <tr><td>CF-Ray</td><td class="desc">Unique request ID (ends with the colo code). Quote this in support tickets to trace a request.</td></tr>
+          <tr><td>CF-IPCountry</td><td class="desc">ISO-3166 country of the visitor (requires IP Geolocation enabled on the zone).</td></tr>
+          <tr><td>CF-Visitor</td><td class="desc">JSON describing the original scheme, e.g. <code class="inline">{"scheme":"https"}</code>.</td></tr>
+          <tr><td>CF-Worker</td><td class="desc">Host of the Worker that dispatched a subrequest, when applicable.</td></tr>
+          <tr><td>X-Forwarded-For</td><td class="desc">Appends the client IP to any existing chain of proxy addresses.</td></tr>
+          <tr><td>X-Forwarded-Proto</td><td class="desc">Original protocol (http/https) used by the client to reach the edge.</td></tr>
+          <tr><td>Accept-Encoding</td><td class="desc">Normalised by Cloudflare to reflect what the edge will accept from the origin.</td></tr>
+        </tbody>
+      </table>
+      <p class="muted-small" style="margin-top:14px;">The richest source of edge data inside Cloudflare is the
+        <code class="inline">request.cf</code> object available in Workers (country, colo, ASN, TLS cipher, bot score,
+        and more). See the
+        <a href="https://developers.cloudflare.com/fundamentals/reference/http-headers/" style="color:var(--accent);">HTTP request headers</a>
+        and <a href="https://developers.cloudflare.com/workers/runtime-apis/request/#incomingrequestcfproperties" style="color:var(--accent);">request.cf properties</a> docs.</p>
+    </div>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;
+    <a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+
+  <script>
+    // ------------------------------------------------------------------
+    // Field metadata for /cdn-cgi/trace keys.
+    // ------------------------------------------------------------------
+    const TRACE_META = {
+      fl:   "Cloudflare edge metal/server that handled the request.",
+      h:    "Host the request was made to.",
+      ip:   "Your public IP address as seen by the edge.",
+      ts:   "Request timestamp (Unix epoch, seconds).",
+      visit_scheme: "Scheme the client used to reach Cloudflare (http/https).",
+      uag:  "User-Agent string sent by your browser.",
+      colo: "IATA code of the Cloudflare data center that served you.",
+      sliver: "Internal deployment sliver (usually 'none').",
+      http: "HTTP protocol version negotiated (e.g. http/3).",
+      loc:  "ISO-3166 country code resolved from your IP.",
+      tls:  "TLS protocol version negotiated.",
+      sni:  "SNI handling mode (e.g. plaintext / encrypted).",
+      warp: "WARP / Cloudflare client status (on, off, plus, etc.).",
+      gateway: "Cloudflare Gateway (Zero Trust) status for the connection.",
+      rbi:  "Remote Browser Isolation status.",
+      kex:  "Key-exchange algorithm used for the TLS handshake."
+    };
+
+    // Common Cloudflare colo (IATA) → city map. Not exhaustive; unknown
+    // codes fall back to showing the raw code.
+    const COLO = {
+      LIS:"Lisbon, PT", OPO:"Porto, PT", MAD:"Madrid, ES", BCN:"Barcelona, ES",
+      CDG:"Paris, FR", MRS:"Marseille, FR", LHR:"London, GB", MAN:"Manchester, GB",
+      AMS:"Amsterdam, NL", FRA:"Frankfurt, DE", DUS:"Dusseldorf, DE", MUC:"Munich, DE",
+      MXP:"Milan, IT", FCO:"Rome, IT", VIE:"Vienna, AT", ZRH:"Zurich, CH",
+      BRU:"Brussels, BE", DUB:"Dublin, IE", CPH:"Copenhagen, DK", ARN:"Stockholm, SE",
+      OSL:"Oslo, NO", HEL:"Helsinki, FI", WAW:"Warsaw, PL", PRG:"Prague, CZ",
+      OTP:"Bucharest, RO", SOF:"Sofia, BG", ATH:"Athens, GR", IST:"Istanbul, TR",
+      EWR:"Newark, US", IAD:"Ashburn, US", ATL:"Atlanta, US", ORD:"Chicago, US",
+      DFW:"Dallas, US", DEN:"Denver, US", LAX:"Los Angeles, US", MIA:"Miami, US",
+      SEA:"Seattle, US", SJC:"San Jose, US", PHX:"Phoenix, US", BOS:"Boston, US",
+      YYZ:"Toronto, CA", YUL:"Montreal, CA", YVR:"Vancouver, CA",
+      GRU:"Sao Paulo, BR", GIG:"Rio de Janeiro, BR", EZE:"Buenos Aires, AR",
+      SCL:"Santiago, CL", BOG:"Bogota, CO", LIM:"Lima, PE", MEX:"Mexico City, MX",
+      NRT:"Tokyo, JP", KIX:"Osaka, JP", ICN:"Seoul, KR", HKG:"Hong Kong",
+      SIN:"Singapore", KUL:"Kuala Lumpur, MY", BKK:"Bangkok, TH", CGK:"Jakarta, ID",
+      BOM:"Mumbai, IN", DEL:"New Delhi, IN", MAA:"Chennai, IN", BLR:"Bangalore, IN",
+      SYD:"Sydney, AU", MEL:"Melbourne, AU", PER:"Perth, AU", AKL:"Auckland, NZ",
+      DXB:"Dubai, AE", TLV:"Tel Aviv, IL", JNB:"Johannesburg, ZA", CPT:"Cape Town, ZA",
+      LOS:"Lagos, NG", NBO:"Nairobi, KE", CAI:"Cairo, EG"
+    };
+
+    function flag(cc) {
+      if (!cc || cc.length !== 2 || cc === "XX") return "";
+      const A = 0x1F1E6;
+      return String.fromCodePoint(A + cc.charCodeAt(0) - 65, A + cc.charCodeAt(1) - 65);
+    }
+    function esc(s) {
+      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+    function setText(id, html) { const el = document.getElementById(id); if (el) el.innerHTML = html; }
+
+    let lastRaw = "";
+
+    function parseTrace(text) {
+      const o = {};
+      text.trim().split("\n").forEach(line => {
+        const i = line.indexOf("=");
+        if (i > -1) o[line.slice(0, i)] = line.slice(i + 1);
+      });
+      return o;
+    }
+
+    function renderSummary(t) {
+      const cc = (t.loc || "").toUpperCase();
+      setText("g-country", cc ? '<span class="flag">' + flag(cc) + '</span>' + cc : "&mdash;");
+      const colo = (t.colo || "").toUpperCase();
+      setText("g-colo", colo ? colo + (COLO[colo] ? ' &middot; <span class="muted-small">' + esc(COLO[colo]) + '</span>' : "") : "&mdash;");
+      setText("g-ip", t.ip ? esc(t.ip) : "&mdash;");
+      setText("g-http", t.http ? esc(t.http) : "&mdash;");
+      setText("g-tls", t.tls ? esc(t.tls) : "&mdash;");
+      const w = (t.warp || "off").toLowerCase();
+      const on = w !== "off" && w !== "";
+      setText("g-warp", '<span class="pill ' + (on ? "on" : "off") + '">' + esc(t.warp || "off") + "</span>");
+    }
+
+    function renderTraceTable(t) {
+      const order = ["h","ip","loc","colo","http","tls","kex","sni","warp","gateway","rbi","visit_scheme","ts","fl","sliver","uag"];
+      const keys = order.filter(k => k in t).concat(Object.keys(t).filter(k => !order.includes(k)));
+      const rows = keys.map(k => {
+        let v = t[k];
+        if (k === "loc") v = (flag(v.toUpperCase()) + " " + v).trim();
+        if (k === "colo" && COLO[v.toUpperCase()]) v = v.toUpperCase() + "  (" + COLO[v.toUpperCase()] + ")";
+        if (k === "ts" && /^\d+/.test(v)) v = v + "  (" + new Date(parseFloat(v) * 1000).toISOString() + ")";
+        const meaning = TRACE_META[k] || "";
+        return "<tr><td>" + esc(k) + '</td><td><span class="val">' + esc(v) + "</span></td><td class=\"desc\">" + esc(meaning) + "</td></tr>";
+      }).join("");
+      setText("trace-body", rows || '<tr><td colspan="3" class="muted-small">No trace fields returned.</td></tr>');
+    }
+
+    async function loadTrace() {
+      try {
+        const res = await fetch("/cdn-cgi/trace", { cache: "no-store" });
+        const text = await res.text();
+        lastRaw = text;
+        const t = parseTrace(text);
+        renderSummary(t);
+        renderTraceTable(t);
+      } catch (e) {
+        setText("trace-body", '<tr><td colspan="3" class="muted-small">Could not load /cdn-cgi/trace &mdash; ' +
+          esc(e.message) + '. This page must be served through a Cloudflare-proxied zone.</td></tr>');
+      }
+    }
+
+    async function loadHeaders() {
+      const WANT = ["cf-ray","cf-cache-status","server","content-type","content-encoding",
+                    "cache-control","cf-apo-via","age","vary","alt-svc","strict-transport-security"];
+      try {
+        const res = await fetch(location.href, { method: "GET", cache: "no-store" });
+        const rows = [];
+        WANT.forEach(h => {
+          const v = res.headers.get(h);
+          if (v == null) return;
+          let cell = '<span class="val">' + esc(v) + "</span>";
+          if (h === "cf-cache-status") {
+            const up = v.toUpperCase();
+            const cls = up === "HIT" ? "hit" : (up === "MISS" || up === "EXPIRED" ? "miss" : "warn");
+            cell = '<span class="pill ' + cls + '">' + esc(up) + "</span>";
+          }
+          rows.push("<tr><td>" + esc(h) + "</td><td>" + cell + "</td></tr>");
+        });
+        setText("hdr-body", rows.length ? rows.join("") :
+          '<tr><td colspan="2" class="muted-small">No Cloudflare response headers exposed for this request.</td></tr>');
+      } catch (e) {
+        setText("hdr-body", '<tr><td colspan="2" class="muted-small">Could not read response headers &mdash; ' +
+          esc(e.message) + "</td></tr>");
+      }
+    }
+
+    function run() { loadTrace(); loadHeaders(); }
+
+    document.getElementById("btn-refresh").addEventListener("click", run);
+    document.getElementById("btn-copy").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(lastRaw || "(no trace loaded)");
+        const m = document.getElementById("copied-msg");
+        m.classList.add("show");
+        setTimeout(() => m.classList.remove("show"), 1500);
+      } catch (_) { /* clipboard blocked */ }
+    });
+
+    run();
+  </script>
+</body>
+</html>
