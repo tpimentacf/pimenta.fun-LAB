@@ -1,0 +1,20 @@
+name = "rate-limit"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# Native Workers Rate Limiting binding. Requires Wrangler >= 4.36.0.
+# The binding name ("WORKER_RL") is what the Worker references as env.WORKER_RL.
+[[ratelimits]]
+name = "WORKER_RL"
+# Unique positive integer (as a string) identifying this limiter in your account.
+# Bindings that share a namespace_id share counters — use a unique value here.
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 5      # number of allowed requests (calls to limit()) per period
+  period = 60    # window in seconds — must be 10 or 60
+
+# Route the Worker over the lab path so it can rate-limit it and serve the page.
+routes = [
+  { pattern = "www.pimenta.fun/ratelimiting/worker-rl*", zone_name = "pimenta.fun" }
+]

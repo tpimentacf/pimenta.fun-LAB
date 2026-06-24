@@ -4,7 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Rate Limit by Worker &mdash; Pimenta Lab</title>
+  <meta name="description" content="Rate limiting with the native Cloudflare Workers Rate Limiting binding: full Worker code, wrangler config, and the step-by-step Cloudflare setup." />
   <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+    #log div { font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size: 0.84rem; padding: 2px 0; }
+    ol.steps { margin: 0 0 6px 20px; color: var(--muted); }
+    ol.steps li { margin: 10px 0; }
+    ol.steps strong { color: var(--text); }
+    .filename { color: var(--accent); font-size: 0.78rem; font-family: ui-monospace,SFMono-Regular,Menlo,monospace;
+                text-transform: none; letter-spacing: 0; margin: 14px 0 4px; }
+    .req { background: rgba(91,141,239,0.1); border: 1px solid rgba(91,141,239,0.35); color: #bcd3ff;
+           border-radius: 10px; padding: 10px 14px; font-size: 0.84rem; margin: 12px 0; }
+  </style>
 </head>
 <body>
   <header class="lab">
@@ -18,20 +31,140 @@
   <main class="lab">
     <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Rate Limiting / Rate Limit by Worker</div>
     <span class="tag">Rate limiting</span>
-    <h1>Rate Limit by Worker</h1>
-    <p class="lead">A Worker enforces the limit using the Rate Limiting binding.</p>
+    <h1>Rate Limit <span class="grad">by Worker</span></h1>
+    <p class="lead">Enforce a limit in code with the native Workers <strong>Rate Limiting binding</strong>
+      (<code class="inline">env.WORKER_RL.limit()</code>). Allowed requests reach the origin; once the threshold is
+      crossed the Worker returns <code class="inline">429</code> &mdash; only after your code decides to check.</p>
+
+    <div class="note">This lab uses <strong>5 requests / 60 seconds</strong>, keyed on the visitor IP + path.
+      Counters are <strong>per Cloudflare data center</strong>. The binding requires <strong>Wrangler &ge; 4.36.0</strong>.</div>
+
+    <div class="warn"><strong>Use at your own risk.</strong> This lab was built by TPimenta LAB for hands-on testing.
+      Always consult the official Cloudflare documentation for accurate, up-to-date guidance.</div>
+
+    <!-- ── LIVE TEST ── -->
     <div class="panel">
+      <h2>Live test</h2>
+      <p class="sub">Fire requests at this path. The 6th within a minute (per colo, per IP) should come back 429.</p>
       <button class="btn" id="one">Send 1 request</button>
       &nbsp; <button class="btn ghost" id="ten">Burst 10</button>
-      <h2>Responses (newest first)</h2>
+      <h2 style="font-size:0.95rem;margin-top:18px;">Responses (newest first)</h2>
       <div id="log"></div>
     </div>
-    <div class="note">Watch for HTTP <code class="inline">429 Too Many Requests</code> once the configured threshold is exceeded.</div>
+
+    <!-- ── WHY A WORKER ── -->
+    <div class="panel">
+      <h2>When to use this vs a Rate Limiting rule</h2>
+      <ul class="bullets">
+        <li>You need the limit applied <strong>only after specific logic runs</strong> (e.g. after auth, for one code path).</li>
+        <li>You want <strong>different limits per user class</strong> (free vs. paid) using different keys/bindings.</li>
+        <li>You want to key on something computed in code (decoded token, tenant ID) rather than raw request fields.</li>
+      </ul>
+      <p class="sub">For simple, declarative limits on a path/zone, use a dashboard
+        <a href="https://www.pimenta.fun/ratelimiting/5r1m/" style="color:var(--accent);">Rate Limiting rule</a> instead &mdash; no Worker needed.</p>
+    </div>
+
+    <!-- ── WORKER CONFIG ── -->
+    <div class="panel">
+      <h2>Worker configuration</h2>
+      <p class="sub">Two files. The binding is declared in <code class="inline">wrangler.toml</code>; the Worker calls
+        <code class="inline">limit()</code>. Full source lives at <code class="inline">workers/rate-limit/</code> in the repo.</p>
+
+      <div class="filename">wrangler.toml</div>
+      <pre>name = "rate-limit"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# Native Rate Limiting binding (Wrangler &gt;= 4.36.0).
+# "name" is what the Worker references as env.WORKER_RL.
+[[ratelimits]]
+name = "WORKER_RL"
+namespace_id = "1001"   # unique integer-as-string; shared id = shared counter
+
+  [ratelimits.simple]
+  limit = 5      # allowed requests per period
+  period = 60    # window in seconds — must be 10 or 60
+
+routes = [
+  { pattern = "www.pimenta.fun/ratelimiting/worker-rl*", zone_name = "pimenta.fun" }
+]</pre>
+
+      <div class="filename">worker.js</div>
+      <pre>const LIMIT = 5, PERIOD = 60; // keep in sync with wrangler.toml
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const ip  = request.headers.get("CF-Connecting-IP") || "unknown";
+    const key = ip + ":" + url.pathname; // lab key; prefer a user/API-key id in prod
+
+    const { success } = await env.WORKER_RL.limit({ key });
+
+    if (!success) {
+      return new Response(
+        "429 Too Many Requests — " + LIMIT + " req / " + PERIOD + "s for " + url.pathname,
+        { status: 429, headers: { "retry-after": String(PERIOD), "cache-control": "no-store" } }
+      );
+    }
+    return fetch(request); // allowed → go to origin
+  }
+};</pre>
+      <div class="req">The <code class="inline">limit()</code> call does <strong>not</strong> add network latency &mdash; counters
+        are cached on the machine running your Worker and reconciled in the background within the colo.</div>
+    </div>
+
+    <!-- ── CLOUDFLARE STEPS ── -->
+    <div class="panel">
+      <h2>Configure it in Cloudflare &mdash; step by step</h2>
+      <ol class="steps">
+        <li><strong>Check Wrangler.</strong> Run <code class="inline">npx wrangler --version</code> &mdash; you need
+          <strong>4.36.0 or newer</strong> for the Rate Limiting binding.</li>
+        <li><strong>Create the project.</strong> Put <code class="inline">worker.js</code> and
+          <code class="inline">wrangler.toml</code> in a folder (see <code class="inline">workers/rate-limit/</code>).</li>
+        <li><strong>Declare the binding.</strong> The <code class="inline">[[ratelimits]]</code> block defines
+          <code class="inline">WORKER_RL</code> with <code class="inline">limit = 5</code>,
+          <code class="inline">period = 60</code>, and a unique <code class="inline">namespace_id</code>.
+          No dashboard step is needed to create the limiter &mdash; it's provisioned from this config on deploy.</li>
+        <li><strong>Authenticate.</strong> <code class="inline">npx wrangler login</code> (or set a
+          <code class="inline">CLOUDFLARE_API_TOKEN</code>).</li>
+        <li><strong>Deploy.</strong> <code class="inline">npx wrangler deploy</code>. This uploads the Worker, registers
+          the binding, and attaches the route.</li>
+        <li><strong>Bind the route.</strong> The <code class="inline">routes</code> entry maps
+          <code class="inline">/ratelimiting/worker-rl*</code> to the Worker. Confirm under
+          <em>Workers &amp; Pages &rarr; your Worker &rarr; Settings &rarr; Domains &amp; Routes</em>.
+          (Prefer the dashboard? Add the route there instead and drop it from the TOML.)</li>
+        <li><strong>Disable WARP</strong> while testing so your requests hit the zone directly, then click
+          <em>Burst 10</em> above or run the curl loop below.</li>
+        <li><strong>Observe.</strong> Bindings aren't shown in the dashboard &mdash; watch 429s via
+          <em>Workers Logs / Traces</em>, or emit an Analytics Engine data point when
+          <code class="inline">limit()</code> returns <code class="inline">success: false</code>.</li>
+      </ol>
+      <div class="filename">verify from a shell</div>
+      <pre>for i in $(seq 1 8); do
+  curl -s -o /dev/null -w "%{http_code}\n" https://www.pimenta.fun/ratelimiting/worker-rl/
+done
+# Expect: 200 200 200 200 200 429 429 429</pre>
+    </div>
+
+    <!-- ── NOTES ── -->
+    <div class="panel">
+      <h2>Good to know</h2>
+      <ul class="bullets">
+        <li><strong>Locality:</strong> the limit is enforced per Cloudflare data center, per key. A globally distributed test sees the limit independently in each colo.</li>
+        <li><strong>Key choice:</strong> avoid raw IPs in production (shared by many users); prefer API keys, user IDs, or routes.</li>
+        <li><strong>Shared counters:</strong> two bindings with the same <code class="inline">namespace_id</code> &mdash; even in different Workers &mdash; share the same counter.</li>
+        <li><strong>Accuracy:</strong> permissive and eventually consistent &mdash; protective, not exact accounting.</li>
+      </ul>
+      <p class="sub">Docs:
+        <a href="https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/" style="color:var(--accent);">Workers Rate Limiting binding</a>.</p>
+    </div>
   </main>
 
   <footer class="lab">
-    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;<a href="https://www.pimenta.fun/#tests">Back to tests</a>
   </footer>
+
   <script>
     var n = 0;
     function hit() {
@@ -40,11 +173,10 @@
       var t0 = performance.now();
       fetch(location.href, { cache: 'no-store' }).then(function (r) {
         log(idx, r.status, Math.round(performance.now() - t0));
-      }).catch(function (e) { log(idx, 'ERR', '-'); });
+      }).catch(function () { log(idx, 'ERR', '-'); });
     }
     function burst(k) { for (var i = 0; i < k; i++) hit(); }
     function log(idx, status, ms) {
-      var cls = (status === 429) ? 'warn' : 'ok';
       var el = document.getElementById('log');
       var line = document.createElement('div');
       line.textContent = '#' + idx + '  ->  ' + status + '  (' + ms + ' ms)';
