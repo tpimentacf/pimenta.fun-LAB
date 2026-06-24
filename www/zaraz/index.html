@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zaraz &mdash; Pimenta Lab</title>
+  <meta name="description" content="Cloudflare Zaraz lab: detect the zaraz.js loader, fire zaraz.track() events, and inspect the Consent Management API." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+    .row-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+    .statebox { display:flex; align-items:center; gap:14px; background: var(--panel2); border:1px solid var(--border);
+                border-radius:12px; padding:16px 18px; }
+    .dot { width:14px; height:14px; border-radius:50%; flex:none; }
+    .dot.on  { background:var(--green); box-shadow:0 0 12px rgba(54,211,153,0.6); }
+    .dot.off { background:#ff6b6b; box-shadow:0 0 12px rgba(255,107,107,0.5); }
+    .statebox .t { font-weight:700; } .statebox .d { color:var(--muted); font-size:0.85rem; }
+    .log { background: var(--panel2); border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+           font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size:0.8rem; color:#cdd8ef;
+           white-space:pre-wrap; word-break:break-word; min-height:44px; max-height:220px; overflow:auto; }
+    .kv { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .kv th, .kv td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .kv thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kv tbody td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #9cc0ff; }
+    .kv td.desc { color: var(--muted); }
+    .kv tbody tr:last-child td { border-bottom: none; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Analytics / Zaraz</div>
+    <span class="tag">Zaraz</span>
+    <h1>Cloudflare <span class="grad">Zaraz</span></h1>
+    <p class="lead">Load and manage third-party tools (analytics, pixels, chat) from Cloudflare's edge instead of the
+      browser &mdash; faster pages, fewer scripts, and a built-in consent manager. This page talks to the live
+      <code class="inline">window.zaraz</code> API.</p>
+
+    <div class="note"><strong>Configure first:</strong> Dashboard &rarr; <em>Zaraz</em>. Add a tool (e.g. a custom HTML/
+      analytics tool) and an action/trigger. Cloudflare injects <code class="inline">zaraz.js</code> automatically on the
+      zone &mdash; this page detects it below.</div>
+
+    <div class="warn"><strong>Use at your own risk.</strong> This lab was built by TPimenta LAB for hands-on testing.
+      Always consult the official Cloudflare documentation for accurate, up-to-date guidance.</div>
+
+    <!-- ── DETECTION ── -->
+    <div class="panel">
+      <h2>Loader detection</h2>
+      <div class="statebox" id="statebox">
+        <span class="dot off" id="dot"></span>
+        <div>
+          <div class="t" id="z-title">Checking&hellip;</div>
+          <div class="d" id="z-desc"></div>
+        </div>
+      </div>
+      <button class="btn" id="btn-recheck" style="margin-top:14px;">Re-detect</button>
+    </div>
+
+    <!-- ── TRACK EVENT ── -->
+    <div class="panel">
+      <h2>Fire an event &mdash; <code class="inline">zaraz.track()</code></h2>
+      <p class="sub">Sends a custom event to every tool subscribed to that trigger. Useful for testing server-side
+        tag delivery.</p>
+      <label for="ev-name">Event name</label>
+      <input type="text" id="ev-name" value="demo_event" />
+      <label for="ev-props">Properties (JSON)</label>
+      <textarea id="ev-props" rows="3">{"source":"pimenta-lab","plan":"demo","value":42}</textarea>
+      <div class="row-actions" style="margin-top:14px;">
+        <button class="btn" id="btn-track">Track event</button>
+        <button class="btn ghost" id="btn-ecom">Track ecommerce</button>
+      </div>
+      <div class="log" id="log" style="margin-top:14px;">Event log&hellip;</div>
+    </div>
+
+    <!-- ── CONSENT ── -->
+    <div class="panel">
+      <h2>Consent Management API</h2>
+      <p class="sub">If the Zaraz Consent Manager is enabled, these call <code class="inline">zaraz.consent.*</code>.</p>
+      <div class="row-actions">
+        <button class="btn ghost" id="btn-consent-get">Get consent state</button>
+        <button class="btn ghost" id="btn-consent-modal">Open consent modal</button>
+        <button class="btn" id="btn-consent-all">Grant all</button>
+        <button class="btn" id="btn-consent-none">Withdraw all</button>
+      </div>
+      <div class="log" id="consent-log" style="margin-top:14px;">Consent log&hellip;</div>
+    </div>
+
+    <!-- ── API REFERENCE ── -->
+    <div class="panel">
+      <h2>Web API reference</h2>
+      <table class="kv">
+        <thead><tr><th style="width:230px;">Call</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>zaraz.track(name, props)</td><td class="desc">Send a custom event to subscribed tools.</td></tr>
+          <tr><td>zaraz.set(key, value)</td><td class="desc">Set a variable for the page/session, available to tools.</td></tr>
+          <tr><td>zaraz.ecommerce(name, data)</td><td class="desc">Send standardized e-commerce events (e.g. "Order Completed").</td></tr>
+          <tr><td>zaraz.consent.get(id)</td><td class="desc">Read consent for a purpose ID.</td></tr>
+          <tr><td>zaraz.consent.setAll(bool)</td><td class="desc">Grant or withdraw all purposes at once.</td></tr>
+          <tr><td>zaraz.showConsentModal()</td><td class="desc">Open the consent modal programmatically.</td></tr>
+        </tbody>
+      </table>
+      <p class="muted-small" style="margin-top:12px;">Docs:
+        <a href="https://developers.cloudflare.com/zaraz/" style="color:var(--accent);">Zaraz</a> &middot;
+        <a href="https://developers.cloudflare.com/zaraz/web-api/" style="color:var(--accent);">Web API</a>.</p>
+    </div>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;<a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    function ts(){ return new Date().toLocaleTimeString(); }
+    function logTo(id,msg){ const el=$(id); el.textContent = "["+ts()+"] "+msg+"\n"+el.textContent; }
+
+    function detect(){
+      const z = window.zaraz;
+      const ok = !!(z && typeof z.track === "function");
+      $("dot").className = "dot " + (ok ? "on" : "off");
+      if(ok){
+        $("z-title").textContent = "Zaraz detected";
+        $("z-desc").innerHTML = "<code class=\"inline\">window.zaraz</code> is loaded. Events and consent calls below are live.";
+      } else if (z) {
+        $("z-title").textContent = "Partial / loading";
+        $("z-desc").innerHTML = "<code class=\"inline\">window.zaraz</code> exists but <code class=\"inline\">track()</code> isn't ready yet. Try Re-detect.";
+      } else {
+        $("z-title").textContent = "Zaraz not loaded";
+        $("z-desc").innerHTML = "No <code class=\"inline\">window.zaraz</code>. Enable Zaraz on this zone (and ensure no blocker strips zaraz.js).";
+      }
+      return ok;
+    }
+
+    function track(){
+      if(!detect()){ logTo("log","zaraz unavailable \u2014 cannot track."); return; }
+      const name = $("ev-name").value.trim() || "demo_event";
+      let props = {};
+      try { props = JSON.parse($("ev-props").value || "{}"); }
+      catch(e){ logTo("log","Invalid JSON props: "+e.message); return; }
+      try { window.zaraz.track(name, props); logTo("log","track('"+name+"', "+JSON.stringify(props)+") sent."); }
+      catch(e){ logTo("log","track() error: "+e.message); }
+    }
+
+    function trackEcom(){
+      if(!detect()){ logTo("log","zaraz unavailable."); return; }
+      const data = { name:"Pimenta Demo Tee", price:29.0, currency:"EUR", product_id:"SKU-DEMO-1" };
+      try {
+        if(typeof window.zaraz.ecommerce === "function"){
+          window.zaraz.ecommerce("Product Viewed", data);
+          logTo("log","ecommerce('Product Viewed', "+JSON.stringify(data)+") sent.");
+        } else {
+          window.zaraz.track("Product Viewed", data);
+          logTo("log","ecommerce() not available; sent via track() instead.");
+        }
+      } catch(e){ logTo("log","ecommerce() error: "+e.message); }
+    }
+
+    function consentGet(){
+      const z=window.zaraz;
+      if(!(z && z.consent)){ logTo("consent-log","Consent manager not enabled (zaraz.consent missing)."); return; }
+      try {
+        const all = (typeof z.consent.getAll === "function") ? z.consent.getAll() : z.consent.getAllCheckboxes && z.consent.getAllCheckboxes();
+        logTo("consent-log","consent state: "+JSON.stringify(all||"(use getAll/get(id))"));
+      } catch(e){ logTo("consent-log","get error: "+e.message); }
+    }
+    function consentSet(v){
+      const z=window.zaraz;
+      if(!(z && z.consent)){ logTo("consent-log","Consent manager not enabled."); return; }
+      try { z.consent.setAll(v); logTo("consent-log","setAll("+v+") called."); }
+      catch(e){ logTo("consent-log","setAll error: "+e.message); }
+    }
+    function consentModal(){
+      const z=window.zaraz;
+      try {
+        if(z && typeof z.showConsentModal === "function"){ z.showConsentModal(); logTo("consent-log","showConsentModal() called."); }
+        else if (z && z.consent && typeof z.consent.modal !== "undefined"){ z.consent.modal = true; logTo("consent-log","consent.modal = true."); }
+        else logTo("consent-log","No consent modal API available.");
+      } catch(e){ logTo("consent-log","modal error: "+e.message); }
+    }
+
+    $("btn-recheck").addEventListener("click", detect);
+    $("btn-track").addEventListener("click", track);
+    $("btn-ecom").addEventListener("click", trackEcom);
+    $("btn-consent-get").addEventListener("click", consentGet);
+    $("btn-consent-modal").addEventListener("click", consentModal);
+    $("btn-consent-all").addEventListener("click", ()=>consentSet(true));
+    $("btn-consent-none").addEventListener("click", ()=>consentSet(false));
+
+    // zaraz may load slightly after DOM; detect now and once more shortly after.
+    detect();
+    setTimeout(detect, 1200);
+  </script>
+</body>
+</html>
