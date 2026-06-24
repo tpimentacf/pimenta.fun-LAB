@@ -172,14 +172,16 @@ done
       var idx = n;
       var t0 = performance.now();
       fetch(location.href, { cache: 'no-store' }).then(function (r) {
-        log(idx, r.status, Math.round(performance.now() - t0));
-      }).catch(function () { log(idx, 'ERR', '-'); });
+        var ray = r.headers.get('cf-ray');
+        var colo = ray ? ray.split('-').pop() : 'n/a';
+        log(idx, r.status, Math.round(performance.now() - t0), colo);
+      }).catch(function () { log(idx, 'ERR', '-', 'n/a'); });
     }
     function burst(k) { for (var i = 0; i < k; i++) hit(); }
-    function log(idx, status, ms) {
+    function log(idx, status, ms, colo) {
       var el = document.getElementById('log');
       var line = document.createElement('div');
-      line.textContent = '#' + idx + '  ->  ' + status + '  (' + ms + ' ms)';
+      line.textContent = '#' + idx + '  ->  ' + status + '  (' + ms + ' ms)  [colo ' + colo + ']';
       line.style.color = (status === 429) ? '#ffc4c4' : '#b6f5dc';
       el.prepend(line);
     }
