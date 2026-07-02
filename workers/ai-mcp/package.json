@@ -1,0 +1,25 @@
+{
+  "name": "ai-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pimenta Lab remote MCP server on Cloudflare Workers, wired to D1 + KV + Workers AI (AI Gateway).",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute pimenta-ai-mcp --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute pimenta-ai-mcp --remote --file=./schema.sql",
+    "types": "wrangler types"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "agents": "^0.2.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250601.0",
+    "typescript": "^5.5.0",
+    "wrangler": "^4.36.0"
+  }
+}

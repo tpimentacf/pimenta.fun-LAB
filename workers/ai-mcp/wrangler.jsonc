@@ -1,0 +1,40 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ai-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Serve the MCP endpoint from *.workers.dev at /mcp. Point MCP clients at
+  // https://ai-mcp.<your-subdomain>.workers.dev/mcp
+  "workers_dev": true,
+
+  // Workers AI binding (env.AI). One AI binding per Worker.
+  "ai": { "binding": "AI" },
+
+  // D1 database binding (env.DB). Fill database_id after `wrangler d1 create`.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pimenta-ai-mcp",
+      "database_id": "<YOUR_D1_DATABASE_ID>"
+    }
+  ],
+
+  // Workers KV binding (env.KV). Fill id after `wrangler kv namespace create`.
+  "kv_namespaces": [
+    {
+      "binding": "KV",
+      "id": "<YOUR_KV_NAMESPACE_ID>"
+    }
+  ],
+
+  // Plain vars. Create an AI Gateway named "pimenta-lab" (or use "default").
+  "vars": {
+    "AI_GATEWAY_ID": "pimenta-lab",
+    "AI_MODEL": "@cf/meta/llama-3.1-8b-instruct-fast"
+  },
+
+  // Turn on Workers Observability (logs/traces) for the demo.
+  "observability": { "enabled": true }
+}
