@@ -99,6 +99,21 @@
     // Implementation catalogue. badges: origin | worker | config | addon | guide | ext
     // ------------------------------------------------------------------
     const SECTIONS = [
+      { title: "AI & Agents", desc: "Cloudflare AI portfolio and a remote MCP server wired to real data.", items: [
+        { name:"AI & MCP Lab (guide)", href:"/ai-lab/", prod:"Workers AI / AI Gateway / Firewall for AI / MCP",
+          badges:["guide","config"],
+          desc:"End-to-end guide: Workers AI, AI Gateway, Firewall for AI, and a remote MCP server on D1+KV, plus a customer demo runbook.",
+          impl:"Static guide page; references the ai-mcp Worker and dashboard config for AI Gateway + Firewall for AI." },
+        { name:"AI Session Slide Deck", href:"/ai-lab/slides/", prod:"Enablement",
+          badges:["origin"],
+          desc:"Self-contained, keyboard-navigable slide deck for a customer AI session.",
+          impl:"Static HTML deck (arrow-key navigation, progress, deep-linkable slides)." },
+        { name:"ai-mcp (remote MCP server)", href:"https://github.com/tpimentacf/pimenta.fun-LAB/tree/main/workers/ai-mcp", prod:"Workers / MCP / D1 / KV / Workers AI",
+          badges:["worker","addon"],
+          desc:"Stateless MCP server exposing D1 notes CRUD, KV get/put, and an ask_ai tool (Workers AI via AI Gateway).",
+          impl:"Worker in <code class=\"inline\">workers/ai-mcp/</code> using createMcpHandler + @modelcontextprotocol/sdk; bindings for AI, D1, KV. Deploy with wrangler." }
+      ]},
+
       { title: "Network & Edge", desc: "Surface the Cloudflare edge metadata behind every request.", items: [
         { name:"Edge Inspector", href:"/edge-inspector/", prod:"cdn-cgi/trace",
           badges:["origin"],

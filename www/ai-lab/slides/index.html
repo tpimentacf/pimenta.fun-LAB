@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cloudflare AI &amp; MCP &mdash; Customer Session</title>
+  <meta name="description" content="Slide deck for a Cloudflare AI customer session: Workers AI, AI Gateway, Firewall for AI, and MCP on Workers wired to D1/KV." />
+  <style>
+    :root{
+      --bg:#0b1020; --panel:#131a30; --panel2:#0f1528; --accent:#f6821f; --accent2:#ff6b6b;
+      --green:#36d399; --blue:#5b8def; --text:#e8edf7; --muted:#9aa6c0; --border:#233056;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    html,body{height:100%;}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      background:radial-gradient(1100px 500px at 20% -10%,#1b2547 0%,var(--bg) 55%);
+      color:var(--text); overflow:hidden;
+    }
+    .deck{height:100vh;display:flex;align-items:center;justify-content:center;}
+    .slide{display:none;width:min(1000px,92vw);max-height:88vh;overflow:auto;padding:8px 6px;}
+    .slide.active{display:block;animation:fade .25s ease;}
+    @keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+    .kicker{display:inline-block;background:rgba(246,130,31,0.12);color:var(--accent);
+      border:1px solid rgba(246,130,31,0.4);padding:5px 13px;border-radius:999px;font-size:0.72rem;
+      font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:20px;}
+    h1{font-size:clamp(2rem,5.5vw,3.6rem);line-height:1.1;margin-bottom:16px;}
+    h1 .grad{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+    h2{font-size:clamp(1.5rem,3.6vw,2.3rem);margin-bottom:18px;line-height:1.15;}
+    h2 .grad{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+    p.lead{color:var(--muted);font-size:clamp(1rem,2vw,1.25rem);max-width:760px;}
+    ul{list-style:none;margin:8px 0;}
+    ul li{position:relative;padding:9px 0 9px 30px;font-size:clamp(0.95rem,1.8vw,1.15rem);color:var(--text);}
+    ul li::before{content:"\2192";position:absolute;left:0;color:var(--accent);font-weight:800;}
+    ul li .m{color:var(--muted);}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+    @media (max-width:720px){ .two{grid-template-columns:1fr;} }
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px;}
+    .card h3{color:var(--accent);font-size:1.15rem;margin-bottom:8px;}
+    .card p{color:var(--muted);font-size:0.98rem;}
+    .big{font-size:clamp(1.05rem,2.1vw,1.35rem);}
+    pre{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:16px 18px;
+      color:#cbd6ef;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:clamp(0.7rem,1.4vw,0.92rem);
+      overflow:auto;line-height:1.4;}
+    code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#1b2547;padding:2px 6px;border-radius:5px;font-size:0.9em;color:#d7e2f7;}
+    .num{font-size:clamp(2.4rem,6vw,4rem);font-weight:800;color:var(--accent);line-height:1;}
+    .subtle{color:var(--muted);}
+
+    /* chrome */
+    .bar{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;
+      padding:14px 22px;font-size:0.82rem;color:var(--muted);}
+    .bar .brand{font-weight:700;color:var(--text);} .bar .brand span{color:var(--accent);}
+    .progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .25s;}
+    .controls{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:16px;padding:16px;}
+    .controls button{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:9px;
+      padding:8px 16px;font-size:0.9rem;font-family:inherit;cursor:pointer;}
+    .controls button:hover{border-color:var(--accent);}
+    .dots{display:flex;gap:6px;flex-wrap:wrap;max-width:60vw;justify-content:center;}
+    .dot{width:9px;height:9px;border-radius:50%;background:var(--border);cursor:pointer;}
+    .dot.on{background:var(--accent);}
+    .hint{position:fixed;bottom:56px;left:0;right:0;text-align:center;color:var(--muted);font-size:0.72rem;}
+    a{color:var(--accent);}
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <div class="bar">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <div><span id="pgnum">1</span> / <span id="pgtot">1</span></div>
+  </div>
+
+  <div class="deck" id="deck">
+
+    <!-- 1 TITLE -->
+    <section class="slide">
+      <span class="kicker">Customer session</span>
+      <h1>Building AI on <span class="grad">Cloudflare</span></h1>
+      <p class="lead">Workers AI &middot; AI Gateway &middot; Firewall for AI &middot; MCP on Workers (with D1 &amp; KV).
+        A live, buildable lab &mdash; from first inference to an agent calling your systems.</p>
+    </section>
+
+    <!-- 2 AGENDA -->
+    <section class="slide">
+      <span class="kicker">Agenda</span>
+      <h2>What we'll cover</h2>
+      <ul class="big">
+        <li>The AI opportunity &mdash; and the four things teams worry about</li>
+        <li><b>Workers AI</b> &mdash; run models with no GPU ops</li>
+        <li><b>AI Gateway</b> &mdash; cost, caching, reliability, visibility</li>
+        <li><b>Firewall for AI</b> &mdash; guardrails for prompts</li>
+        <li><b>MCP on Workers</b> &mdash; connect agents to real data (D1/KV)</li>
+        <li>Live demo &amp; how to build it yourself</li>
+      </ul>
+    </section>
+
+    <!-- 3 PROBLEM -->
+    <section class="slide">
+      <span class="kicker">Why this matters</span>
+      <h2>Everyone wants AI. Four worries stall it.</h2>
+      <div class="two">
+        <div class="card"><h3>Cost &amp; reliability</h3><p>Token spend is opaque; providers rate-limit and go down.</p></div>
+        <div class="card"><h3>Safety</h3><p>Prompt injection, PII leakage, and unsafe content are real risks.</p></div>
+        <div class="card"><h3>Integration</h3><p>Getting AI to safely touch real systems and data is hard.</p></div>
+        <div class="card"><h3>Ops</h3><p>Nobody wants to run GPUs or glue five vendors together.</p></div>
+      </div>
+      <p class="lead" style="margin-top:18px;">Cloudflare answers all four on <b>one</b> platform.</p>
+    </section>
+
+    <!-- 4 PORTFOLIO -->
+    <section class="slide">
+      <span class="kicker">The portfolio</span>
+      <h2>Four building blocks</h2>
+      <div class="two">
+        <div class="card"><h3>Workers AI</h3><p><span class="subtle">Run models.</span> Serverless GPU inference, one API, global network.</p></div>
+        <div class="card"><h3>AI Gateway</h3><p><span class="subtle">Control &amp; observe.</span> Caching, rate limits, retries, cost &amp; latency analytics, logs.</p></div>
+        <div class="card"><h3>Firewall for AI</h3><p><span class="subtle">Protect.</span> Scan prompts for injection, PII, unsafe topics.</p></div>
+        <div class="card"><h3>MCP on Workers</h3><p><span class="subtle">Connect agents.</span> Expose your tools/data to any MCP client.</p></div>
+      </div>
+    </section>
+
+    <!-- 5 WORKERS AI -->
+    <section class="slide">
+      <span class="kicker">Run models</span>
+      <h2>Workers <span class="grad">AI</span></h2>
+      <ul>
+        <li>Open models (Llama, Mistral, embeddings, image, speech) on Cloudflare GPUs</li>
+        <li>One binding, one call &mdash; no infrastructure to manage</li>
+        <li>Runs close to users on the global network</li>
+      </ul>
+      <pre>const out = await env.AI.run(
+  "@cf/meta/llama-3.1-8b-instruct-fast",
+  { messages: [{ role: "user", content: "Write a tagline." }] }
+);</pre>
+    </section>
+
+    <!-- 6 AI GATEWAY -->
+    <section class="slide">
+      <span class="kicker">Control &amp; observe</span>
+      <h2>AI <span class="grad">Gateway</span></h2>
+      <ul>
+        <li>Proxy in front of any provider (Workers AI, OpenAI, Anthropic&hellip;)</li>
+        <li><b>Caching</b> cuts cost &amp; latency &middot; <b>rate limits</b> &middot; <b>retries/fallbacks</b></li>
+        <li>Dashboards: requests, tokens, <b>cost</b>, cached %, latency &middot; full logs</li>
+      </ul>
+      <pre>await env.AI.run(model, input,
+  { gateway: { id: "pimenta-lab" } });   // one-line change</pre>
+    </section>
+
+    <!-- 7 FIREWALL FOR AI -->
+    <section class="slide">
+      <span class="kicker">Protect &middot; Enterprise</span>
+      <h2>Firewall for <span class="grad">AI</span></h2>
+      <ul>
+        <li>WAF detection (AI Security for Apps) scans LLM prompts</li>
+        <li>Signals: <b>prompt injection</b>, <b>PII</b>, <b>unsafe topics</b>, token count</li>
+        <li>Act with normal WAF/rate-limit rules &mdash; no app changes</li>
+      </ul>
+      <pre>(cf.llm.prompt.injection_score gt 50)
+  or (cf.llm.prompt.pii_detected)
+  or (cf.llm.prompt.unsafe_topic_detected)   →  Block</pre>
+    </section>
+
+    <!-- 8 MCP -->
+    <section class="slide">
+      <span class="kicker">Connect agents</span>
+      <h2>MCP on <span class="grad">Workers</span></h2>
+      <ul>
+        <li>Model Context Protocol = a standard way for AI agents to call <b>your tools</b></li>
+        <li>Deploy a remote MCP server on Workers with <code>createMcpHandler</code></li>
+        <li>Back tools with <b>real data</b>: D1 (SQL), KV (key/value), Workers AI</li>
+        <li>Works with Claude, Cloudflare AI Playground, MCP Inspector</li>
+      </ul>
+    </section>
+
+    <!-- 9 ARCHITECTURE -->
+    <section class="slide">
+      <span class="kicker">How it fits</span>
+      <h2>Lab architecture</h2>
+      <pre>MCP client (Claude / AI Playground / Inspector)
+      │  Streamable HTTP (JSON-RPC)
+      ▼
+  ai-mcp Worker  (/mcp)
+   ├─ create_note / list_notes / get_note / delete_note ──►  D1
+   ├─ kv_put / kv_get ───────────────────────────────────►  KV
+   └─ ask_ai ──►  AI Gateway  ──►  Workers AI (LLM)
+      ▲
+  Firewall for AI  — scans prompts (injection / PII / unsafe)</pre>
+    </section>
+
+    <!-- 10 DEMO 1 -->
+    <section class="slide">
+      <span class="kicker">Live demo &middot; 1</span>
+      <h2>Workers AI</h2>
+      <p class="lead">Hit the Worker; get a model response in milliseconds.</p>
+      <pre>curl https://hello-ai.YOUR-SUBDOMAIN.workers.dev
+{ "response": "Protect, accelerate, and build on the connectivity cloud." }</pre>
+      <p class="lead subtle">Message: serverless GPUs, one API, global.</p>
+    </section>
+
+    <!-- 11 DEMO 2 -->
+    <section class="slide">
+      <span class="kicker">Live demo &middot; 2</span>
+      <h2>AI Gateway observability</h2>
+      <ul>
+        <li>Repeat a prompt &rarr; watch a <b>cache hit</b> (0 tokens, near-0 latency)</li>
+        <li>Dashboard shows requests, tokens, <b>cost</b>, cached %, latency</li>
+        <li>Per-request logs for debugging &amp; audit</li>
+      </ul>
+      <p class="lead subtle">Message: control &amp; visibility with a one-line change.</p>
+    </section>
+
+    <!-- 12 DEMO 3 -->
+    <section class="slide">
+      <span class="kicker">Live demo &middot; 3</span>
+      <h2>Firewall for AI blocking</h2>
+      <ul>
+        <li>Benign prompt &rarr; <b>allowed</b></li>
+        <li>"Ignore previous instructions&hellip;" &rarr; <b>blocked</b> (injection score)</li>
+        <li>Show the Security Event &amp; <code>cf.llm.prompt.*</code> fields</li>
+      </ul>
+      <p class="lead subtle">Message: guardrails without touching app code.</p>
+    </section>
+
+    <!-- 13 DEMO 4 -->
+    <section class="slide">
+      <span class="kicker">Live demo &middot; 4</span>
+      <h2>MCP tools on D1 + KV</h2>
+      <ul>
+        <li>Connect <code>/mcp</code> in the AI Playground &rarr; <b>List tools</b></li>
+        <li>Agent: "create a note", "list notes" &rarr; rows land in <b>D1</b></li>
+        <li>Agent: "put KV key visits=1", "ask_ai for a tagline"</li>
+      </ul>
+      <pre>wrangler d1 execute pimenta-ai-mcp --remote \
+  --command "SELECT title,created_at FROM notes ORDER BY created_at DESC"</pre>
+      <p class="lead subtle">Message: safely connect agents to real systems.</p>
+    </section>
+
+    <!-- 14 HOW BUILT -->
+    <section class="slide">
+      <span class="kicker">How it's built</span>
+      <h2>Bindings do the wiring</h2>
+      <pre>// wrangler.jsonc
+{
+  "ai": { "binding": "AI" },
+  "d1_databases": [{ "binding": "DB", "database_name": "pimenta-ai-mcp" }],
+  "kv_namespaces": [{ "binding": "KV" }]
+}</pre>
+      <ul>
+        <li>Deploy with <code>wrangler deploy</code> &mdash; no servers, no GPUs</li>
+        <li>Full source &amp; step-by-step: <b>/ai-lab/</b></li>
+      </ul>
+    </section>
+
+    <!-- 15 VALUE -->
+    <section class="slide">
+      <span class="kicker">Why Cloudflare</span>
+      <h2>One platform, four worries solved</h2>
+      <div class="two">
+        <div class="card"><h3>Cost &amp; reliability</h3><p>AI Gateway caching, rate limits, fallbacks, cost analytics.</p></div>
+        <div class="card"><h3>Safety</h3><p>Firewall for AI: injection, PII, unsafe-topic detection.</p></div>
+        <div class="card"><h3>Integration</h3><p>MCP + D1/KV connect agents to real systems securely.</p></div>
+        <div class="card"><h3>Ops</h3><p>Serverless &mdash; deploy globally with one command.</p></div>
+      </div>
+    </section>
+
+    <!-- 16 NEXT -->
+    <section class="slide">
+      <span class="kicker">Next steps</span>
+      <h2>Let's build your <span class="grad">PoC</span></h2>
+      <ul class="big">
+        <li>Pick one use case (support agent, internal copilot, content tool)</li>
+        <li>We wire an MCP server to <b>your</b> data (D1/KV/API)</li>
+        <li>Add AI Gateway limits + Firewall for AI guardrails</li>
+        <li>Guide &amp; source: <a href="https://www.pimenta.fun/ai-lab/">pimenta.fun/ai-lab</a></li>
+      </ul>
+      <p class="lead" style="margin-top:16px;">Thank you &mdash; questions?</p>
+    </section>
+
+  </div>
+
+  <div class="hint">Use &larr; &rarr; or Space to navigate &middot; F for fullscreen</div>
+  <div class="controls">
+    <button id="prev">&larr; Prev</button>
+    <div class="dots" id="dots"></div>
+    <button id="next">Next &rarr;</button>
+  </div>
+
+  <script>
+    var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+    var i = 0;
+    var dots = document.getElementById("dots");
+    document.getElementById("pgtot").textContent = slides.length;
+
+    slides.forEach(function (_, idx) {
+      var d = document.createElement("div");
+      d.className = "dot";
+      d.addEventListener("click", function () { go(idx); });
+      dots.appendChild(d);
+    });
+    var dotEls = Array.prototype.slice.call(document.querySelectorAll(".dot"));
+
+    function go(n) {
+      i = Math.max(0, Math.min(slides.length - 1, n));
+      slides.forEach(function (s, idx) { s.classList.toggle("active", idx === i); });
+      dotEls.forEach(function (d, idx) { d.classList.toggle("on", idx === i); });
+      document.getElementById("pgnum").textContent = i + 1;
+      document.getElementById("progress").style.width = ((i + 1) / slides.length * 100) + "%";
+      if (location.hash !== "#" + (i + 1)) history.replaceState(null, "", "#" + (i + 1));
+    }
+    function next() { go(i + 1); }
+    function prev() { go(i - 1); }
+
+    document.getElementById("next").addEventListener("click", next);
+    document.getElementById("prev").addEventListener("click", prev);
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") { e.preventDefault(); next(); }
+      else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); prev(); }
+      else if (e.key === "Home") { go(0); }
+      else if (e.key === "End") { go(slides.length - 1); }
+      else if (e.key.toLowerCase() === "f") {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+        else document.exitFullscreen();
+      }
+    });
+
+    var start = parseInt((location.hash || "#1").slice(1), 10);
+    go(isNaN(start) ? 0 : start - 1);
+  </script>
+</body>
+</html>
