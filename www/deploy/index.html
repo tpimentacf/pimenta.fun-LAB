@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apache Deployment Guide &mdash; Pimenta Lab</title>
+  <meta name="description" content="Step-by-step deployment of the pimenta.fun lab on Ubuntu + Apache: four vhosts (www/shop/api/aop), shared TLS + security-header snippets, OWASP Juice Shop backend, Certbot HTTPS, and Authenticated Origin Pulls." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    main.lab { max-width: 900px; }
+    main.lab code { background:#1b2547; padding:2px 6px; border-radius:5px; font-size:0.85rem; color:#d7e2f7; }
+    main.lab pre code { background:none; padding:0; color:inherit; }
+    .filename { color: var(--accent); font-size: 0.78rem; font-family: ui-monospace,SFMono-Regular,Menlo,monospace; margin: 14px 0 4px; }
+
+    .steps { counter-reset: step; list-style:none; margin:0; padding:0; }
+    .steps > li { position:relative; padding:2px 0 18px 44px; margin:0; border-left:2px solid var(--border); margin-left:14px; }
+    .steps > li:last-child { border-left:2px solid transparent; }
+    .steps > li::before { counter-increment: step; content: counter(step); position:absolute; left:-15px; top:0;
+      width:30px; height:30px; border-radius:50%; background:var(--accent); color:#1a1205; font-weight:800;
+      display:flex; align-items:center; justify-content:center; font-size:0.9rem; }
+    .steps h3 { margin:2px 0 6px; font-size:1.02rem; }
+    .steps p { margin:0 0 8px; font-size:0.9rem; }
+    .steps h4 { margin:14px 0 4px; font-size:0.9rem; color:var(--muted); }
+
+    .pill { display:inline-block; font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; padding:2px 8px; border-radius:999px; margin-left:6px; vertical-align:middle; }
+    .pill.cli  { background: rgba(91,141,239,0.15); color: var(--blue); border:1px solid rgba(91,141,239,0.4); }
+    .pill.dash { background: rgba(246,130,31,0.15); color: var(--accent); border:1px solid rgba(246,130,31,0.4); }
+
+    table.tbl { width:100%; border-collapse:collapse; margin:14px 0; font-size:0.88rem; }
+    table.tbl th, table.tbl td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+    table.tbl th { color: var(--muted); font-weight:600; }
+
+    .toc { columns:2; gap:24px; font-size:0.9rem; }
+    .toc a { color: var(--text); text-decoration:none; }
+    .toc a:hover { color: var(--accent); }
+    @media (max-width:640px){ .toc { columns:1; } }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+      <a href="https://www.pimenta.fun/#docs">Docs</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#docs">Docs</a> / Origin / Apache Deployment Guide</div>
+    <span class="tag">Guide</span>
+    <h1>Apache <span class="grad">Deployment</span> Guide</h1>
+    <p class="lead">Stand up the whole lab on Ubuntu + Apache: four proxied vhosts, shared TLS &amp; security-header
+      snippets, the OWASP Juice Shop API backend, HTTPS via Certbot, and Authenticated Origin Pulls.</p>
+
+    <div class="warn"><strong>Use at your own risk.</strong> This lab was built by TPimenta LAB for hands-on testing.
+      Always consult the official Cloudflare documentation for accurate, up-to-date guidance.</div>
+
+    <div class="panel">
+      <strong>The three sites</strong>
+      <table class="tbl">
+        <thead><tr><th>Domain</th><th>Content</th><th>Backend</th></tr></thead>
+        <tbody>
+          <tr><td><code>www.pimenta.fun</code></td><td>Landing page</td><td>Static HTML</td></tr>
+          <tr><td><code>shop.pimenta.fun</code></td><td>Shop items + login + chatbot</td><td>Static HTML</td></tr>
+          <tr><td><code>api.pimenta.fun</code></td><td>API docs + live API</td><td>OWASP Juice Shop</td></tr>
+        </tbody>
+      </table>
+      <div class="filename">repo layout</div>
+      <pre>pimenta-lab/
+├── www/index.html
+├── shop/index.html
+├── shop/login.html
+├── api/index.html
+└── apache/
+    ├── www.pimenta.fun.conf
+    ├── shop.pimenta.fun.conf
+    └── api.pimenta.fun.conf</pre>
+    </div>
+
+    <div class="panel">
+      <strong>Contents</strong>
+      <div class="toc">
+        <p><a href="#s1">1. Install Apache</a></p>
+        <p><a href="#s2">2. Copy the site files</a></p>
+        <p><a href="#s3">3. Shared SSL + header snippets</a></p>
+        <p><a href="#s4">4. Install the virtual hosts</a></p>
+        <p><a href="#s5">5. Enable required modules</a></p>
+        <p><a href="#s6">6. Run OWASP Juice Shop</a></p>
+        <p><a href="#s7">7. Test config &amp; reload</a></p>
+        <p><a href="#s8">8. DNS</a></p>
+        <p><a href="#s9">9. HTTPS certificates</a></p>
+        <p><a href="#s10">10. Authenticated Origin Pulls</a></p>
+        <p><a href="#s11">11. Verify</a></p>
+        <p><a href="#login">Optional: wire the login form</a></p>
+      </div>
+    </div>
+
+    <ol class="steps">
+      <li id="s1">
+        <h3>Install Apache <span class="pill cli">CLI</span></h3>
+        <pre>sudo apt update
+sudo apt install -y apache2
+sudo systemctl enable --now apache2</pre>
+      </li>
+
+      <li id="s2">
+        <h3>Copy the site files <span class="pill cli">CLI</span></h3>
+        <p>Serve all four site roots from <code>/var/www/pimenta</code> with correct ownership and permissions:</p>
+        <pre>sudo mkdir -p /var/www/pimenta
+sudo cp -r www shop api aop /var/www/pimenta/
+sudo chown -R www-data:www-data /var/www/pimenta
+sudo find /var/www/pimenta -type d -exec chmod 755 {} \;
+sudo find /var/www/pimenta -type f -exec chmod 644 {} \;</pre>
+      </li>
+
+      <li id="s3">
+        <h3>Install the shared SSL + header snippets <span class="pill cli">CLI</span></h3>
+        <p>The vhosts <code>Include</code> the headers + ssl-params snippets in their <code>:443</code> blocks; the OCSP
+          stapling cache is global, so enable it as a conf:</p>
+        <pre>sudo cp apache/pimenta-security-headers.conf /etc/apache2/conf-available/
+sudo cp apache/pimenta-ssl-params.conf       /etc/apache2/conf-available/
+sudo cp apache/pimenta-ssl-stapling.conf     /etc/apache2/conf-available/
+
+# the vhosts Include the headers + ssl-params snippets in their :443 blocks;
+# the stapling cache is global, so enable it as a conf:
+sudo a2enconf pimenta-ssl-stapling</pre>
+      </li>
+
+      <li id="s4">
+        <h3>Install the virtual hosts <span class="pill cli">CLI</span></h3>
+        <p><strong>Easiest</strong> &mdash; the helper installs snippets + modules, fetches the AOP CA, enables all four
+          sites, and runs configtest:</p>
+        <pre>cd apache &amp;&amp; sudo ./enable-sites.sh</pre>
+        <h4>Or manually</h4>
+        <pre>sudo cp apache/www.pimenta.fun.conf  /etc/apache2/sites-available/
+sudo cp apache/shop.pimenta.fun.conf /etc/apache2/sites-available/
+sudo cp apache/api.pimenta.fun.conf  /etc/apache2/sites-available/
+sudo cp apache/aop.pimenta.fun.conf  /etc/apache2/sites-available/
+
+sudo a2ensite www.pimenta.fun shop.pimenta.fun api.pimenta.fun aop.pimenta.fun
+sudo a2dissite 000-default.conf      # optional: drop the default site</pre>
+        <h4>4b. Download the Cloudflare origin-pull CA (required by aop.pimenta.fun)</h4>
+        <p>The <code>aop</code> vhost verifies Cloudflare's client certificate, so this CA must exist or Apache won't start:</p>
+        <pre>sudo mkdir -p /etc/apache2/cloudflare
+sudo curl -fsSL \
+  https://developers.cloudflare.com/ssl/static/authenticated_origin_pull_ca.pem \
+  -o /etc/apache2/cloudflare/origin-pull-ca.pem</pre>
+      </li>
+
+      <li id="s5">
+        <h3>Enable required modules <span class="pill cli">CLI</span></h3>
+        <pre># ssl/headers/rewrite for HTTPS + response headers; proxy for the API;
+# socache_shmcb backs the OCSP stapling cache
+sudo a2enmod ssl headers rewrite proxy proxy_http socache_shmcb</pre>
+        <div class="note">The vhosts listen on <code>:443</code> and reference Let's Encrypt paths
+          (<code>/etc/letsencrypt/live/YOUR-DOMAIN/</code>). Those files don't exist until you run Certbot (step 9), so
+          enable the sites <strong>then run Certbot</strong>. The <code>:443</code> blocks are wrapped in
+          <code>&lt;IfModule mod_ssl.c&gt;</code> so <code>configtest</code> won't fail before the certs exist.</div>
+      </li>
+
+      <li id="s6">
+        <h3>Run OWASP Juice Shop (the API backend) <span class="pill cli">CLI</span></h3>
+        <h4>Docker (recommended)</h4>
+        <pre>sudo apt install -y docker.io
+sudo docker run -d --restart=always \
+  -p 127.0.0.1:3000:3000 \
+  --name juice-shop \
+  bkimminich/juice-shop</pre>
+        <h4>Or via Node.js</h4>
+        <pre>git clone https://github.com/juice-shop/juice-shop.git
+cd juice-shop &amp;&amp; npm install &amp;&amp; npm start   # listens on :3000</pre>
+        <div class="note">The <code>api.pimenta.fun</code> vhost proxies <code>/rest/</code>, <code>/api/</code>,
+          <code>/ftp/</code>, and <code>/metrics</code> to <code>127.0.0.1:3000</code>. To serve the entire Juice Shop
+          app at the root, uncomment the <code>ProxyPass /</code> lines in <code>api.pimenta.fun.conf</code>.</div>
+        <div class="warn"><strong>Juice Shop is intentionally vulnerable.</strong> Keep this lab isolated and use it only
+          for authorized security testing.</div>
+      </li>
+
+      <li id="s7">
+        <h3>Test config &amp; reload <span class="pill cli">CLI</span></h3>
+        <pre>sudo apache2ctl configtest      # should print: Syntax OK
+sudo systemctl reload apache2</pre>
+      </li>
+
+      <li id="s8">
+        <h3>DNS <span class="pill dash">Cloudflare</span></h3>
+        <p>Point the records at your server's public IP. Keep them <strong>proxied (orange cloud)</strong> so Cloudflare
+          features (WAF, mTLS, AOP, cache) apply:</p>
+        <pre>www    A   YOUR_SERVER_IP   (proxied)
+shop   A   YOUR_SERVER_IP   (proxied)
+api    A   YOUR_SERVER_IP   (proxied)
+aop    A   YOUR_SERVER_IP   (proxied — required for Authenticated Origin Pulls)
+@      A   YOUR_SERVER_IP   (optional, for the bare pimenta.fun)</pre>
+        <p>For local-only testing, add to <code>/etc/hosts</code>:</p>
+        <pre>YOUR_SERVER_IP  www.pimenta.fun shop.pimenta.fun api.pimenta.fun aop.pimenta.fun pimenta.fun</pre>
+      </li>
+
+      <li id="s9">
+        <h3>HTTPS certificates (Certbot) <span class="pill cli">CLI</span></h3>
+        <p>The vhosts already contain the <code>:443</code> SSL blocks. Obtain certs in <code>certonly</code> mode (so
+          Certbot doesn't rewrite the hand-written vhosts), then reload:</p>
+        <pre>sudo apt install -y certbot python3-certbot-apache
+
+# HTTP-01 over the running :80 vhosts (the configs allow /.well-known/ through):
+sudo certbot certonly --webroot -w /var/www/pimenta/www \
+  -d www.pimenta.fun -d pimenta.fun
+sudo certbot certonly --webroot -w /var/www/pimenta/shop -d shop.pimenta.fun
+sudo certbot certonly --webroot -w /var/www/pimenta/api  -d api.pimenta.fun
+sudo certbot certonly --webroot -w /var/www/pimenta/aop  -d aop.pimenta.fun
+
+sudo apache2ctl configtest &amp;&amp; sudo systemctl reload apache2</pre>
+        <p>Auto-renewal is handled by <code>certbot.timer</code>. Add a reload hook so Apache picks up renewed certs:</p>
+        <pre>echo -e '#!/bin/sh\nsystemctl reload apache2' | \
+  sudo tee /etc/letsencrypt/renewal-hooks/deploy/reload-apache.sh
+sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-apache.sh</pre>
+        <div class="note">Prefer the all-in-one installer? <code>sudo certbot --apache -d www.pimenta.fun &hellip;</code>
+          also works, but it may rewrite these vhosts &mdash; use <code>certonly</code> to keep them as-is.</div>
+        <h4>Verify headers &amp; TLS</h4>
+        <pre># security/response headers
+curl -sI https://www.pimenta.fun | grep -Ei 'strict-transport|x-frame|x-content|referrer|permissions|x-pimenta'
+
+# negotiated protocol should be TLS 1.3 (or 1.2); 1.0/1.1 must fail
+openssl s_client -connect www.pimenta.fun:443 -tls1_3 &lt;/dev/null 2&gt;/dev/null | grep -E 'Protocol|Cipher'
+openssl s_client -connect www.pimenta.fun:443 -tls1_1 &lt;/dev/null 2&gt;&amp;1 | grep -i 'alert\|failure'   # expect a failure
+
+# OCSP stapling
+openssl s_client -connect www.pimenta.fun:443 -status &lt;/dev/null 2&gt;/dev/null | grep -A1 'OCSP Response Status'</pre>
+      </li>
+
+      <li id="s10">
+        <h3>Enable Authenticated Origin Pulls (aop.pimenta.fun) <span class="pill dash">Cloudflare</span></h3>
+        <ol class="bullets" style="list-style:decimal">
+          <li>The origin is ready: the <code>aop</code> vhost runs <code>SSLVerifyClient optional</code> and trusts
+            <code>/etc/apache2/cloudflare/origin-pull-ca.pem</code> (step 4b).</li>
+          <li>In Cloudflare for the zone: <em>SSL/TLS &rarr; Origin Server &rarr; Authenticated Origin Pulls &rarr; On</em>
+            (zone-level). Ensure the <code>aop</code> record is <strong>proxied</strong>.</li>
+          <li>Verify:</li>
+        </ol>
+        <pre># Through Cloudflare: CF presents its client cert -&gt; SUCCESS
+curl -sI https://aop.pimenta.fun/ | grep -i x-aop-client-verify
+#   -&gt; X-AOP-Client-Verify: SUCCESS
+
+# Direct to origin (no CF cert): NONE (optional) — or 400 if you switch to "require"
+curl -sI --resolve aop.pimenta.fun:443:YOUR_ORIGIN_IP https://aop.pimenta.fun/ | head</pre>
+        <p>Or just open <a href="https://aop.pimenta.fun/">aop.pimenta.fun</a> &mdash; the page reports SUCCESS / NONE / FAILED.</p>
+      </li>
+
+      <li id="s11">
+        <h3>Verify everything <span class="pill cli">CLI</span></h3>
+        <pre>curl -I http://www.pimenta.fun
+curl -I http://shop.pimenta.fun
+curl    https://api.pimenta.fun/rest/admin/application-version   # {"status":"success","version":"1.0.0",...}
+curl -sI https://aop.pimenta.fun/ | grep -i x-aop-client-verify  # AOP status</pre>
+        <p>Then browse:
+          <a href="https://www.pimenta.fun">www</a> &middot;
+          <a href="https://shop.pimenta.fun">shop</a> (open the chat bubble, click <strong>Login</strong>) &middot;
+          <a href="https://api.pimenta.fun">api</a> &middot;
+          <a href="https://aop.pimenta.fun">aop</a>.</p>
+      </li>
+    </ol>
+
+    <!-- optional -->
+    <h2 id="login">Optional: wire the login form to the live API</h2>
+    <p>In <code>shop/login.html</code> the form <code>action</code> is <code>/rest/user/login</code>. To make it hit
+      Juice Shop, do either:</p>
+    <ul class="bullets">
+      <li>In <code>apache/shop.pimenta.fun.conf</code>, uncomment the <code>ProxyPass /rest/user/login</code> lines, <strong>or</strong></li>
+      <li>In <code>shop/login.html</code>, uncomment the <code>fetch("https://api.pimenta.fun/rest/user/login", &hellip;)</code>
+        block in the <code>&lt;script&gt;</code> and remove the demo-mode branch.</li>
+    </ul>
+
+    <h2 id="resources">Files &amp; resources</h2>
+    <div class="panel">
+      <ul class="bullets">
+        <li>Vhosts &amp; snippets: <code>apache/</code> (<a href="https://github.com/tpimentacf/pimenta.fun-LAB/tree/main/apache">GitHub</a>)</li>
+        <li>Certbot: <a href="https://eff-certbot.readthedocs.io/">eff-certbot.readthedocs.io</a></li>
+        <li>Cloudflare Authenticated Origin Pulls: <a href="https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/">developers.cloudflare.com/ssl/&hellip;/authenticated-origin-pull</a></li>
+        <li>OWASP Juice Shop: <a href="https://owasp.org/www-project-juice-shop/">owasp.org/www-project-juice-shop</a></li>
+        <li>mTLS &amp; AOP walkthrough: <a href="/mtls-guide/">/mtls-guide/</a></li>
+      </ul>
+    </div>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;<a href="https://www.pimenta.fun/#docs">Back to docs</a>
+  </footer>
+</body>
+</html>
