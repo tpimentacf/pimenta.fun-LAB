@@ -61,7 +61,7 @@
       <code class="inline">shop</code> (OWASP Juice Shop storefront) and <code class="inline">api</code> (Juice Shop API).
       Most pages are static origin files; the Cloudflare behaviour they exercise is configured in the dashboard,
       with a few Workers doing edge logic. See the
-      <a href="/DEPLOY.md" style="color:var(--accent);">deployment guide</a>.</div>
+      <a href="/deploy/" style="color:var(--accent);">deployment guide</a>.</div>
 
     <p style="margin-bottom:4px;"><strong>How each implementation is built &mdash; badge legend:</strong></p>
     <div class="legend">
@@ -347,10 +347,10 @@
           badges:["guide"],
           desc:"Cron job that syncs www, shop, api & aop A records to the origin VM's changing public IP.",
           impl:"Step-by-step guide (/ddns/) for the script + cron calling the Cloudflare DNS API (see ddns/)." },
-        { name:"Apache Deployment Guide", href:"/DEPLOY.md", prod:"Origin",
+        { name:"Apache Deployment Guide", href:"/deploy/", prod:"Origin",
           badges:["guide"],
-          desc:"Set up the three vhosts on Ubuntu + Apache with HTTPS via Certbot.",
-          impl:"Operational runbook for the origin." }
+          desc:"Set up the four vhosts on Ubuntu + Apache with HTTPS via Certbot and Authenticated Origin Pulls.",
+          impl:"Step-by-step guide (/deploy/) — operational runbook for the origin." }
       ]}
     ];
 
