@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cloudflare Dynamic DNS &mdash; Pimenta Lab</title>
+  <meta name="description" content="Step-by-step guide to keep Cloudflare A records pointed at a GCP VM's current public IP, updated automatically via cron or a systemd timer." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    main.lab { max-width: 900px; }
+    main.lab code { background:#1b2547; padding:2px 6px; border-radius:5px; font-size:0.85rem; color:#d7e2f7; }
+    main.lab pre code { background:none; padding:0; color:inherit; }
+    .filename { color: var(--accent); font-size: 0.78rem; font-family: ui-monospace,SFMono-Regular,Menlo,monospace; margin: 14px 0 4px; }
+
+    .flow { display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin:22px 0; }
+    .node { background: var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px 18px; flex:1; min-width:150px; text-align:center; }
+    .node b { color: var(--text); display:block; margin-bottom:4px; }
+    .node small { color: var(--muted); }
+    .leg { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 10px; min-width:120px; }
+    .leg .arrow { color: var(--accent); font-size:1.4rem; line-height:1; }
+    .leg small { color: var(--green); font-size:0.72rem; text-align:center; margin-top:4px; }
+
+    .steps { counter-reset: step; list-style:none; margin:0; padding:0; }
+    .steps > li { position:relative; padding:2px 0 18px 44px; margin:0; border-left:2px solid var(--border); margin-left:14px; }
+    .steps > li:last-child { border-left:2px solid transparent; }
+    .steps > li::before { counter-increment: step; content: counter(step); position:absolute; left:-15px; top:0;
+      width:30px; height:30px; border-radius:50%; background:var(--accent); color:#1a1205; font-weight:800;
+      display:flex; align-items:center; justify-content:center; font-size:0.9rem; }
+    .steps h3 { margin:2px 0 6px; font-size:1.02rem; }
+    .steps p { margin:0 0 8px; font-size:0.9rem; }
+
+    .pill { display:inline-block; font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; padding:2px 8px; border-radius:999px; margin-left:6px; vertical-align:middle; }
+    .pill.dash { background: rgba(246,130,31,0.15); color: var(--accent); border:1px solid rgba(246,130,31,0.4); }
+    .pill.cli  { background: rgba(91,141,239,0.15); color: var(--blue); border:1px solid rgba(91,141,239,0.4); }
+
+    table.tbl { width:100%; border-collapse:collapse; margin:14px 0; font-size:0.88rem; }
+    table.tbl th, table.tbl td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+    table.tbl th { color: var(--muted); font-weight:600; }
+
+    .toc { columns:2; gap:24px; font-size:0.9rem; }
+    .toc a { color: var(--text); text-decoration:none; }
+    .toc a:hover { color: var(--accent); }
+    @media (max-width:640px){ .toc { columns:1; } }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+      <a href="https://www.pimenta.fun/#docs">Docs</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#docs">Docs</a> / Network &amp; Edge / Cloudflare Dynamic DNS</div>
+    <span class="tag">Guide</span>
+    <h1>Cloudflare <span class="grad">Dynamic DNS</span></h1>
+    <p class="lead">Keep the lab hostnames (<code>www</code>, <code>shop</code>, <code>api</code>, <code>aop</code>) pointed at the
+      current public IP of a GCP VM &mdash; created if missing, updated only when the IP changes, and re-run automatically on a schedule.</p>
+
+    <div class="warn"><strong>Use at your own risk.</strong> This lab was built by TPimenta LAB for hands-on testing.
+      Always consult the official Cloudflare documentation for accurate, up-to-date guidance.</div>
+
+    <!-- how it works -->
+    <div class="flow">
+      <div class="node"><b>GCP VM</b><small>reads its external IP<br>(metadata server)</small></div>
+      <div class="leg"><span class="arrow">&#8594;</span><small>cf-ddns.sh<br>daily via cron</small></div>
+      <div class="node"><b>Cloudflare API</b><small>look up each A record</small></div>
+      <div class="leg"><span class="arrow">&#8594;</span><small>create / update<br>only if changed</small></div>
+      <div class="node"><b>DNS records</b><small>www &middot; shop &middot; api &middot; aop<br>(proxied)</small></div>
+    </div>
+
+    <div class="note">
+      <strong>How it works:</strong> the script reads the VM's external IP from the GCP metadata server
+      (falling back to <code>ipify.org</code> / <code>ifconfig.me</code>), looks up each A record via the Cloudflare API,
+      <strong>creates</strong> it if missing, <strong>updates</strong> it only if the IP changed, and logs every run to
+      <code>/var/log/cf-ddns.log</code>. Keep the records <strong>proxied</strong> (<code>PROXIED="true"</code>) so
+      Cloudflare features &mdash; WAF, mTLS, Authenticated Origin Pulls &mdash; still apply.
+    </div>
+
+    <div class="panel">
+      <strong>Contents</strong>
+      <div class="toc">
+        <p><a href="#prereq">0. Prerequisites</a></p>
+        <p><a href="#token">1. Create a scoped API token</a></p>
+        <p><a href="#install">2. Install on the VM</a></p>
+        <p><a href="#test">3. Test it manually</a></p>
+        <p><a href="#cron">4. Schedule it (daily cron)</a></p>
+        <p><a href="#static">5. Reserve a static IP (optional)</a></p>
+        <p><a href="#systemd">6. systemd timer (alternative)</a></p>
+        <p><a href="#trouble">7. Troubleshooting</a></p>
+      </div>
+    </div>
+
+    <!-- ── Prereqs ── -->
+    <h2 id="prereq">0. Prerequisites</h2>
+    <ul class="bullets">
+      <li>A GCP VM (or any Linux host) running your origin, on the zone <code>pimenta.fun</code>.</li>
+      <li>The two files from the repo's <code>ddns/</code> folder: <code>cf-ddns.sh</code> and <code>cf-ddns.env.example</code>.</li>
+      <li><code>sudo</code> access on the VM; <code>curl</code> and <code>jq</code> (installed in step 2).</li>
+    </ul>
+
+    <!-- ── The apply sequence ── -->
+    <h2 id="token">The apply sequence</h2>
+    <p class="lead" style="font-size:0.95rem">Run steps 1&ndash;4 in order to apply dynamic DNS. Steps 5&ndash;6 are optional hardening / alternatives.</p>
+
+    <ol class="steps">
+      <li id="s1">
+        <h3>Create a scoped Cloudflare API token <span class="pill dash">Dashboard</span></h3>
+        <p>Cloudflare dashboard &rarr; <em>My Profile &rarr; API Tokens &rarr; Create Token &rarr; Create Custom Token</em>:</p>
+        <ul class="bullets">
+          <li><strong>Permissions:</strong> <code>Zone</code> &rarr; <code>DNS</code> &rarr; <code>Edit</code></li>
+          <li><strong>Zone Resources:</strong> <code>Include</code> &rarr; <code>Specific zone</code> &rarr; <code>pimenta.fun</code></li>
+          <li>Create and copy the token (it is shown only once).</li>
+        </ul>
+        <div class="note">Use a <strong>scoped token</strong>, not the Global API Key.</div>
+      </li>
+
+      <li id="s2">
+        <h3>Install on the VM <span class="pill cli">CLI</span></h3>
+        <p>From inside the <code>ddns/</code> folder on the VM, install dependencies, the script, and the config:</p>
+        <pre># Dependencies
+sudo apt update &amp;&amp; sudo apt install -y curl jq
+
+# Install the update script
+sudo install -m 0755 cf-ddns.sh /usr/local/bin/cf-ddns.sh
+
+# Config directory + file
+sudo mkdir -p /etc/cf-ddns
+sudo cp cf-ddns.env.example /etc/cf-ddns/cf-ddns.env
+sudo nano /etc/cf-ddns/cf-ddns.env         # paste token, confirm RECORDS
+sudo chmod 600 /etc/cf-ddns/cf-ddns.env    # protect the token
+
+# Log file
+sudo touch /var/log/cf-ddns.log</pre>
+        <p>Fill in the config file &mdash; paste the token from step 1 and confirm the record list:</p>
+        <div class="filename">/etc/cf-ddns/cf-ddns.env</div>
+        <pre># /etc/cf-ddns/cf-ddns.env  — readable by root only (chmod 600)
+
+# Cloudflare API token: Zone &gt; DNS &gt; Edit, scoped to pimenta.fun
+CF_API_TOKEN="paste-your-scoped-token-here"
+
+# The zone (root domain) that holds the records
+CF_ZONE_NAME="pimenta.fun"
+
+# Optional: hard-code the Zone ID to skip a lookup call (Overview page).
+# Leave blank to auto-resolve by name.
+CF_ZONE_ID=""
+
+# Space-separated A records to keep in sync
+RECORDS="www.pimenta.fun shop.pimenta.fun api.pimenta.fun aop.pimenta.fun"
+
+TTL="120"        # seconds (use 1 for "Auto")
+PROXIED="true"   # "true" = proxied (orange), "false" = DNS only (grey)
+LOG_FILE="/var/log/cf-ddns.log"</pre>
+      </li>
+
+      <li id="s3">
+        <h3>Test it manually <span class="pill cli">CLI</span></h3>
+        <p>Run the sync once and check the log:</p>
+        <pre># Run the sync once, then read the log
+sudo /usr/local/bin/cf-ddns.sh
+sudo tail -n 20 /var/log/cf-ddns.log</pre>
+        <p>Expected output:</p>
+        <pre>2026-06-03 09:00:01 Current public IP: 34.12.34.56
+2026-06-03 09:00:01 Zone pimenta.fun -&gt; a1b2c3...
+2026-06-03 09:00:02 UPDATED www.pimenta.fun: 1.2.3.4 -&gt; 34.12.34.56
+2026-06-03 09:00:02 UPDATED shop.pimenta.fun: 1.2.3.4 -&gt; 34.12.34.56
+2026-06-03 09:00:02 Done.</pre>
+        <p>Confirm the records resolve (proxied records return Cloudflare IPs, which is correct):</p>
+        <pre>dig +short www.pimenta.fun @1.1.1.1
+dig +short shop.pimenta.fun @1.1.1.1</pre>
+      </li>
+
+      <li id="s4">
+        <h3>Schedule the daily cron job <span class="pill cli">CLI</span></h3>
+        <p>Install a root cron entry that runs every day at 03:00:</p>
+        <pre># Recommended: /etc/cron.d entry (note the required user column)
+sudo tee /etc/cron.d/cf-ddns &gt;/dev/null &lt;&lt;'EOF'
+# m h dom mon dow user command
+0 3 * * * root /usr/local/bin/cf-ddns.sh &gt;&gt; /var/log/cf-ddns.log 2&gt;&amp;1
+EOF
+sudo chmod 644 /etc/cron.d/cf-ddns</pre>
+        <p>Or add it to root's crontab instead:</p>
+        <pre># Alternative: root's crontab
+sudo crontab -e
+# add this line:
+0 3 * * * /usr/local/bin/cf-ddns.sh &gt;&gt; /var/log/cf-ddns.log 2&gt;&amp;1</pre>
+        <div class="note">Schedule cheatsheet:
+          <code>0 3 * * *</code> = daily at 03:00 &middot;
+          <code>*/5 * * * *</code> = every 5 min (ephemeral IPs) &middot;
+          <code>@reboot</code> = also run on every boot.
+        </div>
+      </li>
+    </ol>
+
+    <p class="note"><strong>That's it.</strong> Dynamic DNS is now applied &mdash; the records self-heal to the VM's
+      current IP every day. The sections below are optional.</p>
+
+    <!-- ── Static IP ── -->
+    <h2 id="static">5. Reserve a static IP in GCP <span class="pill cli">optional</span></h2>
+    <p>A daily cron is fine when the VM has a <strong>static external IP</strong> or rarely reboots. If the IP is
+      ephemeral, either run the cron more often (every 5 minutes) or &mdash; the better fix &mdash; reserve a static IP so
+      the record only ever needs to be set once. The daily cron then remains a safe self-healing backstop.</p>
+    <pre># Promote the VM's current ephemeral IP to a reserved static IP
+gcloud compute addresses create pimenta-ip \
+  --addresses "$(curl -s -H 'Metadata-Flavor: Google' \
+    http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip)" \
+  --region YOUR_REGION</pre>
+
+    <!-- ── systemd ── -->
+    <h2 id="systemd">6. systemd timer instead of cron <span class="pill cli">alternative</span></h2>
+    <p>If you prefer systemd over cron, install a oneshot service plus a daily timer:</p>
+    <pre>sudo tee /etc/systemd/system/cf-ddns.service &gt;/dev/null &lt;&lt;'EOF'
+[Unit]
+Description=Cloudflare DDNS update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/cf-ddns.sh
+EOF
+
+sudo tee /etc/systemd/system/cf-ddns.timer &gt;/dev/null &lt;&lt;'EOF'
+[Unit]
+Description=Run Cloudflare DDNS daily
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now cf-ddns.timer
+systemctl list-timers cf-ddns.timer</pre>
+
+    <!-- ── Troubleshooting ── -->
+    <h2 id="trouble">7. Troubleshooting</h2>
+    <table class="tbl">
+      <thead><tr><th>Symptom</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td><code>zone not found</code> / token lacks access</td><td>Token must include <code>Zone:DNS:Edit</code> for <code>pimenta.fun</code>.</td></tr>
+        <tr><td>could not determine public IP</td><td>Check egress; the metadata server only works on GCP. Test <code>curl https://api.ipify.org</code>.</td></tr>
+        <tr><td>Record proxied / unproxied wrong</td><td>Set <code>PROXIED="true"</code> or <code>"false"</code> in the env file.</td></tr>
+        <tr><td>No log output from cron</td><td>Confirm cron is running: <code>systemctl status cron</code>.</td></tr>
+        <tr><td>Want to see the exact request</td><td>Run <code>sudo bash -x /usr/local/bin/cf-ddns.sh</code> for a verbose trace.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ── Resources ── -->
+    <h2 id="resources">Files &amp; resources</h2>
+    <div class="panel">
+      <ul class="bullets">
+        <li>Script &amp; config: <code>ddns/</code> (<a href="https://github.com/tpimentacf/pimenta.fun-LAB/tree/main/ddns">GitHub</a>)</li>
+        <li>Cloudflare DNS records API: <a href="https://developers.cloudflare.com/api/resources/dns/">developers.cloudflare.com/api/&hellip;/dns</a></li>
+        <li>Create an API token: <a href="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/">developers.cloudflare.com/fundamentals/api/&hellip;/create-token</a></li>
+        <li>Reserve a static external IP (GCP): <a href="https://cloud.google.com/compute/docs/ip-addresses/reserve-static-external-ip-address">cloud.google.com/compute/&hellip;/reserve-static-external-ip-address</a></li>
+      </ul>
+    </div>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;<a href="https://www.pimenta.fun/#docs">Back to docs</a>
+  </footer>
+</body>
+</html>
