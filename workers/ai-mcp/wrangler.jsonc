@@ -4,30 +4,36 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["nodejs_compat"],
+  "account_id": "9af757cde4de6c1ab25168f42af2b950",
 
   // Serve the MCP endpoint from *.workers.dev at /mcp. Point MCP clients at
   // https://ai-mcp.<your-subdomain>.workers.dev/mcp
-  "workers_dev": true,
+  // Option A: route on your own domain (zone inferred from the hostname)
+  "routes": [{
+    "pattern": "www.pimenta.fun/mcp",
+    "zone_name": "pimenta.fun"
+  }],
+
+  // Option B: use the free *.workers.dev subdomain instead of a zone
+  // "workers_dev": true,
 
   // Workers AI binding (env.AI). One AI binding per Worker.
-  "ai": { "binding": "AI" },
+  "ai": {
+    "binding": "AI"
+  },
 
   // D1 database binding (env.DB). Fill database_id after `wrangler d1 create`.
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "pimenta-ai-mcp",
-      "database_id": "<YOUR_D1_DATABASE_ID>"
-    }
-  ],
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "pimenta-ai-mcp",
+    "database_id": "f3fea425-bffd-4e1c-add6-d95e3829169b"
+  }],
 
   // Workers KV binding (env.KV). Fill id after `wrangler kv namespace create`.
-  "kv_namespaces": [
-    {
-      "binding": "KV",
-      "id": "<YOUR_KV_NAMESPACE_ID>"
-    }
-  ],
+  "kv_namespaces": [{
+    "binding": "KV",
+    "id": "ebfcb69a77b74958a7256935bd32e330"
+  }],
 
   // Plain vars. Create an AI Gateway named "pimenta-lab" (or use "default").
   "vars": {
@@ -36,5 +42,7 @@
   },
 
   // Turn on Workers Observability (logs/traces) for the demo.
-  "observability": { "enabled": true }
+  "observability": {
+    "enabled": true
+  }
 }
