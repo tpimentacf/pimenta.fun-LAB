@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ai-agent",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-01",
+  "account_id": "9af757cde4de6c1ab25168f42af2b950",
+
+  // Chat-agent API endpoint. The static chat UI lives at /agent/ (Apache
+  // origin); this Worker only owns the /agent/api path, so they don't collide.
+  // Option A: route on your own domain (zone inferred from the hostname).
+  "routes": [{
+    "pattern": "www.pimenta.fun/agent/api",
+    "zone_name": "pimenta.fun"
+  }],
+
+  // Option B: use the free *.workers.dev subdomain instead of a zone.
+  // "workers_dev": true,
+
+  // Workers AI binding (env.AI) — drives the tool-calling loop.
+  "ai": {
+    "binding": "AI"
+  },
+
+  "vars": {
+    // The remote MCP server this agent connects to (Streamable HTTP).
+    "MCP_URL": "https://www.pimenta.fun/mcp",
+    // AI Gateway id for observability of the agent's own inference calls.
+    "AI_GATEWAY_ID": "pimenta-lab",
+    // Tool-calling model. Must support function calling.
+    "AGENT_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    // Safety cap on tool-loop iterations per message.
+    "MAX_STEPS": "5"
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}
