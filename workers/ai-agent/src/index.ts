@@ -60,13 +60,22 @@ type Json = Record<string, any>;
  * (createMcpHandler, default transport) answers request-bearing POSTs with an
  * SSE stream, so we accept both and parse whichever came back.
  */
+type RpcResult = {
+  result?: Json;
+  error?: Json;
+  sessionId?: string;
+  status?: number; // HTTP status of the round-trip
+  ctype?: string; // response content-type
+  raw?: string; // first slice of the raw body, for diagnostics
+};
+
 async function mcpRpc(
   url: string,
   method: string,
   params: Json | undefined,
   id: number,
   sessionId?: string,
-): Promise<{ result?: Json; error?: Json; sessionId?: string }> {
+): Promise<RpcResult> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
     accept: "application/json, text/event-stream",
@@ -74,26 +83,35 @@ async function mcpRpc(
   };
   if (sessionId) headers["mcp-session-id"] = sessionId;
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+    });
+  } catch (e: any) {
+    // fetch itself threw (DNS, subrequest loop, TLS…) — the usual "silent" cause.
+    return { error: { code: -2, message: `fetch failed: ${String(e?.message || e)}` } };
+  }
 
   const newSession = res.headers.get("mcp-session-id") || sessionId;
   const ctype = res.headers.get("content-type") || "";
   const bodyText = await res.text();
+  const raw = bodyText.slice(0, 300);
 
   if (!res.ok && !bodyText) {
-    return { error: { code: res.status, message: `HTTP ${res.status}` }, sessionId: newSession };
+    return { error: { code: res.status, message: `HTTP ${res.status}` }, sessionId: newSession, status: res.status, ctype, raw };
   }
 
   const payload = ctype.includes("text/event-stream")
     ? parseSse(bodyText, id)
     : safeJson(bodyText);
 
-  if (!payload) return { error: { code: -1, message: "Unparseable MCP response" }, sessionId: newSession };
-  return { result: payload.result, error: payload.error, sessionId: newSession };
+  if (!payload) {
+    return { error: { code: -1, message: "Unparseable MCP response" }, sessionId: newSession, status: res.status, ctype, raw };
+  }
+  return { result: payload.result, error: payload.error, sessionId: newSession, status: res.status, ctype, raw };
 }
 
 /** Pull the JSON-RPC message matching `id` out of an SSE stream (data: lines). */
@@ -116,8 +134,23 @@ function safeJson(s: string): Json | undefined {
   }
 }
 
-/** Handshake + tools/list. Returns the tool list and the (optional) session id. */
-async function mcpListTools(url: string): Promise<{ tools: Json[]; sessionId?: string }> {
+type McpDebug = {
+  url: string;
+  initStatus?: number;
+  initError?: string;
+  initCtype?: string;
+  sessionId?: string;
+  listStatus?: number;
+  listError?: string;
+  listCtype?: string;
+  listRaw?: string;
+  retried: boolean;
+  toolCount: number;
+};
+
+/** Handshake + tools/list. Returns the tool list, session id, and diagnostics. */
+async function mcpListTools(url: string): Promise<{ tools: Json[]; sessionId?: string; debug: McpDebug }> {
+  const debug: McpDebug = { url, retried: false, toolCount: 0 };
   let id = 1;
   const init = await mcpRpc(
     url,
@@ -129,7 +162,11 @@ async function mcpListTools(url: string): Promise<{ tools: Json[]; sessionId?: s
     },
     id++,
   );
+  debug.initStatus = init.status;
+  debug.initCtype = init.ctype;
+  if (init.error) debug.initError = String(init.error.message ?? JSON.stringify(init.error));
   const sessionId = init.sessionId;
+  debug.sessionId = sessionId;
 
   // Politeness: tell the server we're initialized (notifications carry no id).
   if (sessionId) {
@@ -153,10 +190,16 @@ async function mcpListTools(url: string): Promise<{ tools: Json[]; sessionId?: s
   let tools = (listed.result?.tools as Json[]) || [];
   // The server is stateless; a rare empty/failed list is transient — retry once.
   if (!tools.length) {
+    debug.retried = true;
     listed = await mcpRpc(url, "tools/list", {}, id++, listed.sessionId ?? sessionId);
     tools = (listed.result?.tools as Json[]) || [];
   }
-  return { tools, sessionId: listed.sessionId ?? sessionId };
+  debug.listStatus = listed.status;
+  debug.listCtype = listed.ctype;
+  debug.listRaw = listed.raw;
+  if (listed.error) debug.listError = String(listed.error.message ?? JSON.stringify(listed.error));
+  debug.toolCount = tools.length;
+  return { tools, sessionId: listed.sessionId ?? sessionId, debug };
 }
 
 /** Execute one tool and return its result flattened to text. */
@@ -248,9 +291,24 @@ async function runAgent(env: Env, userMessages: Msg[]) {
   const maxSteps = Number(env.MAX_STEPS) || DEFAULT_MAX_STEPS;
   const gateway = env.AI_GATEWAY_ID ? { gateway: { id: env.AI_GATEWAY_ID } } : undefined;
 
-  const { tools: mcpTools, sessionId } = await mcpListTools(mcpUrl);
+  const { tools: mcpTools, sessionId, debug: mcpDebug } = await mcpListTools(mcpUrl);
   const aiTools = mcpTools.map(toAiTool);
   const toolNames = new Set<string>(mcpTools.map((t) => t.name));
+
+  // If the MCP server gave us no tools, do NOT let the model freewheel and
+  // hallucinate fake tool calls — say so plainly and hand back the diagnostics.
+  if (!aiTools.length) {
+    return {
+      reply:
+        "I couldn't load any tools from the MCP server, so I can't act on that yet. " +
+        "This usually means the agent Worker can't reach " +
+        `${mcpUrl} (see mcpDebug).`,
+      steps: [],
+      model,
+      toolCount: 0,
+      mcpDebug,
+    };
+  }
 
   const messages: Msg[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -291,7 +349,7 @@ async function runAgent(env: Env, userMessages: Msg[]) {
     reply = textOf(resp) || "(no answer)";
   }
 
-  return { reply, steps, model, toolCount: mcpTools.length };
+  return { reply, steps, model, toolCount: mcpTools.length, mcpDebug };
 }
 
 /* --------------------------------------------------------------- HTTP entry */
@@ -315,13 +373,26 @@ export default {
 
     const url = new URL(request.url);
 
-    // Tiny GET probe so the endpoint is inspectable in a browser.
+    // GET probe: does a LIVE tools/list so you can diagnose in a browser.
     if (request.method === "GET") {
+      const mcpUrl = env.MCP_URL || DEFAULT_MCP_URL;
+      let toolNames: string[] = [];
+      let mcpDebug: McpDebug | { error: string };
+      try {
+        const listed = await mcpListTools(mcpUrl);
+        toolNames = listed.tools.map((t) => String(t.name));
+        mcpDebug = listed.debug;
+      } catch (e: any) {
+        mcpDebug = { error: String(e?.message || e) } as any;
+      }
       return json({
-        ok: true,
+        ok: toolNames.length > 0,
         service: "ai-agent",
-        mcp: env.MCP_URL || DEFAULT_MCP_URL,
+        mcp: mcpUrl,
         model: env.AGENT_MODEL || DEFAULT_MODEL,
+        toolCount: toolNames.length,
+        toolNames,
+        mcpDebug,
         usage: "POST { messages:[{role,content}] } to this URL",
       });
     }
