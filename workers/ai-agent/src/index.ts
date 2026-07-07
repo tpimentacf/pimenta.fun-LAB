@@ -36,6 +36,37 @@ export interface Env {
 }
 
 const DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+
+/**
+ * Open-source, tool-capable Workers AI models offered in the chat's model
+ * picker. Every entry supports function calling — a hard requirement for this
+ * agent's tool loop (models without it break the loop). Sourced from the live
+ * Workers AI catalogue (properties.function_calling === "true"). The UI reads
+ * this list from the GET probe, so extend it here in one place.
+ */
+const MODELS: { id: string; label: string }[] = [
+  { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", label: "Llama 3.3 70B — Meta (default)" },
+  { id: "@cf/meta/llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout 17B — Meta" },
+  { id: "@cf/openai/gpt-oss-120b", label: "gpt-oss 120B — OpenAI (open weights)" },
+  { id: "@cf/openai/gpt-oss-20b", label: "gpt-oss 20B — OpenAI (open weights)" },
+  { id: "@cf/mistralai/mistral-small-3.1-24b-instruct", label: "Mistral Small 3.1 24B" },
+  { id: "@cf/qwen/qwen3-30b-a3b-fp8", label: "Qwen3 30B A3B — Alibaba" },
+  { id: "@cf/google/gemma-4-26b-a4b-it", label: "Gemma 4 26B — Google" },
+  { id: "@cf/zai-org/glm-5.2", label: "GLM 5.2 — Z.ai" },
+  { id: "@cf/zai-org/glm-4.7-flash", label: "GLM 4.7 Flash — Z.ai" },
+  { id: "@cf/moonshotai/kimi-k2.6", label: "Kimi K2.6 — Moonshot" },
+  { id: "@cf/moonshotai/kimi-k2.7-code", label: "Kimi K2.7 Code — Moonshot" },
+  { id: "@cf/nvidia/nemotron-3-120b-a12b", label: "Nemotron 3 120B — NVIDIA" },
+  { id: "@cf/ibm-granite/granite-4.0-h-micro", label: "Granite 4.0 H Micro — IBM" },
+];
+const MODEL_IDS = new Set<string>(MODELS.map((m) => m.id));
+
+/** Resolve a requested model against the allowlist; fall back to the default. */
+function resolveModel(env: Env, requested?: string): string {
+  const fallback = env.AGENT_MODEL || DEFAULT_MODEL;
+  return requested && MODEL_IDS.has(requested) ? requested : fallback;
+}
+
 const DEFAULT_MCP_URL = "https://www.pimenta.fun/mcp";
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 const DEFAULT_MAX_STEPS = 5;
@@ -357,8 +388,8 @@ function guardrailBlock(msg: string): { blocked: "prompt" | "response" } | null 
 
 /* --------------------------------------------------------------- agent loop */
 
-async function runAgent(env: Env, userMessages: Msg[]) {
-  const model = env.AGENT_MODEL || DEFAULT_MODEL;
+async function runAgent(env: Env, userMessages: Msg[], requestedModel?: string) {
+  const model = resolveModel(env, requestedModel);
   const mcpUrl = env.MCP_URL || DEFAULT_MCP_URL;
   const maxSteps = Number(env.MAX_STEPS) || DEFAULT_MAX_STEPS;
   const gateway = env.AI_GATEWAY_ID ? { gateway: { id: env.AI_GATEWAY_ID } } : undefined;
@@ -476,10 +507,12 @@ export default {
         service: "ai-agent",
         mcp: mcpUrl,
         model: env.AGENT_MODEL || DEFAULT_MODEL,
+        defaultModel: env.AGENT_MODEL || DEFAULT_MODEL,
+        models: MODELS,
         toolCount: toolNames.length,
         toolNames,
         mcpDebug,
-        usage: "POST { messages:[{role,content}] } to this URL",
+        usage: "POST { messages:[{role,content}], model? } to this URL",
       });
     }
 
@@ -499,8 +532,11 @@ export default {
     }
     if (!messages.length) return json({ error: "Provide messages[] or message" }, 400);
 
+    // Optional model override — validated against the open-source allowlist.
+    const requestedModel = typeof payload.model === "string" ? payload.model : undefined;
+
     try {
-      const out = await runAgent(env, messages);
+      const out = await runAgent(env, messages, requestedModel);
       return json(out);
     } catch (err: any) {
       const detail = String(err?.message || err);
@@ -515,7 +551,7 @@ export default {
             "such as an SSN, credit-card, or similar). Nothing was sent to the model. " +
             "Try again without that content.",
           steps: [],
-          model: env.AGENT_MODEL || DEFAULT_MODEL,
+          model: resolveModel(env, requestedModel),
           toolCount: 0,
           guardrail: true,
           blocked: gr.blocked,
