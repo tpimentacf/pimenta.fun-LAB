@@ -33,7 +33,10 @@
     .composer button { background:var(--accent); color:#1a1205; border:none; border-radius:9px; padding:0 18px;
                        font-weight:800; cursor:pointer; font-size:0.9rem; }
     .composer button:disabled { opacity:0.5; cursor:not-allowed; }
+    .chips-label { color:var(--muted); font-size:0.78rem; margin:14px 0 2px; }
     .chips { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0 2px; }
+    .chip.pii { border-style:dashed; }
+    .chip.pii:hover { border-color:#ff6b6b; color:#ff6b6b; }
     .chip { background:var(--panel2); border:1px solid var(--border); border-radius:999px; padding:6px 12px;
             font-size:0.8rem; color:#cdd9f2; cursor:pointer; }
     .chip:hover { border-color:var(--accent); color:var(--accent); }
@@ -107,6 +110,14 @@
         <button class="chip" type="button">Ask AI to explain MCP in one sentence</button>
       </div>
 
+      <div class="chips-label">Test AI Gateway PII guardrails (synthetic data only):</div>
+      <div class="chips" id="chips-pii">
+        <button class="chip pii" type="button" data-q="Save a note titled Contact with body: my email is jane.doe@example.com and my phone is +1-202-555-0147.">Email &amp; phone</button>
+        <button class="chip pii" type="button" data-q="Store a note with this SSN: 123-45-6789 and remember it for me.">US SSN</button>
+        <button class="chip pii" type="button" data-q="Ask AI to summarise this payment card: 4111 1111 1111 1111, exp 12/29, cvv 123.">Credit card</button>
+        <button class="chip pii" type="button" data-q="Remember that my name is John Smith and my IBAN is GB82 WEST 1234 5698 7654 32.">Name &amp; IBAN</button>
+      </div>
+
       <div class="toolbar">
         <span><span id="dot" class="dot"></span><span id="status">idle</span></span>
         <button id="clear" class="link" type="button">Clear conversation</button>
@@ -169,6 +180,24 @@
           <tr><td><code>ask_ai</code></td><td>Workers AI</td><td>Ask an LLM (via AI Gateway); the call is logged to D1.</td></tr>
         </tbody>
       </table>
+    </section>
+
+    <!-- ── PII GUARDRAILS ────────────────────────────────────────── -->
+    <section class="panel">
+      <h2>Testing PII protection</h2>
+      <div class="sub">The dashed <span style="color:#ff6b6b">Test&hellip;</span> chips send prompts containing <em>synthetic</em> personal data.</div>
+      <p>Every model call the agent makes &mdash; both its own reasoning turn and the
+      <code>ask_ai</code> tool &mdash; is routed through the <code>pimenta-lab</code>
+      <strong>AI Gateway</strong>. AI Gateway <strong>Guardrails</strong> can inspect prompts and
+      responses and detect / block PII (emails, phone numbers, SSNs, payment cards, IBANs, and
+      more). These chips let you see that in action:</p>
+      <ul>
+        <li>With Guardrails <strong>off</strong>: the prompt flows straight through &mdash; a good reminder <em>not</em> to store real PII in demo notes.</li>
+        <li>With Guardrails set to <strong>flag</strong>: the request still runs, but the gateway logs mark the detected PII categories.</li>
+        <li>With Guardrails set to <strong>block</strong>: the model call is rejected upstream, so the agent returns an error instead of an answer &mdash; that error <em>is</em> the protection working.</li>
+      </ul>
+      <p class="sub" style="margin-top:10px">Enable it in <strong>AI &rarr; AI Gateway &rarr; pimenta-lab &rarr; Guardrails</strong>,
+      turn on PII detection, and choose flag or block. All chip data above is fake test data &mdash; never paste real personal information.</p>
     </section>
 
     <!-- ── BUILD & DEPLOY ────────────────────────────────────────── -->
@@ -313,11 +342,14 @@ npx wrangler deploy</pre>
         send(t);
       });
 
-      document.getElementById("chips").addEventListener("click", function (e) {
+      function onChip(e) {
         if (e.target && e.target.classList.contains("chip")) {
-          send(e.target.textContent);
+          send(e.target.getAttribute("data-q") || e.target.textContent);
         }
-      });
+      }
+      document.getElementById("chips").addEventListener("click", onChip);
+      var piiChips = document.getElementById("chips-pii");
+      if (piiChips) piiChips.addEventListener("click", onChip);
 
       clearBtn.addEventListener("click", function () {
         history = [];

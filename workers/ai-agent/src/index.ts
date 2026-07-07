@@ -28,7 +28,8 @@
 
 export interface Env {
   AI: Ai; // Workers AI binding (env.AI)
-  MCP_URL?: string; // remote MCP endpoint (Streamable HTTP)
+  MCP?: Fetcher; // Service binding to the ai-mcp Worker (preferred transport)
+  MCP_URL?: string; // remote MCP endpoint (Streamable HTTP) — fallback / external
   AI_GATEWAY_ID?: string; // AI Gateway id for observability
   AGENT_MODEL?: string; // tool-calling model
   MAX_STEPS?: string; // safety cap on tool-loop iterations
@@ -60,13 +61,23 @@ type Json = Record<string, any>;
  * (createMcpHandler, default transport) answers request-bearing POSTs with an
  * SSE stream, so we accept both and parse whichever came back.
  */
+type RpcResult = {
+  result?: Json;
+  error?: Json;
+  sessionId?: string;
+  status?: number; // HTTP status of the round-trip
+  ctype?: string; // response content-type
+  raw?: string; // first slice of the raw body, for diagnostics
+};
+
 async function mcpRpc(
   url: string,
   method: string,
   params: Json | undefined,
   id: number,
   sessionId?: string,
-): Promise<{ result?: Json; error?: Json; sessionId?: string }> {
+  fetcher?: Fetcher,
+): Promise<RpcResult> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
     accept: "application/json, text/event-stream",
@@ -74,26 +85,35 @@ async function mcpRpc(
   };
   if (sessionId) headers["mcp-session-id"] = sessionId;
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-  });
+  let res: Response;
+  try {
+    res = await pickFetch(fetcher)(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+    });
+  } catch (e: any) {
+    // fetch itself threw (DNS, subrequest loop, TLS…) — the usual "silent" cause.
+    return { error: { code: -2, message: `fetch failed: ${String(e?.message || e)}` } };
+  }
 
   const newSession = res.headers.get("mcp-session-id") || sessionId;
   const ctype = res.headers.get("content-type") || "";
   const bodyText = await res.text();
+  const raw = bodyText.slice(0, 300);
 
   if (!res.ok && !bodyText) {
-    return { error: { code: res.status, message: `HTTP ${res.status}` }, sessionId: newSession };
+    return { error: { code: res.status, message: `HTTP ${res.status}` }, sessionId: newSession, status: res.status, ctype, raw };
   }
 
   const payload = ctype.includes("text/event-stream")
     ? parseSse(bodyText, id)
     : safeJson(bodyText);
 
-  if (!payload) return { error: { code: -1, message: "Unparseable MCP response" }, sessionId: newSession };
-  return { result: payload.result, error: payload.error, sessionId: newSession };
+  if (!payload) {
+    return { error: { code: -1, message: "Unparseable MCP response" }, sessionId: newSession, status: res.status, ctype, raw };
+  }
+  return { result: payload.result, error: payload.error, sessionId: newSession, status: res.status, ctype, raw };
 }
 
 /** Pull the JSON-RPC message matching `id` out of an SSE stream (data: lines). */
@@ -116,8 +136,35 @@ function safeJson(s: string): Json | undefined {
   }
 }
 
-/** Handshake + tools/list. Returns the tool list and the (optional) session id. */
-async function mcpListTools(url: string): Promise<{ tools: Json[]; sessionId?: string }> {
+/**
+ * Prefer a Service binding (direct Worker-to-Worker RPC) when present; else fall
+ * back to a public fetch. A Worker fetching its OWN zone's hostname does not
+ * re-run Workers routing — the subrequest hits the origin and misses the /mcp
+ * Worker route (returns the site's 404 HTML). The binding avoids DNS/routing
+ * entirely, so it is the reliable transport for a same-zone MCP server.
+ */
+function pickFetch(fetcher?: Fetcher): typeof fetch {
+  return fetcher ? (fetcher.fetch.bind(fetcher) as unknown as typeof fetch) : fetch;
+}
+
+type McpDebug = {
+  url: string;
+  transport: "service-binding" | "fetch";
+  initStatus?: number;
+  initError?: string;
+  initCtype?: string;
+  sessionId?: string;
+  listStatus?: number;
+  listError?: string;
+  listCtype?: string;
+  listRaw?: string;
+  retried: boolean;
+  toolCount: number;
+};
+
+/** Handshake + tools/list. Returns the tool list, session id, and diagnostics. */
+async function mcpListTools(url: string, fetcher?: Fetcher): Promise<{ tools: Json[]; sessionId?: string; debug: McpDebug }> {
+  const debug: McpDebug = { url, transport: fetcher ? "service-binding" : "fetch", retried: false, toolCount: 0 };
   let id = 1;
   const init = await mcpRpc(
     url,
@@ -128,13 +175,19 @@ async function mcpListTools(url: string): Promise<{ tools: Json[]; sessionId?: s
       clientInfo: { name: "pimenta-ai-agent", version: "1.0.0" },
     },
     id++,
+    undefined,
+    fetcher,
   );
+  debug.initStatus = init.status;
+  debug.initCtype = init.ctype;
+  if (init.error) debug.initError = String(init.error.message ?? JSON.stringify(init.error));
   const sessionId = init.sessionId;
+  debug.sessionId = sessionId;
 
   // Politeness: tell the server we're initialized (notifications carry no id).
   if (sessionId) {
     try {
-      await fetch(url, {
+      await pickFetch(fetcher)(url, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -149,9 +202,20 @@ async function mcpListTools(url: string): Promise<{ tools: Json[]; sessionId?: s
     }
   }
 
-  const listed = await mcpRpc(url, "tools/list", {}, id++, sessionId);
-  const tools = (listed.result?.tools as Json[]) || [];
-  return { tools, sessionId: listed.sessionId };
+  let listed = await mcpRpc(url, "tools/list", {}, id++, sessionId, fetcher);
+  let tools = (listed.result?.tools as Json[]) || [];
+  // The server is stateless; a rare empty/failed list is transient — retry once.
+  if (!tools.length) {
+    debug.retried = true;
+    listed = await mcpRpc(url, "tools/list", {}, id++, listed.sessionId ?? sessionId, fetcher);
+    tools = (listed.result?.tools as Json[]) || [];
+  }
+  debug.listStatus = listed.status;
+  debug.listCtype = listed.ctype;
+  debug.listRaw = listed.raw;
+  if (listed.error) debug.listError = String(listed.error.message ?? JSON.stringify(listed.error));
+  debug.toolCount = tools.length;
+  return { tools, sessionId: listed.sessionId ?? sessionId, debug };
 }
 
 /** Execute one tool and return its result flattened to text. */
@@ -160,8 +224,9 @@ async function mcpCallTool(
   name: string,
   args: Json,
   sessionId: string | undefined,
+  fetcher?: Fetcher,
 ): Promise<string> {
-  const r = await mcpRpc(url, "tools/call", { name, arguments: args }, Math.floor(Math.random() * 1e6) + 10, sessionId);
+  const r = await mcpRpc(url, "tools/call", { name, arguments: args }, Math.floor(Math.random() * 1e6) + 10, sessionId, fetcher);
   if (r.error) return `Tool error: ${r.error.message ?? JSON.stringify(r.error)}`;
   const content = (r.result?.content as Json[]) || [];
   const txt = content
@@ -195,6 +260,86 @@ function coerceArgs(a: unknown): Json {
   return {};
 }
 
+/**
+ * Models often emit every argument as a string (e.g. limit:"20"). The MCP server
+ * validates against JSON Schema and rejects the wrong primitive type, so coerce
+ * numeric/boolean strings back to their schema type before calling the tool.
+ */
+function coerceToSchema(args: Json, schema: Json | undefined): Json {
+  const props = (schema && schema.properties) || {};
+  const out: Json = { ...args };
+  for (const [k, v] of Object.entries(out)) {
+    const t = props[k]?.type;
+    if ((t === "integer" || t === "number") && typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) {
+      out[k] = Number(v);
+    } else if (t === "boolean" && typeof v === "string") {
+      if (v === "true") out[k] = true;
+      else if (v === "false") out[k] = false;
+    }
+  }
+  return out;
+}
+
+/**
+ * Run the model with tools, tolerating Workers AI's inconsistent backend routing.
+ * Some backends accept the flat tools shape {name,description,parameters}; others
+ * (vLLM/OpenAI-compatible) 400 with error 8007 unless tools are nested as
+ * {type:"function", function:{...}}. Try flat first (the documented Workers AI
+ * shape), and on a tools-format error retry once with the nested shape.
+ */
+async function aiRunWithTools(env: Env, model: string, messages: Msg[], aiTools: Json[], gateway: any): Promise<any> {
+  try {
+    return await env.AI.run(model, { messages, tools: aiTools } as Json, gateway);
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    if (/\b8007\b|'function'|\btools\b/i.test(msg)) {
+      const nested = aiTools.map((t) => ({ type: "function", function: t }));
+      return await env.AI.run(model, { messages, tools: nested } as Json, gateway);
+    }
+    throw e;
+  }
+}
+
+/** The model's plain-text answer, wherever this model variant puts it. */
+function textOf(resp: any): string {
+  return (resp?.response ?? resp?.result ?? "").toString().trim();
+}
+
+/** Best-effort JSON parse of a model string that may be fenced or prose-wrapped. */
+function looseJson(s: string): Json | Json[] | undefined {
+  const stripped = s.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const whole = safeJson(stripped);
+  if (whole) return whole;
+  const m = stripped.match(/[\[{][\s\S]*[\]}]/);
+  return m ? safeJson(m[0]) : undefined;
+}
+
+/**
+ * Normalise however this model expressed tool calls into {name, arguments}[].
+ * Some Workers AI models return structured `tool_calls`; others (json variant)
+ * emit the call as JSON *text* in `response`, sometimes keyed `parameters`.
+ */
+function extractCalls(resp: any, known: Set<string>): { name: string; arguments: Json }[] {
+  const norm = (o: any) => ({
+    name: (o?.name || o?.function?.name || "") as string,
+    arguments: coerceArgs(o?.arguments ?? o?.parameters ?? o?.function?.arguments),
+  });
+
+  const structured: any[] = Array.isArray(resp?.tool_calls) ? resp.tool_calls : [];
+  if (structured.length) return structured.map(norm).filter((c) => c.name);
+
+  // Text-form fallback: only treat as a call when the name is a real MCP tool,
+  // so a genuine JSON answer is never mistaken for a tool invocation.
+  const parsed = looseJson(textOf(resp));
+  if (!parsed) return [];
+  const arr: any[] = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray((parsed as Json).tool_calls)
+      ? (parsed as Json).tool_calls
+      : [parsed];
+  return arr.map(norm).filter((c) => c.name && known.has(c.name));
+}
+
 /* --------------------------------------------------------------- agent loop */
 
 async function runAgent(env: Env, userMessages: Msg[]) {
@@ -202,9 +347,29 @@ async function runAgent(env: Env, userMessages: Msg[]) {
   const mcpUrl = env.MCP_URL || DEFAULT_MCP_URL;
   const maxSteps = Number(env.MAX_STEPS) || DEFAULT_MAX_STEPS;
   const gateway = env.AI_GATEWAY_ID ? { gateway: { id: env.AI_GATEWAY_ID } } : undefined;
+  const mcpFetch = env.MCP; // Service binding to ai-mcp, when configured
 
-  const { tools: mcpTools, sessionId } = await mcpListTools(mcpUrl);
+  const { tools: mcpTools, sessionId, debug: mcpDebug } = await mcpListTools(mcpUrl, mcpFetch);
   const aiTools = mcpTools.map(toAiTool);
+  const toolNames = new Set<string>(mcpTools.map((t) => t.name));
+  const schemaByName = new Map<string, Json>(
+    mcpTools.map((t) => [t.name as string, (t.inputSchema || t.input_schema || {}) as Json]),
+  );
+
+  // If the MCP server gave us no tools, do NOT let the model freewheel and
+  // hallucinate fake tool calls — say so plainly and hand back the diagnostics.
+  if (!aiTools.length) {
+    return {
+      reply:
+        "I couldn't load any tools from the MCP server, so I can't act on that yet. " +
+        "This usually means the agent Worker can't reach " +
+        `${mcpUrl} (see mcpDebug).`,
+      steps: [],
+      model,
+      toolCount: 0,
+      mcpDebug,
+    };
+  }
 
   const messages: Msg[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -215,25 +380,30 @@ async function runAgent(env: Env, userMessages: Msg[]) {
   let reply = "";
 
   for (let step = 0; step < maxSteps; step++) {
-    const resp: any = await env.AI.run(model, { messages, tools: aiTools }, gateway as any);
-    const calls: Json[] = resp?.tool_calls || [];
+    // aiTools is guaranteed non-empty here (we returned early above otherwise);
+    // the helper tolerates Workers AI's flat-vs-nested tools-format routing.
+    const resp: any = await aiRunWithTools(env, model, messages, aiTools, gateway as any);
+    const calls = extractCalls(resp, toolNames);
 
     if (!calls.length) {
-      reply = (resp?.response ?? resp?.result ?? "").toString().trim();
+      reply = textOf(resp);
       break;
     }
 
+    // Some models repeat an identical call in one turn — run each only once.
+    const seen = new Set<string>();
+    const unique = calls.filter((c) => {
+      const key = c.name + "\u0000" + JSON.stringify(c.arguments);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     // Execute every tool the model asked for this turn, then loop again.
-    for (const call of calls) {
-      const name = call.name || call.function?.name;
-      const args = coerceArgs(call.arguments ?? call.function?.arguments);
-      if (!name || !mcpTools.some((t) => t.name === name)) {
-        steps.push({ tool: String(name), args, result: "Unknown tool (not offered by MCP server)" });
-        messages.push({ role: "assistant", content: JSON.stringify(call) });
-        messages.push({ role: "tool", content: "Error: unknown tool" });
-        continue;
-      }
-      const result = await mcpCallTool(mcpUrl, name, args, sessionId);
+    for (const call of unique) {
+      const { name } = call;
+      const args = coerceToSchema(call.arguments, schemaByName.get(name));
+      const result = await mcpCallTool(mcpUrl, name, args, sessionId, mcpFetch);
       steps.push({ tool: name, args, result });
       messages.push({ role: "assistant", content: JSON.stringify({ name, arguments: args }) });
       messages.push({ role: "tool", content: result });
@@ -247,10 +417,10 @@ async function runAgent(env: Env, userMessages: Msg[]) {
       { messages: [...messages, { role: "user", content: "Summarise the result for me in plain language." }] },
       gateway as any,
     );
-    reply = (resp?.response ?? "").toString().trim() || "(no answer)";
+    reply = textOf(resp) || "(no answer)";
   }
 
-  return { reply, steps, model, toolCount: mcpTools.length };
+  return { reply, steps, model, toolCount: mcpTools.length, mcpDebug };
 }
 
 /* --------------------------------------------------------------- HTTP entry */
@@ -274,13 +444,26 @@ export default {
 
     const url = new URL(request.url);
 
-    // Tiny GET probe so the endpoint is inspectable in a browser.
+    // GET probe: does a LIVE tools/list so you can diagnose in a browser.
     if (request.method === "GET") {
+      const mcpUrl = env.MCP_URL || DEFAULT_MCP_URL;
+      let toolNames: string[] = [];
+      let mcpDebug: McpDebug | { error: string };
+      try {
+        const listed = await mcpListTools(mcpUrl, env.MCP);
+        toolNames = listed.tools.map((t) => String(t.name));
+        mcpDebug = listed.debug;
+      } catch (e: any) {
+        mcpDebug = { error: String(e?.message || e) } as any;
+      }
       return json({
-        ok: true,
+        ok: toolNames.length > 0,
         service: "ai-agent",
-        mcp: env.MCP_URL || DEFAULT_MCP_URL,
+        mcp: mcpUrl,
         model: env.AGENT_MODEL || DEFAULT_MODEL,
+        toolCount: toolNames.length,
+        toolNames,
+        mcpDebug,
         usage: "POST { messages:[{role,content}] } to this URL",
       });
     }
