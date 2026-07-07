@@ -194,10 +194,10 @@
       <ul>
         <li>With Guardrails <strong>off</strong>: the prompt flows straight through &mdash; a good reminder <em>not</em> to store real PII in demo notes.</li>
         <li>With Guardrails set to <strong>flag</strong>: the request still runs, but the gateway logs mark the detected PII categories.</li>
-        <li>With Guardrails set to <strong>block</strong>: the model call is rejected upstream, so the agent returns an error instead of an answer &mdash; that error <em>is</em> the protection working.</li>
+        <li>With Guardrails set to <strong>block</strong> (<strong>currently on</strong> for this lab): the gateway rejects the call before it reaches the model (error <code>2016</code>), and the agent shows a &#127905;&#65039; &ldquo;blocked&rdquo; message &mdash; that block <em>is</em> the protection working. Nothing sensitive ever reaches the model.</li>
       </ul>
-      <p class="sub" style="margin-top:10px">Enable it in <strong>AI &rarr; AI Gateway &rarr; pimenta-lab &rarr; Guardrails</strong>,
-      turn on PII detection, and choose flag or block. All chip data above is fake test data &mdash; never paste real personal information.</p>
+      <p class="sub" style="margin-top:10px">Configured in <strong>AI &rarr; AI Gateway &rarr; pimenta-lab &rarr; Guardrails</strong>
+      (here: PII / <em>Privacy</em> set to <strong>block</strong> on prompts). All chip data above is fake test data &mdash; never paste real personal information.</p>
     </section>
 
     <!-- ── BUILD & DEPLOY ────────────────────────────────────────── -->

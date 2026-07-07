@@ -340,6 +340,21 @@ function extractCalls(resp: any, known: Set<string>): { name: string; arguments:
   return arr.map(norm).filter((c) => c.name && known.has(c.name));
 }
 
+/* ----------------------------------------------------------------- guardrails */
+
+/**
+ * AI Gateway Guardrails block a request/response by failing the env.AI.run call
+ * with an error like "2016: Prompt blocked due to security configurations"
+ * (2016 = prompt blocked, 2017 = response blocked). Detect it so we can answer
+ * the user gracefully instead of surfacing a raw 500.
+ */
+function guardrailBlock(msg: string): { blocked: "prompt" | "response" } | null {
+  if (/\b2016\b/.test(msg)) return { blocked: "prompt" };
+  if (/\b2017\b/.test(msg)) return { blocked: "response" };
+  if (/blocked due to security configurations|guardrail/i.test(msg)) return { blocked: "prompt" };
+  return null;
+}
+
 /* --------------------------------------------------------------- agent loop */
 
 async function runAgent(env: Env, userMessages: Msg[]) {
@@ -488,7 +503,26 @@ export default {
       const out = await runAgent(env, messages);
       return json(out);
     } catch (err: any) {
-      return json({ error: "Agent failed", detail: String(err?.message || err) }, 500);
+      const detail = String(err?.message || err);
+      // AI Gateway Guardrails intercepted the prompt/response — answer politely.
+      const gr = guardrailBlock(detail);
+      if (gr) {
+        const where = gr.blocked === "response" ? "the response" : "your message";
+        return json({
+          reply:
+            `\u{1F6E1}\uFE0F AI Gateway Guardrails blocked ${where}. ` +
+            "It looks like it contained sensitive or disallowed content (e.g. PII " +
+            "such as an SSN, credit-card, or similar). Nothing was sent to the model. " +
+            "Try again without that content.",
+          steps: [],
+          model: env.AGENT_MODEL || DEFAULT_MODEL,
+          toolCount: 0,
+          guardrail: true,
+          blocked: gr.blocked,
+          detail,
+        });
+      }
+      return json({ error: "Agent failed", detail }, 500);
     }
   },
 } satisfies ExportedHandler<Env>;
