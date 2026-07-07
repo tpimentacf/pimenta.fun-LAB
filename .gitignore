@@ -1,0 +1,9 @@
+# Dependencies (installed via npm; never committed)
+node_modules/
+
+# Wrangler local state
+.wrangler/
+.dev.vars
+
+# macOS
+.DS_Store
