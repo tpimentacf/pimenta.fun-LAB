@@ -111,7 +111,11 @@
         { name:"ai-mcp (remote MCP server)", href:"https://github.com/tpimentacf/pimenta.fun-LAB/tree/main/workers/ai-mcp", prod:"Workers / MCP / D1 / KV / Workers AI",
           badges:["worker","addon"],
           desc:"Stateless MCP server exposing D1 notes CRUD, KV get/put, and an ask_ai tool (Workers AI via AI Gateway).",
-          impl:"Worker in <code class=\"inline\">workers/ai-mcp/</code> using createMcpHandler + @modelcontextprotocol/sdk; bindings for AI, D1, KV. Deploy with wrangler." }
+          impl:"Worker in <code class=\"inline\">workers/ai-mcp/</code> using createMcpHandler + @modelcontextprotocol/sdk; bindings for AI, D1, KV. Deploy with wrangler." },
+        { name:"AI Chat Agent", href:"/agent/", prod:"Workers AI / MCP client",
+          badges:["worker","origin"],
+          desc:"A chat agent connected to the MCP server: runs a Workers AI function-calling loop that discovers MCP tools, calls them (notes, KV, ask_ai), and answers. Live chat UI plus a build guide.",
+          impl:"Worker in <code class=\"inline\">workers/ai-agent/</code> (MCP client over Streamable HTTP + Workers AI tool loop, model llama-3.3-70b) at <code class=\"inline\">/agent/api</code>; static chat page at <code class=\"inline\">/agent/</code>." }
       ]},
 
       { title: "Network & Edge", desc: "Surface the Cloudflare edge metadata behind every request.", items: [
