@@ -21,6 +21,15 @@
     "binding": "AI"
   },
 
+  // Service binding (env.MCP) — direct Worker-to-Worker RPC to the ai-mcp
+  // Worker. REQUIRED because a same-zone public fetch to www.pimenta.fun/mcp
+  // hits the Apache origin (404) instead of the /mcp Worker route. The binding
+  // bypasses DNS/routing and invokes ai-mcp directly.
+  "services": [{
+    "binding": "MCP",
+    "service": "ai-mcp"
+  }],
+
   "vars": {
     // The remote MCP server this agent connects to (Streamable HTTP).
     "MCP_URL": "https://www.pimenta.fun/mcp",

@@ -28,7 +28,8 @@
 
 export interface Env {
   AI: Ai; // Workers AI binding (env.AI)
-  MCP_URL?: string; // remote MCP endpoint (Streamable HTTP)
+  MCP?: Fetcher; // Service binding to the ai-mcp Worker (preferred transport)
+  MCP_URL?: string; // remote MCP endpoint (Streamable HTTP) — fallback / external
   AI_GATEWAY_ID?: string; // AI Gateway id for observability
   AGENT_MODEL?: string; // tool-calling model
   MAX_STEPS?: string; // safety cap on tool-loop iterations
@@ -75,6 +76,7 @@ async function mcpRpc(
   params: Json | undefined,
   id: number,
   sessionId?: string,
+  fetcher?: Fetcher,
 ): Promise<RpcResult> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
@@ -85,7 +87,7 @@ async function mcpRpc(
 
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await pickFetch(fetcher)(url, {
       method: "POST",
       headers,
       body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
@@ -134,8 +136,20 @@ function safeJson(s: string): Json | undefined {
   }
 }
 
+/**
+ * Prefer a Service binding (direct Worker-to-Worker RPC) when present; else fall
+ * back to a public fetch. A Worker fetching its OWN zone's hostname does not
+ * re-run Workers routing — the subrequest hits the origin and misses the /mcp
+ * Worker route (returns the site's 404 HTML). The binding avoids DNS/routing
+ * entirely, so it is the reliable transport for a same-zone MCP server.
+ */
+function pickFetch(fetcher?: Fetcher): typeof fetch {
+  return fetcher ? (fetcher.fetch.bind(fetcher) as unknown as typeof fetch) : fetch;
+}
+
 type McpDebug = {
   url: string;
+  transport: "service-binding" | "fetch";
   initStatus?: number;
   initError?: string;
   initCtype?: string;
@@ -149,8 +163,8 @@ type McpDebug = {
 };
 
 /** Handshake + tools/list. Returns the tool list, session id, and diagnostics. */
-async function mcpListTools(url: string): Promise<{ tools: Json[]; sessionId?: string; debug: McpDebug }> {
-  const debug: McpDebug = { url, retried: false, toolCount: 0 };
+async function mcpListTools(url: string, fetcher?: Fetcher): Promise<{ tools: Json[]; sessionId?: string; debug: McpDebug }> {
+  const debug: McpDebug = { url, transport: fetcher ? "service-binding" : "fetch", retried: false, toolCount: 0 };
   let id = 1;
   const init = await mcpRpc(
     url,
@@ -161,6 +175,8 @@ async function mcpListTools(url: string): Promise<{ tools: Json[]; sessionId?: s
       clientInfo: { name: "pimenta-ai-agent", version: "1.0.0" },
     },
     id++,
+    undefined,
+    fetcher,
   );
   debug.initStatus = init.status;
   debug.initCtype = init.ctype;
@@ -171,7 +187,7 @@ async function mcpListTools(url: string): Promise<{ tools: Json[]; sessionId?: s
   // Politeness: tell the server we're initialized (notifications carry no id).
   if (sessionId) {
     try {
-      await fetch(url, {
+      await pickFetch(fetcher)(url, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -186,12 +202,12 @@ async function mcpListTools(url: string): Promise<{ tools: Json[]; sessionId?: s
     }
   }
 
-  let listed = await mcpRpc(url, "tools/list", {}, id++, sessionId);
+  let listed = await mcpRpc(url, "tools/list", {}, id++, sessionId, fetcher);
   let tools = (listed.result?.tools as Json[]) || [];
   // The server is stateless; a rare empty/failed list is transient — retry once.
   if (!tools.length) {
     debug.retried = true;
-    listed = await mcpRpc(url, "tools/list", {}, id++, listed.sessionId ?? sessionId);
+    listed = await mcpRpc(url, "tools/list", {}, id++, listed.sessionId ?? sessionId, fetcher);
     tools = (listed.result?.tools as Json[]) || [];
   }
   debug.listStatus = listed.status;
@@ -208,8 +224,9 @@ async function mcpCallTool(
   name: string,
   args: Json,
   sessionId: string | undefined,
+  fetcher?: Fetcher,
 ): Promise<string> {
-  const r = await mcpRpc(url, "tools/call", { name, arguments: args }, Math.floor(Math.random() * 1e6) + 10, sessionId);
+  const r = await mcpRpc(url, "tools/call", { name, arguments: args }, Math.floor(Math.random() * 1e6) + 10, sessionId, fetcher);
   if (r.error) return `Tool error: ${r.error.message ?? JSON.stringify(r.error)}`;
   const content = (r.result?.content as Json[]) || [];
   const txt = content
@@ -290,8 +307,9 @@ async function runAgent(env: Env, userMessages: Msg[]) {
   const mcpUrl = env.MCP_URL || DEFAULT_MCP_URL;
   const maxSteps = Number(env.MAX_STEPS) || DEFAULT_MAX_STEPS;
   const gateway = env.AI_GATEWAY_ID ? { gateway: { id: env.AI_GATEWAY_ID } } : undefined;
+  const mcpFetch = env.MCP; // Service binding to ai-mcp, when configured
 
-  const { tools: mcpTools, sessionId, debug: mcpDebug } = await mcpListTools(mcpUrl);
+  const { tools: mcpTools, sessionId, debug: mcpDebug } = await mcpListTools(mcpUrl, mcpFetch);
   const aiTools = mcpTools.map(toAiTool);
   const toolNames = new Set<string>(mcpTools.map((t) => t.name));
 
@@ -332,7 +350,7 @@ async function runAgent(env: Env, userMessages: Msg[]) {
     // Execute every tool the model asked for this turn, then loop again.
     for (const call of calls) {
       const { name, arguments: args } = call;
-      const result = await mcpCallTool(mcpUrl, name, args, sessionId);
+      const result = await mcpCallTool(mcpUrl, name, args, sessionId, mcpFetch);
       steps.push({ tool: name, args, result });
       messages.push({ role: "assistant", content: JSON.stringify({ name, arguments: args }) });
       messages.push({ role: "tool", content: result });
@@ -379,7 +397,7 @@ export default {
       let toolNames: string[] = [];
       let mcpDebug: McpDebug | { error: string };
       try {
-        const listed = await mcpListTools(mcpUrl);
+        const listed = await mcpListTools(mcpUrl, env.MCP);
         toolNames = listed.tools.map((t) => String(t.name));
         mcpDebug = listed.debug;
       } catch (e: any) {
