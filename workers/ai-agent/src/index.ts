@@ -260,6 +260,46 @@ function coerceArgs(a: unknown): Json {
   return {};
 }
 
+/**
+ * Models often emit every argument as a string (e.g. limit:"20"). The MCP server
+ * validates against JSON Schema and rejects the wrong primitive type, so coerce
+ * numeric/boolean strings back to their schema type before calling the tool.
+ */
+function coerceToSchema(args: Json, schema: Json | undefined): Json {
+  const props = (schema && schema.properties) || {};
+  const out: Json = { ...args };
+  for (const [k, v] of Object.entries(out)) {
+    const t = props[k]?.type;
+    if ((t === "integer" || t === "number") && typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) {
+      out[k] = Number(v);
+    } else if (t === "boolean" && typeof v === "string") {
+      if (v === "true") out[k] = true;
+      else if (v === "false") out[k] = false;
+    }
+  }
+  return out;
+}
+
+/**
+ * Run the model with tools, tolerating Workers AI's inconsistent backend routing.
+ * Some backends accept the flat tools shape {name,description,parameters}; others
+ * (vLLM/OpenAI-compatible) 400 with error 8007 unless tools are nested as
+ * {type:"function", function:{...}}. Try flat first (the documented Workers AI
+ * shape), and on a tools-format error retry once with the nested shape.
+ */
+async function aiRunWithTools(env: Env, model: string, messages: Msg[], aiTools: Json[], gateway: any): Promise<any> {
+  try {
+    return await env.AI.run(model, { messages, tools: aiTools } as Json, gateway);
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    if (/\b8007\b|'function'|\btools\b/i.test(msg)) {
+      const nested = aiTools.map((t) => ({ type: "function", function: t }));
+      return await env.AI.run(model, { messages, tools: nested } as Json, gateway);
+    }
+    throw e;
+  }
+}
+
 /** The model's plain-text answer, wherever this model variant puts it. */
 function textOf(resp: any): string {
   return (resp?.response ?? resp?.result ?? "").toString().trim();
@@ -312,6 +352,9 @@ async function runAgent(env: Env, userMessages: Msg[]) {
   const { tools: mcpTools, sessionId, debug: mcpDebug } = await mcpListTools(mcpUrl, mcpFetch);
   const aiTools = mcpTools.map(toAiTool);
   const toolNames = new Set<string>(mcpTools.map((t) => t.name));
+  const schemaByName = new Map<string, Json>(
+    mcpTools.map((t) => [t.name as string, (t.inputSchema || t.input_schema || {}) as Json]),
+  );
 
   // If the MCP server gave us no tools, do NOT let the model freewheel and
   // hallucinate fake tool calls — say so plainly and hand back the diagnostics.
@@ -337,9 +380,9 @@ async function runAgent(env: Env, userMessages: Msg[]) {
   let reply = "";
 
   for (let step = 0; step < maxSteps; step++) {
-    // NEVER pass an empty tools array — Workers AI 400s on it. Omit instead.
-    const runInput: Json = aiTools.length ? { messages, tools: aiTools } : { messages };
-    const resp: any = await env.AI.run(model, runInput, gateway as any);
+    // aiTools is guaranteed non-empty here (we returned early above otherwise);
+    // the helper tolerates Workers AI's flat-vs-nested tools-format routing.
+    const resp: any = await aiRunWithTools(env, model, messages, aiTools, gateway as any);
     const calls = extractCalls(resp, toolNames);
 
     if (!calls.length) {
@@ -347,9 +390,19 @@ async function runAgent(env: Env, userMessages: Msg[]) {
       break;
     }
 
+    // Some models repeat an identical call in one turn — run each only once.
+    const seen = new Set<string>();
+    const unique = calls.filter((c) => {
+      const key = c.name + "\u0000" + JSON.stringify(c.arguments);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     // Execute every tool the model asked for this turn, then loop again.
-    for (const call of calls) {
-      const { name, arguments: args } = call;
+    for (const call of unique) {
+      const { name } = call;
+      const args = coerceToSchema(call.arguments, schemaByName.get(name));
       const result = await mcpCallTool(mcpUrl, name, args, sessionId, mcpFetch);
       steps.push({ tool: name, args, result });
       messages.push({ role: "assistant", content: JSON.stringify({ name, arguments: args }) });
