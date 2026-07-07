@@ -149,9 +149,14 @@ async function mcpListTools(url: string): Promise<{ tools: Json[]; sessionId?: s
     }
   }
 
-  const listed = await mcpRpc(url, "tools/list", {}, id++, sessionId);
-  const tools = (listed.result?.tools as Json[]) || [];
-  return { tools, sessionId: listed.sessionId };
+  let listed = await mcpRpc(url, "tools/list", {}, id++, sessionId);
+  let tools = (listed.result?.tools as Json[]) || [];
+  // The server is stateless; a rare empty/failed list is transient — retry once.
+  if (!tools.length) {
+    listed = await mcpRpc(url, "tools/list", {}, id++, listed.sessionId ?? sessionId);
+    tools = (listed.result?.tools as Json[]) || [];
+  }
+  return { tools, sessionId: listed.sessionId ?? sessionId };
 }
 
 /** Execute one tool and return its result flattened to text. */
@@ -195,6 +200,46 @@ function coerceArgs(a: unknown): Json {
   return {};
 }
 
+/** The model's plain-text answer, wherever this model variant puts it. */
+function textOf(resp: any): string {
+  return (resp?.response ?? resp?.result ?? "").toString().trim();
+}
+
+/** Best-effort JSON parse of a model string that may be fenced or prose-wrapped. */
+function looseJson(s: string): Json | Json[] | undefined {
+  const stripped = s.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const whole = safeJson(stripped);
+  if (whole) return whole;
+  const m = stripped.match(/[\[{][\s\S]*[\]}]/);
+  return m ? safeJson(m[0]) : undefined;
+}
+
+/**
+ * Normalise however this model expressed tool calls into {name, arguments}[].
+ * Some Workers AI models return structured `tool_calls`; others (json variant)
+ * emit the call as JSON *text* in `response`, sometimes keyed `parameters`.
+ */
+function extractCalls(resp: any, known: Set<string>): { name: string; arguments: Json }[] {
+  const norm = (o: any) => ({
+    name: (o?.name || o?.function?.name || "") as string,
+    arguments: coerceArgs(o?.arguments ?? o?.parameters ?? o?.function?.arguments),
+  });
+
+  const structured: any[] = Array.isArray(resp?.tool_calls) ? resp.tool_calls : [];
+  if (structured.length) return structured.map(norm).filter((c) => c.name);
+
+  // Text-form fallback: only treat as a call when the name is a real MCP tool,
+  // so a genuine JSON answer is never mistaken for a tool invocation.
+  const parsed = looseJson(textOf(resp));
+  if (!parsed) return [];
+  const arr: any[] = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray((parsed as Json).tool_calls)
+      ? (parsed as Json).tool_calls
+      : [parsed];
+  return arr.map(norm).filter((c) => c.name && known.has(c.name));
+}
+
 /* --------------------------------------------------------------- agent loop */
 
 async function runAgent(env: Env, userMessages: Msg[]) {
@@ -205,6 +250,7 @@ async function runAgent(env: Env, userMessages: Msg[]) {
 
   const { tools: mcpTools, sessionId } = await mcpListTools(mcpUrl);
   const aiTools = mcpTools.map(toAiTool);
+  const toolNames = new Set<string>(mcpTools.map((t) => t.name));
 
   const messages: Msg[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -215,24 +261,19 @@ async function runAgent(env: Env, userMessages: Msg[]) {
   let reply = "";
 
   for (let step = 0; step < maxSteps; step++) {
-    const resp: any = await env.AI.run(model, { messages, tools: aiTools }, gateway as any);
-    const calls: Json[] = resp?.tool_calls || [];
+    // NEVER pass an empty tools array — Workers AI 400s on it. Omit instead.
+    const runInput: Json = aiTools.length ? { messages, tools: aiTools } : { messages };
+    const resp: any = await env.AI.run(model, runInput, gateway as any);
+    const calls = extractCalls(resp, toolNames);
 
     if (!calls.length) {
-      reply = (resp?.response ?? resp?.result ?? "").toString().trim();
+      reply = textOf(resp);
       break;
     }
 
     // Execute every tool the model asked for this turn, then loop again.
     for (const call of calls) {
-      const name = call.name || call.function?.name;
-      const args = coerceArgs(call.arguments ?? call.function?.arguments);
-      if (!name || !mcpTools.some((t) => t.name === name)) {
-        steps.push({ tool: String(name), args, result: "Unknown tool (not offered by MCP server)" });
-        messages.push({ role: "assistant", content: JSON.stringify(call) });
-        messages.push({ role: "tool", content: "Error: unknown tool" });
-        continue;
-      }
+      const { name, arguments: args } = call;
       const result = await mcpCallTool(mcpUrl, name, args, sessionId);
       steps.push({ tool: name, args, result });
       messages.push({ role: "assistant", content: JSON.stringify({ name, arguments: args }) });
@@ -247,7 +288,7 @@ async function runAgent(env: Env, userMessages: Msg[]) {
       { messages: [...messages, { role: "user", content: "Summarise the result for me in plain language." }] },
       gateway as any,
     );
-    reply = (resp?.response ?? "").toString().trim() || "(no answer)";
+    reply = textOf(resp) || "(no answer)";
   }
 
   return { reply, steps, model, toolCount: mcpTools.length };
