@@ -40,8 +40,16 @@
     .chip { background:var(--panel2); border:1px solid var(--border); border-radius:999px; padding:6px 12px;
             font-size:0.8rem; color:#cdd9f2; cursor:pointer; }
     .chip:hover { border-color:var(--accent); color:var(--accent); }
-    .toolbar { display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:0.8rem; color:var(--muted); }
+    .toolbar { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:10px; font-size:0.8rem; color:var(--muted); flex-wrap:wrap; }
+    .toolbar .tb-left { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     .toolbar a, .toolbar button.link { color:var(--accent); background:none; border:none; cursor:pointer; font-size:0.8rem; padding:0; }
+    .mlabel { color:var(--muted); font-size:0.78rem; }
+    .model-select { background:#0f1836; border:1px solid var(--border); border-radius:8px; color:#cdd9f2;
+                    font-size:0.78rem; padding:5px 26px 5px 9px; max-width:250px; cursor:pointer;
+                    appearance:none; -webkit-appearance:none;
+                    background-image:linear-gradient(45deg,transparent 50%,#8fa3c9 50%),linear-gradient(135deg,#8fa3c9 50%,transparent 50%);
+                    background-position:calc(100% - 14px) 52%,calc(100% - 9px) 52%; background-size:5px 5px,5px 5px; background-repeat:no-repeat; }
+    .model-select:focus { outline:none; border-color:var(--accent); }
     .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#6b7fb3; margin-right:6px; vertical-align:middle; }
     .dot.ok { background:#57d38c; } .dot.bad { background:#ff6b6b; }
 
@@ -90,7 +98,8 @@
     <section class="panel">
       <h2>Live chat</h2>
       <div class="sub">Talks to <code>/agent/api</code> on this domain, which runs the tool-calling loop against
-        <code>https://www.pimenta.fun/mcp</code>.</div>
+        <code>https://www.pimenta.fun/mcp</code>. Pick which <strong>open-source model</strong> drives the loop
+        from the selector below &mdash; every option supports function calling.</div>
 
       <div class="chat">
         <div id="log" class="log">
@@ -119,7 +128,11 @@
       </div>
 
       <div class="toolbar">
-        <span><span id="dot" class="dot"></span><span id="status">idle</span></span>
+        <span class="tb-left">
+          <label class="mlabel" for="model">Model</label>
+          <select id="model" class="model-select" aria-label="Choose the open-source model"></select>
+          <span><span id="dot" class="dot"></span><span id="status">idle</span></span>
+        </span>
         <button id="clear" class="link" type="button">Clear conversation</button>
       </div>
     </section>
@@ -258,9 +271,67 @@ npx wrangler deploy</pre>
       var statusEl = document.getElementById("status");
       var dotEl = document.getElementById("dot");
       var clearBtn = document.getElementById("clear");
+      var modelEl = document.getElementById("model");
 
       // Conversation history sent to the agent (excludes the greeting).
       var history = [];
+
+      // ── model picker ──────────────────────────────────────────────
+      var MODEL_KEY = "pimenta.agent.model";
+      var modelLabels = {}; // id -> friendly label, for the status line
+      // Used only if the GET probe (which returns the live allowlist) fails.
+      var FALLBACK_MODELS = [
+        { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", label: "Llama 3.3 70B \u2014 Meta (default)" },
+        { id: "@cf/openai/gpt-oss-120b", label: "gpt-oss 120B \u2014 OpenAI" },
+        { id: "@cf/openai/gpt-oss-20b", label: "gpt-oss 20B \u2014 OpenAI" },
+        { id: "@cf/mistralai/mistral-small-3.1-24b-instruct", label: "Mistral Small 3.1 24B" },
+        { id: "@cf/qwen/qwen3-30b-a3b-fp8", label: "Qwen3 30B A3B \u2014 Alibaba" },
+        { id: "@cf/google/gemma-4-26b-a4b-it", label: "Gemma 4 26B \u2014 Google" }
+      ];
+
+      function shortLabel(id) {
+        if (!id) return "";
+        if (modelLabels[id]) return modelLabels[id];
+        var p = String(id).split("/");
+        return p[p.length - 1] || id;
+      }
+
+      function populateModels(list, defaultId) {
+        modelEl.innerHTML = "";
+        modelLabels = {};
+        list.forEach(function (m) {
+          modelLabels[m.id] = m.label || m.id;
+          var opt = document.createElement("option");
+          opt.value = m.id;
+          opt.textContent = m.label || m.id;
+          modelEl.appendChild(opt);
+        });
+        var ids = list.map(function (m) { return m.id; });
+        var saved = null;
+        try { saved = localStorage.getItem(MODEL_KEY); } catch (e) {}
+        var pick = (saved && ids.indexOf(saved) !== -1) ? saved
+                 : (defaultId && ids.indexOf(defaultId) !== -1) ? defaultId
+                 : ids[0];
+        modelEl.value = pick;
+      }
+
+      async function initModels() {
+        // The GET probe returns the live open-source allowlist + default.
+        try {
+          var res = await fetch(API, { method: "GET" });
+          var data = await res.json();
+          if (data && Array.isArray(data.models) && data.models.length) {
+            populateModels(data.models, data.defaultModel);
+            return;
+          }
+        } catch (e) { /* fall through to the built-in list */ }
+        populateModels(FALLBACK_MODELS, FALLBACK_MODELS[0].id);
+      }
+
+      modelEl.addEventListener("change", function () {
+        try { localStorage.setItem(MODEL_KEY, modelEl.value); } catch (e) {}
+        setStatus("model: " + shortLabel(modelEl.value), "");
+      });
 
       function setStatus(text, cls) {
         statusEl.textContent = text;
@@ -314,7 +385,7 @@ npx wrangler deploy</pre>
           var res = await fetch(API, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ messages: history })
+            body: JSON.stringify({ messages: history, model: modelEl.value })
           });
           var data = await res.json();
           if (!res.ok) throw new Error(data.detail || data.error || ("HTTP " + res.status));
@@ -323,7 +394,11 @@ npx wrangler deploy</pre>
           var reply = (data.reply || "(no answer)").toString();
           addMsg("bot", reply);
           history.push({ role: "assistant", content: reply });
-          setStatus("idle", "ok");
+          // Show which model actually answered; flag a server-side fallback.
+          setStatus("via " + shortLabel(data.model || modelEl.value), "ok");
+          if (data.model && data.model !== modelEl.value) {
+            addMsg("sys", "Server used " + shortLabel(data.model) + " (requested model unavailable).");
+          }
         } catch (err) {
           typing.remove();
           addMsg("bot", "\u26a0 " + (err && err.message ? err.message : "request failed"));
@@ -359,6 +434,7 @@ npx wrangler deploy</pre>
       });
 
       setStatus("idle", "");
+      initModels();
     })();
   </script>
 </body>
