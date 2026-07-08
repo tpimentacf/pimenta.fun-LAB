@@ -193,7 +193,7 @@
     <section id="playground" class="panel">
       <h2>Interactive playground</h2>
       <p class="sub">Adjust the options &mdash; the URL and the transformed image update live. Source is a real
-        1200&times;800 PNG served from this zone (<code class="inline">/images-lab/sample.png</code>).</p>
+        1536&times;1024 photo of Cloudflare&rsquo;s Lisbon office, served from this zone (<code class="inline">/images-lab/sample.png</code>).</p>
 
       <div class="chips" id="presets">
         <button class="chip" data-preset="thumb">Thumbnail (150, cover)</button>
@@ -207,9 +207,9 @@
 
       <div class="pg-controls" style="margin-top:8px;">
         <div class="ctl"><label for="c-width">Width <span class="v" id="v-width">400</span></label>
-          <input type="range" id="c-width" min="0" max="1200" step="20" value="400" /></div>
+          <input type="range" id="c-width" min="0" max="1536" step="16" value="400" /></div>
         <div class="ctl"><label for="c-height">Height <span class="v" id="v-height">0 (auto)</span></label>
-          <input type="range" id="c-height" min="0" max="800" step="20" value="0" /></div>
+          <input type="range" id="c-height" min="0" max="1024" step="16" value="0" /></div>
         <div class="ctl"><label for="c-fit">Fit</label>
           <select id="c-fit">
             <option value="scale-down">scale-down</option>
@@ -270,8 +270,8 @@
 
       <div class="compare">
         <figure>
-          <div class="cap"><span>Original PNG</span><span class="sz" id="sz-orig">&mdash;</span></div>
-          <img id="img-orig" src="/images-lab/sample.png" alt="Original sample image" />
+          <div class="cap"><span>Original</span><span class="sz" id="sz-orig">&mdash;</span></div>
+          <img id="img-orig" src="/images-lab/sample.png" alt="Cloudflare Lisbon office &mdash; original image" />
         </figure>
         <figure>
           <div class="cap"><span>Transformed</span><span class="sz" id="sz-new">&mdash;</span></div>
