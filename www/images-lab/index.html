@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cloudflare Images &amp; Transformations &mdash; Pimenta Lab</title>
+  <meta name="description" content="Guide and interactive playground for Cloudflare image optimization: URL transformations via /cdn-cgi/image, the cf.image Worker API, quality, format=auto (AVIF/WebP), fit, gravity, blur, sharpen, and the Cloudflare Images product." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    /* page-specific styling layered on /assets/lab.css */
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+
+    /* status banner */
+    .status { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px;
+      border: 1px solid var(--border); background: var(--panel2); font-size: 0.9rem; margin: 0 0 18px; }
+    .status .dot { width: 10px; height: 10px; border-radius: 999px; background: var(--muted); flex: none; }
+    .status.on .dot { background: var(--green); box-shadow: 0 0 0 4px rgba(54,211,153,0.15); }
+    .status.off .dot { background: var(--accent2); box-shadow: 0 0 0 4px rgba(255,107,107,0.15); }
+    .status .txt b { color: var(--text); }
+
+    /* table of contents */
+    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
+    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--panel2); color: var(--muted); text-decoration: none; }
+    .toc a:hover { color: var(--text); border-color: var(--accent); }
+
+    /* url anatomy */
+    .anat { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; line-height: 1.9;
+      background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+      word-break: break-all; }
+    .anat .pfx { color: #9cc0ff; }
+    .anat .opt { color: var(--accent); font-weight: 700; }
+    .anat .src { color: var(--green); }
+    .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px,1fr)); gap: 10px; margin: 12px 0 0; }
+    .legend div { font-size: 0.82rem; color: var(--muted); }
+    .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; }
+
+    /* diagram */
+    figure.diagram { margin: 6px 0 0; background: var(--panel2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px; }
+    figure.diagram svg { width: 100%; height: auto; display: block; }
+    figure.diagram figcaption { color: var(--muted); font-size: 0.8rem; margin-top: 10px; text-align: center; }
+
+    /* playground */
+    .pg-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 14px 18px; }
+    .ctl label { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px;
+      color: var(--muted); margin-bottom: 5px; }
+    .ctl label .v { color: var(--accent); font-weight: 700; text-transform: none; letter-spacing: 0; float: right; }
+    .ctl input[type=range] { width: 100%; accent-color: var(--accent); }
+    .ctl select, .ctl input[type=text], .ctl input[type=number] { width: 100%; background: var(--panel2);
+      color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; font-size: 0.86rem; }
+    .ctl input[type=color] { width: 100%; height: 34px; background: var(--panel2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 2px; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 4px; }
+    .chip { font-size: 0.8rem; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--panel2); color: var(--text); cursor: pointer; }
+    .chip:hover { border-color: var(--accent); }
+
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 6px 0 0; }
+    @media (max-width: 640px) { .compare { grid-template-columns: 1fr; } }
+    .compare figure { margin: 0; }
+    .compare .cap { display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .compare .cap .sz { color: var(--text); font-family: ui-monospace, Menlo, monospace; text-transform: none; }
+    .compare img { width: 100%; height: auto; display: block; border: 1px solid var(--border);
+      border-radius: 10px; background:
+        repeating-conic-gradient(#1b2440 0% 25%, #141c33 0% 50%) 50% / 22px 22px; }
+
+    .urlbox { display: flex; gap: 8px; align-items: stretch; margin: 4px 0 0; }
+    .urlbox code { flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 0.82rem; color: #d7e2f7;
+      background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px;
+      word-break: break-all; }
+    .copied { color: var(--green); font-size: 0.8rem; opacity: 0; transition: opacity 0.2s; align-self: center; }
+    .copied.show { opacity: 1; }
+
+    /* reference table */
+    .ref { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .ref th, .ref td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .ref thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .ref tbody td:first-child { font-family: ui-monospace, Menlo, monospace; color: #9cc0ff; white-space: nowrap; }
+    .ref tbody td:nth-child(2) { font-family: ui-monospace, Menlo, monospace; color: #d7e2f7; }
+    .ref tbody td.d { color: var(--muted); }
+    .ref tbody tr:last-child td { border-bottom: none; }
+
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+    pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+      overflow-x: auto; font-size: 0.82rem; line-height: 1.55; color: #d7e2f7; }
+    pre.code .c { color: var(--muted); }
+    .btn.sm { padding: 8px 12px; font-size: 0.82rem; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Images &amp; Media / Cloudflare Images</div>
+    <span class="tag">Images Lab</span>
+    <h1>Cloudflare <span class="grad">Images &amp; Transformations</span></h1>
+    <p class="lead">Cloudflare resizes, recompresses, and reformats images at the edge &mdash; no build pipeline, no
+      origin work. This lab explains the two ways to do it (<b>URL transformations</b> and the <b>Images</b> product),
+      then lets you build <code class="inline">/cdn-cgi/image/&hellip;</code> URLs live against a real sample and see
+      the bytes shrink.</p>
+
+    <div id="status" class="status">
+      <span class="dot"></span>
+      <span class="txt">Checking whether image transformations are enabled on this zone&hellip;</span>
+    </div>
+
+    <nav class="toc">
+      <a href="#products">Two products</a>
+      <a href="#anatomy">URL anatomy</a>
+      <a href="#playground">Playground</a>
+      <a href="#reference">Options reference</a>
+      <a href="#worker">Worker API</a>
+      <a href="#images">Images product</a>
+      <a href="#enable">Enable &amp; verify</a>
+      <a href="#resources">Resources</a>
+    </nav>
+
+    <!-- ============================================================= -->
+    <section id="products" class="panel">
+      <h2>Two ways to optimize images</h2>
+      <p class="sub">Both deliver optimized bytes from Cloudflare&rsquo;s edge; they differ in where the original lives
+        and how you address it.</p>
+      <ul class="bullets">
+        <li><b>Image Transformations</b> &mdash; transform images that already live on <i>your</i> origin (or any
+          allowed URL). You address them through the <code class="inline">/cdn-cgi/image/&lt;options&gt;/&lt;source&gt;</code>
+          path, or from a Worker via <code class="inline">fetch(url, { cf: { image: &hellip; } })</code>. No upload,
+          no storage &mdash; Cloudflare pulls the source, transforms, and caches the result.</li>
+        <li><b>Cloudflare Images</b> (product) &mdash; you <i>upload and store</i> originals with Cloudflare and serve
+          them from <code class="inline">imagedelivery.net</code> using named <b>variants</b>. Includes direct-creator
+          upload, signed URLs, and per-image analytics. Storage + delivery are billed together.</li>
+      </ul>
+      <figure class="diagram">
+        <svg viewBox="0 0 720 170" role="img" aria-label="Image transformation pipeline">
+          <defs>
+            <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L7,3 L0,6 Z" fill="#5b8def"></path>
+            </marker>
+          </defs>
+          <g font-family="ui-monospace, Menlo, monospace" font-size="12">
+            <rect x="8" y="52" width="150" height="66" rx="10" fill="#0f1528" stroke="#233056"></rect>
+            <text x="83" y="80" text-anchor="middle" fill="#e8edf7">Source image</text>
+            <text x="83" y="98" text-anchor="middle" fill="#9aa6c0">origin or URL</text>
+
+            <rect x="210" y="42" width="176" height="86" rx="10" fill="#0f1528" stroke="#f6821f"></rect>
+            <text x="298" y="70" text-anchor="middle" fill="#f6821f">cdn-cgi/image</text>
+            <text x="298" y="90" text-anchor="middle" fill="#9aa6c0">resize, recompress,</text>
+            <text x="298" y="106" text-anchor="middle" fill="#9aa6c0">reformat (auto)</text>
+
+            <rect x="438" y="52" width="130" height="66" rx="10" fill="#0f1528" stroke="#233056"></rect>
+            <text x="503" y="80" text-anchor="middle" fill="#e8edf7">Edge cache</text>
+            <text x="503" y="98" text-anchor="middle" fill="#9aa6c0">stores result</text>
+
+            <rect x="620" y="52" width="92" height="66" rx="10" fill="#0f1528" stroke="#233056"></rect>
+            <text x="666" y="88" text-anchor="middle" fill="#e8edf7">Browser</text>
+
+            <line x1="158" y1="85" x2="206" y2="85" stroke="#5b8def" stroke-width="2" marker-end="url(#ah)"></line>
+            <line x1="386" y1="85" x2="434" y2="85" stroke="#5b8def" stroke-width="2" marker-end="url(#ah)"></line>
+            <line x1="568" y1="85" x2="616" y2="85" stroke="#5b8def" stroke-width="2" marker-end="url(#ah)"></line>
+          </g>
+        </svg>
+        <figcaption>URL transformation flow: the first request transforms and caches; later requests are cache hits.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="anatomy" class="panel">
+      <h2>Anatomy of a transformation URL</h2>
+      <p class="sub">A transformation is just a special path prefix in front of your image path.</p>
+      <div class="anat">
+        <span class="pfx">/cdn-cgi/image/</span><span class="opt">width=400,quality=75,format=auto</span><span class="src">/images-lab/sample.png</span>
+      </div>
+      <div class="legend">
+        <div><span class="sw" style="background:#9cc0ff"></span><b>Prefix</b> &mdash; fixed magic path handled by the edge.</div>
+        <div><span class="sw" style="background:#f6821f"></span><b>Options</b> &mdash; comma-separated <code class="inline">key=value</code> list.</div>
+        <div><span class="sw" style="background:#36d399"></span><b>Source</b> &mdash; a path on this zone (or a full allowed URL).</div>
+      </div>
+      <div class="note" style="margin-top:14px;">The source can be a <b>relative path</b> on the same zone (as above) or
+        a <b>full URL</b>. Full URLs from other origins only work when the zone setting is <code class="inline">open</code>;
+        with <code class="inline">on</code> (this zone&rsquo;s current mode) only same-zone paths are transformed.</div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="playground" class="panel">
+      <h2>Interactive playground</h2>
+      <p class="sub">Adjust the options &mdash; the URL and the transformed image update live. Source is a real
+        1200&times;800 PNG served from this zone (<code class="inline">/images-lab/sample.png</code>).</p>
+
+      <div class="chips" id="presets">
+        <button class="chip" data-preset="thumb">Thumbnail (150, cover)</button>
+        <button class="chip" data-preset="avif">AVIF, quality 60</button>
+        <button class="chip" data-preset="blur">Blur placeholder</button>
+        <button class="chip" data-preset="gray">Grayscale</button>
+        <button class="chip" data-preset="rotate">Rotate 90&deg;</button>
+        <button class="chip" data-preset="pad">Fit=pad + background</button>
+        <button class="chip" data-preset="reset">Reset</button>
+      </div>
+
+      <div class="pg-controls" style="margin-top:8px;">
+        <div class="ctl"><label for="c-width">Width <span class="v" id="v-width">400</span></label>
+          <input type="range" id="c-width" min="0" max="1200" step="20" value="400" /></div>
+        <div class="ctl"><label for="c-height">Height <span class="v" id="v-height">0 (auto)</span></label>
+          <input type="range" id="c-height" min="0" max="800" step="20" value="0" /></div>
+        <div class="ctl"><label for="c-fit">Fit</label>
+          <select id="c-fit">
+            <option value="scale-down">scale-down</option>
+            <option value="contain">contain</option>
+            <option value="cover" selected>cover</option>
+            <option value="crop">crop</option>
+            <option value="pad">pad</option>
+          </select></div>
+        <div class="ctl"><label for="c-gravity">Gravity (crop focus)</label>
+          <select id="c-gravity">
+            <option value="auto" selected>auto</option>
+            <option value="center">center</option>
+            <option value="left">left</option>
+            <option value="right">right</option>
+            <option value="top">top</option>
+            <option value="bottom">bottom</option>
+          </select></div>
+        <div class="ctl"><label for="c-quality">Quality <span class="v" id="v-quality">75</span></label>
+          <input type="range" id="c-quality" min="1" max="100" step="1" value="75" /></div>
+        <div class="ctl"><label for="c-format">Format</label>
+          <select id="c-format">
+            <option value="auto" selected>auto (AVIF/WebP)</option>
+            <option value="avif">avif</option>
+            <option value="webp">webp</option>
+            <option value="jpeg">jpeg</option>
+            <option value="png">png</option>
+          </select></div>
+        <div class="ctl"><label for="c-blur">Blur <span class="v" id="v-blur">0</span></label>
+          <input type="range" id="c-blur" min="0" max="120" step="1" value="0" /></div>
+        <div class="ctl"><label for="c-sharpen">Sharpen <span class="v" id="v-sharpen">0</span></label>
+          <input type="range" id="c-sharpen" min="0" max="10" step="0.5" value="0" /></div>
+        <div class="ctl"><label for="c-rotate">Rotate</label>
+          <select id="c-rotate">
+            <option value="0" selected>0&deg;</option>
+            <option value="90">90&deg;</option>
+            <option value="180">180&deg;</option>
+            <option value="270">270&deg;</option>
+          </select></div>
+        <div class="ctl"><label for="c-bright">Brightness <span class="v" id="v-bright">1</span></label>
+          <input type="range" id="c-bright" min="0.4" max="2" step="0.05" value="1" /></div>
+        <div class="ctl"><label for="c-contrast">Contrast <span class="v" id="v-contrast">1</span></label>
+          <input type="range" id="c-contrast" min="0.4" max="2" step="0.05" value="1" /></div>
+        <div class="ctl"><label for="c-sat">Saturation <span class="v" id="v-sat">1</span></label>
+          <input type="range" id="c-sat" min="0" max="2" step="0.05" value="1" /></div>
+        <div class="ctl"><label for="c-dpr">DPR <span class="v" id="v-dpr">1</span></label>
+          <input type="range" id="c-dpr" min="1" max="3" step="1" value="1" /></div>
+        <div class="ctl"><label for="c-bg">Background (pad/contain)</label>
+          <input type="color" id="c-bg" value="#0b1020" /></div>
+      </div>
+
+      <h3 style="font-size:0.95rem; margin:20px 0 6px;">Generated URL</h3>
+      <div class="urlbox">
+        <code id="url-out">/cdn-cgi/image/&hellip;</code>
+        <button class="btn ghost sm" id="btn-copy">Copy</button>
+        <a class="btn ghost sm" id="btn-open" href="#" target="_blank" rel="noopener">Open</a>
+        <span class="copied" id="copied">copied</span>
+      </div>
+
+      <div class="compare">
+        <figure>
+          <div class="cap"><span>Original PNG</span><span class="sz" id="sz-orig">&mdash;</span></div>
+          <img id="img-orig" src="/images-lab/sample.png" alt="Original sample image" />
+        </figure>
+        <figure>
+          <div class="cap"><span>Transformed</span><span class="sz" id="sz-new">&mdash;</span></div>
+          <img id="img-new" src="/images-lab/sample.png" alt="Transformed sample image" />
+        </figure>
+      </div>
+      <p class="muted-small" style="margin-top:10px;">Sizes are measured from the actual bytes the browser downloads
+        (<code class="inline">Content-Length</code>). <code class="inline">format=auto</code> serves AVIF or WebP when
+        your browser advertises support &mdash; often a fraction of the original.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="reference" class="panel">
+      <h2>Options reference</h2>
+      <p class="sub">The most useful transformation options. Combine any of them in the comma-separated list.</p>
+      <table class="ref">
+        <thead><tr><th>Option</th><th>Example values</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>width, height</td><td>width=400</td><td class="d">Target dimensions in pixels. Set one to preserve aspect ratio.</td></tr>
+          <tr><td>fit</td><td>cover, contain, scale-down, crop, pad</td><td class="d">How the image fills the box when both width &amp; height are set.</td></tr>
+          <tr><td>gravity</td><td>auto, center, left, 0.5x0.2</td><td class="d">Which part to keep when cropping. <code class="inline">auto</code> picks the salient region.</td></tr>
+          <tr><td>quality</td><td>1&ndash;100 (or low/high)</td><td class="d">Lossy compression level. Lower = smaller bytes.</td></tr>
+          <tr><td>format</td><td>auto, avif, webp, jpeg, png</td><td class="d"><code class="inline">auto</code> negotiates the best modern format per browser.</td></tr>
+          <tr><td>dpr</td><td>1, 2, 3</td><td class="d">Device pixel ratio multiplier for retina displays.</td></tr>
+          <tr><td>blur</td><td>1&ndash;250</td><td class="d">Gaussian blur radius &mdash; great for LQIP placeholders.</td></tr>
+          <tr><td>sharpen</td><td>0&ndash;10</td><td class="d">Sharpening strength applied after resize.</td></tr>
+          <tr><td>rotate</td><td>90, 180, 270</td><td class="d">Rotate in fixed 90&deg; steps.</td></tr>
+          <tr><td>brightness, contrast, saturation</td><td>1.0 = unchanged; 0 sat = grayscale</td><td class="d">Simple tone adjustments.</td></tr>
+          <tr><td>background</td><td>%23RRGGBB or a color name</td><td class="d">Fill color behind transparent areas / <code class="inline">pad</code>.</td></tr>
+          <tr><td>trim</td><td>20 or top;right;bottom;left</td><td class="d">Crop away uniform borders.</td></tr>
+          <tr><td>metadata</td><td>none, copyright, keep</td><td class="d">Which EXIF/metadata to preserve. <code class="inline">none</code> strips everything.</td></tr>
+          <tr><td>onerror</td><td>redirect</td><td class="d">Serve the untransformed original if a transform fails.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="worker" class="panel">
+      <h2>The Worker API (<code class="inline">cf.image</code>)</h2>
+      <p class="sub">For full control &mdash; auth, allow-lists, dynamic sizing &mdash; transform from inside a Worker by
+        passing a <code class="inline">cf.image</code> object to <code class="inline">fetch()</code>.</p>
+      <pre class="code"><span class="c">// workers/img-resize/src/index.js</span>
+export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    const src = url.searchParams.get("image");
+    if (!src) return new Response("missing ?image=", { status: 400 });
+
+    <span class="c">// Optional: only allow images from your own zone</span>
+    const allowed = "https://www.pimenta.fun/";
+    if (!src.startsWith(allowed)) return new Response("forbidden", { status: 403 });
+
+    return fetch(src, {
+      cf: {
+        image: {
+          width: Number(url.searchParams.get("w")) || 800,
+          quality: 80,
+          format: "auto",
+          fit: "cover"
+        }
+      }
+    });
+  }
+}</pre>
+      <p class="muted-small">The <code class="inline">&lt;img&gt;</code> markup for a page just points at the transform
+        path &mdash; and you can generate a responsive <code class="inline">srcset</code>:</p>
+      <pre class="code">&lt;img
+  src="/cdn-cgi/image/width=800,format=auto/images-lab/sample.png"
+  srcset="/cdn-cgi/image/width=480,format=auto/images-lab/sample.png 480w,
+          /cdn-cgi/image/width=960,format=auto/images-lab/sample.png 960w"
+  sizes="(max-width: 640px) 480px, 960px"
+  width="800" height="533" alt="Sample" /&gt;</pre>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="images" class="panel">
+      <h2>The Cloudflare Images product</h2>
+      <p class="sub">When you want Cloudflare to <i>store</i> the originals too, not just transform origin images.</p>
+      <ul class="bullets">
+        <li><b>Upload</b> via API, dashboard, or <b>direct creator upload</b> (one-time upload URL handed to an end user
+          so files never touch your server).</li>
+        <li><b>Variants</b> &mdash; named, reusable transform presets (e.g. <code class="inline">thumbnail</code>,
+          <code class="inline">hero</code>). Delivery URLs look like
+          <code class="inline">https://imagedelivery.net/&lt;hash&gt;/&lt;image-id&gt;/&lt;variant&gt;</code>.</li>
+        <li><b>Signed URLs</b> &mdash; require a token + expiry for private images.</li>
+        <li><b>Flexible variants</b> &mdash; opt in to allow ad-hoc transform parameters on delivery URLs instead of only
+          pre-defined variants.</li>
+      </ul>
+      <pre class="code"><span class="c"># Upload an image with the Images API</span>
+curl -X POST \
+  "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/images/v1" \
+  -H "Authorization: Bearer $CF_IMAGES_TOKEN" \
+  -F "file=@sample.png"</pre>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="enable" class="panel">
+      <h2>Enable &amp; verify</h2>
+      <p class="sub">URL transformations must be turned on per zone before <code class="inline">/cdn-cgi/image/</code>
+        works. This zone is already set to <code class="inline">on</code>.</p>
+      <ul class="bullets">
+        <li><b>Dashboard</b> &mdash; the zone &rarr; <b>Images</b> &rarr; <b>Transformations</b> &rarr; enable
+          &ldquo;Transform via URL&rdquo;. Choose whether to allow other origins.</li>
+        <li><b>API</b> &mdash; set the <code class="inline">image_resizing</code> zone setting to
+          <code class="inline">on</code> (same-zone only) or <code class="inline">open</code> (any origin URL):</li>
+      </ul>
+      <pre class="code">curl -X PATCH \
+  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/settings/image_resizing" \
+  -H "X-Auth-Email: $CF_EMAIL" -H "X-Auth-Key: $CF_API_KEY" \
+  -H "Content-Type: application/json" \
+  --data '{"value":"on"}'
+
+<span class="c"># Verify a transform returns an image (HTTP 200, content-type image/*)</span>
+curl -sI "https://www.pimenta.fun/cdn-cgi/image/width=64/images-lab/sample.png" | grep -i "content-type"</pre>
+      <div class="warn" style="margin-top:14px;">Transformations are a <b>billed</b> feature (priced per unique
+        transformation, with caching). Leave it <code class="inline">on</code> rather than <code class="inline">open</code>
+        unless you specifically need to transform third-party origins.</div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="resources" class="panel">
+      <h2>Resources</h2>
+      <ul class="bullets">
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/images/transform-images/transform-via-url/">Transform images via URL</a> &mdash; the full option list.</li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/images/transform-images/transform-via-workers/">Transform via Workers</a> &mdash; the <code class="inline">cf.image</code> API.</li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/images/">Cloudflare Images</a> &mdash; storage, variants, direct upload, signed URLs.</li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/images/manage-images/enable-transformations/">Enable transformations</a> &mdash; per-zone setup.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    <a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+
+  <script>
+    "use strict";
+    var SRC = "/images-lab/sample.png";
+    var PREFIX = "/cdn-cgi/image/";
+
+    function $(id) { return document.getElementById(id); }
+    var els = {
+      width: $("c-width"), height: $("c-height"), fit: $("c-fit"), gravity: $("c-gravity"),
+      quality: $("c-quality"), format: $("c-format"), blur: $("c-blur"), sharpen: $("c-sharpen"),
+      rotate: $("c-rotate"), bright: $("c-bright"), contrast: $("c-contrast"), sat: $("c-sat"),
+      dpr: $("c-dpr"), bg: $("c-bg")
+    };
+
+    function setLabel(id, txt) { var e = $("v-" + id); if (e) e.textContent = txt; }
+
+    function buildOptions() {
+      var p = [];
+      var w = +els.width.value, h = +els.height.value;
+      if (w > 0) p.push("width=" + w);
+      if (h > 0) p.push("height=" + h);
+      p.push("fit=" + els.fit.value);
+      if (els.gravity.value !== "auto") p.push("gravity=" + els.gravity.value);
+      p.push("quality=" + els.quality.value);
+      p.push("format=" + els.format.value);
+      if (+els.blur.value > 0) p.push("blur=" + els.blur.value);
+      if (+els.sharpen.value > 0) p.push("sharpen=" + els.sharpen.value);
+      if (+els.rotate.value !== 0) p.push("rotate=" + els.rotate.value);
+      if (+els.bright.value !== 1) p.push("brightness=" + els.bright.value);
+      if (+els.contrast.value !== 1) p.push("contrast=" + els.contrast.value);
+      if (+els.sat.value !== 1) p.push("saturation=" + els.sat.value);
+      if (+els.dpr.value > 1) p.push("dpr=" + els.dpr.value);
+      if (els.fit.value === "pad" || els.fit.value === "contain") {
+        p.push("background=%23" + els.bg.value.replace("#", ""));
+      }
+      return p.join(",");
+    }
+
+    var reqSeq = 0;
+    function measure(url, elId) {
+      var seq = ++reqSeq;
+      fetch(url, { cache: "no-store" }).then(function (r) {
+        var len = r.headers.get("content-length");
+        var ct = (r.headers.get("content-type") || "").replace("image/", "");
+        var txt = len ? (Math.round(+len / 1024 * 10) / 10) + " KB" : "?";
+        if (ct) txt += " \u00b7 " + ct;
+        if (seq === reqSeq || elId === "sz-orig") $(elId).textContent = txt;
+      }).catch(function () { $(elId).textContent = "\u2014"; });
+    }
+
+    function render() {
+      var labels = {
+        width: (+els.width.value === 0 ? "0 (auto)" : els.width.value),
+        height: (+els.height.value === 0 ? "0 (auto)" : els.height.value),
+        quality: els.quality.value, blur: els.blur.value, sharpen: els.sharpen.value,
+        bright: els.bright.value, contrast: els.contrast.value, sat: els.sat.value, dpr: els.dpr.value
+      };
+      for (var k in labels) setLabel(k, labels[k]);
+
+      var opts = buildOptions();
+      var url = PREFIX + opts + SRC;
+      $("url-out").textContent = url;
+      $("btn-open").href = url;
+      $("img-new").src = url;
+      measure(url, "sz-new");
+    }
+
+    // wire all controls
+    Object.keys(els).forEach(function (k) {
+      els[k].addEventListener("input", render);
+      els[k].addEventListener("change", render);
+    });
+
+    // presets
+    var PRESETS = {
+      thumb:  { width: 150, height: 150, fit: "cover", gravity: "auto", quality: 75, format: "auto" },
+      avif:   { width: 600, fit: "scale-down", quality: 60, format: "avif" },
+      blur:   { width: 400, fit: "cover", quality: 40, format: "auto", blur: 60 },
+      gray:   { width: 500, fit: "cover", quality: 75, format: "auto", sat: 0 },
+      rotate: { width: 400, fit: "scale-down", quality: 75, format: "auto", rotate: 90 },
+      pad:    { width: 400, height: 400, fit: "pad", quality: 75, format: "auto", bg: "#f6821f" }
+    };
+    var DEFAULTS = { width: 400, height: 0, fit: "cover", gravity: "auto", quality: 75, format: "auto",
+      blur: 0, sharpen: 0, rotate: "0", bright: 1, contrast: 1, sat: 1, dpr: 1, bg: "#0b1020" };
+
+    function applyState(s) {
+      var merged = Object.assign({}, DEFAULTS, s);
+      els.width.value = merged.width; els.height.value = merged.height;
+      els.fit.value = merged.fit; els.gravity.value = merged.gravity;
+      els.quality.value = merged.quality; els.format.value = merged.format;
+      els.blur.value = merged.blur; els.sharpen.value = merged.sharpen;
+      els.rotate.value = String(merged.rotate); els.bright.value = merged.bright;
+      els.contrast.value = merged.contrast; els.sat.value = merged.sat;
+      els.dpr.value = merged.dpr; els.bg.value = merged.bg;
+      render();
+    }
+
+    $("presets").addEventListener("click", function (e) {
+      var b = e.target.closest(".chip"); if (!b) return;
+      var name = b.getAttribute("data-preset");
+      if (name === "reset") { applyState({}); return; }
+      applyState(PRESETS[name] || {});
+    });
+
+    // copy
+    $("btn-copy").addEventListener("click", function () {
+      var abs = location.origin + $("url-out").textContent;
+      navigator.clipboard.writeText(abs).then(function () {
+        var m = $("copied"); m.classList.add("show");
+        setTimeout(function () { m.classList.remove("show"); }, 1400);
+      }).catch(function () {});
+    });
+
+    // status probe + original size
+    function checkStatus() {
+      var probe = PREFIX + "width=48,format=auto" + SRC;
+      var box = $("status");
+      fetch(probe, { cache: "no-store" }).then(function (r) {
+        var ct = r.headers.get("content-type") || "";
+        if (r.ok && ct.indexOf("image/") === 0) {
+          box.className = "status on";
+          box.querySelector(".txt").innerHTML =
+            "<b>Transformations are ON</b> for this zone &mdash; the playground below renders live.";
+        } else {
+          throw new Error("not-image");
+        }
+      }).catch(function () {
+        box.className = "status off";
+        box.querySelector(".txt").innerHTML =
+          "<b>Transformations appear to be OFF</b> &mdash; live images may not render. " +
+          "See <a style=\"color:var(--accent)\" href=\"#enable\">Enable &amp; verify</a>.";
+      });
+    }
+
+    checkStatus();
+    measure(SRC, "sz-orig");
+    render();
+  </script>
+</body>
+</html>

@@ -129,6 +129,13 @@
           impl:"A Worker (<code class=\"inline\">workers/cf-echo/</code>) returns the request as JSON; the lab page renders it. Deploy with <code class=\"inline\">wrangler deploy</code> and bind a route." }
       ]},
 
+      { title: "Images & Media", desc: "Edge image optimization \u2014 resize, recompress, and reformat on the fly.", items: [
+        { name:"Cloudflare Images & Transformations", href:"/images-lab/", prod:"Image Transformations / Images / Workers",
+          badges:["guide","config","origin"],
+          desc:"Guide plus an interactive playground that builds <code class=\"inline\">/cdn-cgi/image/\u2026</code> URLs live (width, quality, format=auto, fit, gravity, blur, sharpen) against a real same-zone PNG, with live byte-size comparison of the transformed output.",
+          impl:"Static page with inline JS; the zone <code class=\"inline\">image_resizing</code> setting is enabled (on). Also covers the <code class=\"inline\">cf.image</code> Worker API and the Cloudflare Images product (variants, signed URLs, direct upload)." }
+      ]},
+
       { title: "Challenges", desc: "WAF custom rules with challenge / validation actions.", items: [
         { name:"Managed Challenge", href:"/challenges/managed/", prod:"WAF",
           badges:["config","origin"],
