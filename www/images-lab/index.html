@@ -120,6 +120,7 @@
       <a href="#playground">Playground</a>
       <a href="#reference">Options reference</a>
       <a href="#worker">Worker API</a>
+      <a href="#flows">Flows</a>
       <a href="#images">Images product</a>
       <a href="#enable">Enable &amp; verify</a>
       <a href="#resources">Resources</a>
@@ -347,6 +348,74 @@ export default {
     </section>
 
     <!-- ============================================================= -->
+    <section id="flows" class="panel">
+      <h2>Transformation flows (no-code automation)</h2>
+      <p class="sub">The URL and Worker methods above are <i>explicit</i> &mdash; you opt each image in. A <b>flow</b> is
+        the opposite: a zone-level rule that <b>transparently rewrites matching image requests</b> through the Images
+        service, so your existing URLs get optimized automatically with no <code class="inline">/cdn-cgi/image/</code>
+        prefix and no Worker. You configure them in the dashboard under
+        <b>Images</b> &rarr; <b>Transformations</b> &rarr; <b>Automation</b>.</p>
+
+      <ul class="bullets">
+        <li><b>Custom flow</b> &mdash; your own <i>conditions</i> (what to match) paired with <i>actions</i> (which
+          optimizations to apply). Best for broad, consistent rules like &ldquo;transcode everything to AVIF&rdquo; or
+          &ldquo;force 100&times;100 under <code class="inline">/thumbnail</code>&rdquo;.</li>
+        <li><b>Provider flow</b> &mdash; a translation layer for migrating off another optimizer. Cloudflare currently
+          supports <b>Fastly Image Optimizer</b>: your existing Fastly URLs (e.g. <code class="inline">?width</code>,
+          <code class="inline">?orient</code>) keep working while Cloudflare maps them to its own parameters.</li>
+      </ul>
+
+      <h3 style="font-size:0.95rem; margin:22px 0 6px;">How a request is matched</h3>
+      <ul class="bullets">
+        <li>Flows are evaluated <b>top to bottom</b>; the <b>first</b> matching flow runs and the rest are skipped
+          (reorder in the dashboard to set priority).</li>
+        <li>If <b>no</b> flow matches, the request passes through to your origin <b>unmodified</b>.</li>
+        <li>Custom flows only trigger on <b>supported image extensions</b> &mdash; HTML, CSS and other non-images are
+          never touched.</li>
+        <li>Flows run <b>after</b> HTTP redirect rules, and include <b>loop prevention</b> (a request already coming
+          from the Images service won&rsquo;t re-trigger the flow).</li>
+        <li>Transformations must be <code class="inline">on</code> for the zone first &mdash; this zone already is
+          (see <a style="color:var(--accent);" href="#enable">Enable &amp; verify</a>).</li>
+      </ul>
+
+      <h3 style="font-size:0.95rem; margin:22px 0 6px;">Custom flow: conditions</h3>
+      <p class="sub">A flow fires only when <b>all</b> configured conditions match.</p>
+      <table class="ref">
+        <thead><tr><th>Condition</th><th>Example</th><th>Matches when&hellip;</th></tr></thead>
+        <tbody>
+          <tr><td>File extension</td><td>jpeg, png, webp</td><td class="d">the request is for one of the chosen image formats (or all formats).</td></tr>
+          <tr><td>URL path</td><td>/images-lab/*</td><td class="d">the path matches the pattern, e.g. everything under a directory.</td></tr>
+          <tr><td>Query parameter</td><td>orient</td><td class="d">the query string contains the named parameter.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="font-size:0.95rem; margin:22px 0 6px;">Example &mdash; auto-optimize this lab&rsquo;s images</h3>
+      <p class="sub">A single custom flow that transcodes and responsively sizes every image under
+        <code class="inline">/images-lab/</code>:</p>
+      <pre class="code"><span class="c"># Images &rarr; Transformations &rarr; Automation &rarr; Add custom flow</span>
+<span class="c"># Flow name: "Optimize lab images"</span>
+
+WHEN  <span class="c">(all conditions match)</span>
+  file extension   is   jpeg, png, webp
+  URL path         is   /images-lab/*
+
+THEN  <span class="c">(apply these actions)</span>
+  format   = auto     <span class="c"># AVIF/WebP negotiated per browser</span>
+  quality  = 80       <span class="c"># or a perceptual level: high / medium-high / ...</span>
+  width    = auto     <span class="c"># size to the requesting device via client hints</span></pre>
+
+      <p class="muted-small">With that flow live, this plain markup is optimized automatically &mdash; note there is
+        <b>no</b> transform prefix in the <code class="inline">src</code>:</p>
+      <pre class="code">&lt;img src="/images-lab/sample.png" alt="Cloudflare Lisbon office" /&gt;</pre>
+      <p class="muted-small">Cloudflare rewrites that request through Images on the edge and serves an AVIF/WebP,
+        device-sized version &mdash; while the original URL, your HTML, and your origin file all stay exactly the same.</p>
+
+      <div class="warn" style="margin-top:14px;">Flows produce transformations under the hood, so they are
+        <b>billed</b> the same way (per unique transformation, with caching). Because a broad path rule can match a lot
+        of traffic, scope conditions tightly and watch usage.</div>
+    </section>
+
+    <!-- ============================================================= -->
     <section id="images" class="panel">
       <h2>The Cloudflare Images product</h2>
       <p class="sub">When you want Cloudflare to <i>store</i> the originals too, not just transform origin images.</p>
@@ -397,6 +466,7 @@ curl -sI "https://www.pimenta.fun/cdn-cgi/image/width=64/images-lab/sample.png" 
       <ul class="bullets">
         <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/images/transform-images/transform-via-url/">Transform images via URL</a> &mdash; the full option list.</li>
         <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/images/transform-images/transform-via-workers/">Transform via Workers</a> &mdash; the <code class="inline">cf.image</code> API.</li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/images/optimization/transformations/flows/">Transformation flows</a> &mdash; no-code zone automation &amp; Fastly migration.</li>
         <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/images/">Cloudflare Images</a> &mdash; storage, variants, direct upload, signed URLs.</li>
         <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/images/manage-images/enable-transformations/">Enable transformations</a> &mdash; per-zone setup.</li>
       </ul>
