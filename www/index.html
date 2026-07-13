@@ -324,6 +324,14 @@
       <div class="go">Open images lab &rarr;</div>
     </a>
 
+    <a class="card" href="https://www.pimenta.fun/precursor-lab/">
+      <span class="doc-tag guide">Guide</span>
+      <h3>Cloudflare Precursor</h3>
+      <div class="url">precursor-lab/</div>
+      <p>Client-side, session-based bot verification that continuously scores behavior and updates the <code>cf_clearance</code> cookie. Guide plus an interactive session inspector (clearance watcher, environment signals, behavior probe) &mdash; and labs to test it.</p>
+      <div class="go">Open precursor lab &rarr;</div>
+    </a>
+
     <a class="card" href="#docs" style="cursor: default;">
       <span class="doc-tag soon">Planned</span>
       <h3>More implementations</h3>
@@ -355,6 +363,12 @@
     // ---------------------------------------------------------------------
     const TESTS = [
       { tab: "Challenges", groups: [
+        { title: "Session verification (Precursor)", links: [
+          ["Precursor lab & guide", "https://www.pimenta.fun/precursor-lab/"],
+          ["Session inspector", "https://www.pimenta.fun/precursor-lab/#inspector"],
+          ["Precursor labs", "https://www.pimenta.fun/precursor-lab/#labs"],
+          ["Turnstile pre-clearance", "https://www.pimenta.fun/turnstile/pre-clearance/"]
+        ]},
         { title: "Challenge types", links: [
           ["Managed challenge", "https://www.pimenta.fun/challenges/managed/"],
           ["JS challenge", "https://www.pimenta.fun/challenges/javascript/"],
@@ -416,7 +430,8 @@
       { tab: "Bot Management", groups: [
         { title: "Tests", links: [
           ["Delay-action", "https://www.pimenta.fun/delay-action/"],
-          ["Chatbot", "https://shop.pimenta.fun/"]
+          ["Chatbot", "https://shop.pimenta.fun/"],
+          ["Precursor (session verification)", "https://www.pimenta.fun/precursor-lab/"]
         ]}
       ]},
       { tab: "Cache", groups: [

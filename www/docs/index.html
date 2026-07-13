@@ -136,7 +136,11 @@
           impl:"Static page with inline JS; the zone <code class=\"inline\">image_resizing</code> setting is enabled (on). Also covers the <code class=\"inline\">cf.image</code> Worker API and the Cloudflare Images product (variants, signed URLs, direct upload)." }
       ]},
 
-      { title: "Challenges", desc: "WAF custom rules with challenge / validation actions.", items: [
+      { title: "Challenges", desc: "Session verification plus WAF custom rules with challenge / validation actions.", items: [
+        { name:"Precursor (session verification)", href:"/precursor-lab/", prod:"Cloudflare Challenges / Bot Management",
+          badges:["guide","config","origin"],
+          desc:"Guide plus an interactive session inspector for Precursor \u2014 client-side, session-based verification that continuously scores visitor behavior and updates the <code class=\"inline\">cf_clearance</code> cookie. Covers the verification loop, Minimize Friction vs Maximize Security modes, Precursor rules, its relationship to JavaScript Detections &amp; Challenge Pages, and hands-on labs.",
+          impl:"Static page with inline JS; enabled as a zone setting under Security &rarr; Settings &rarr; Precursor. The inspector reads client-side signals (<code class=\"inline\">cf_clearance</code>, challenge-platform script, navigator/behavior) for illustration only \u2014 real scoring is server-side." },
         { name:"Managed Challenge", href:"/challenges/managed/", prod:"WAF",
           badges:["config","origin"],
           desc:"Path guarded by a WAF custom rule using the Managed Challenge action \u2014 Cloudflare picks the lowest-friction challenge for the visitor.",
