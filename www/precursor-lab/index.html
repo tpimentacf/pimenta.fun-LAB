@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cloudflare Precursor &mdash; Pimenta Lab</title>
+  <meta name="description" content="Guide and interactive session inspector for Cloudflare Precursor: client-side, session-based bot verification tied to the cf_clearance cookie. How the continuous verification loop works, how to enable it (Minimize Friction vs Maximize Security), Precursor rules, its relationship to JavaScript Detections and Challenge Pages, and hands-on labs to test it." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    /* page-specific styling layered on /assets/lab.css */
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel h3 { font-size: 0.95rem; margin: 22px 0 6px; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+
+    /* status banner */
+    .status { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px;
+      border: 1px solid var(--border); background: var(--panel2); font-size: 0.9rem; margin: 0 0 18px; }
+    .status .dot { width: 10px; height: 10px; border-radius: 999px; background: var(--muted); flex: none; }
+    .status.on .dot { background: var(--green); box-shadow: 0 0 0 4px rgba(54,211,153,0.15); }
+    .status.off .dot { background: var(--accent2); box-shadow: 0 0 0 4px rgba(255,107,107,0.15); }
+    .status .txt b { color: var(--text); }
+
+    /* table of contents */
+    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
+    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--panel2); color: var(--muted); text-decoration: none; }
+    .toc a:hover { color: var(--text); border-color: var(--accent); }
+
+    /* diagram */
+    figure.diagram { margin: 6px 0 0; background: var(--panel2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px; }
+    figure.diagram svg { width: 100%; height: auto; display: block; }
+    figure.diagram figcaption { color: var(--muted); font-size: 0.8rem; margin-top: 10px; text-align: center; }
+
+    /* signal panel */
+    .signals { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 10px; margin: 6px 0 0; }
+    .sig { border: 1px solid var(--border); background: var(--panel2); border-radius: 10px; padding: 10px 12px; }
+    .sig .k { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+    .sig .val { font-family: ui-monospace, Menlo, monospace; font-size: 0.84rem; color: #d7e2f7;
+      margin-top: 4px; word-break: break-all; }
+    .sig.ok .val { color: var(--green); }
+    .sig.warn .val { color: var(--accent2); }
+
+    .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 0.86rem; margin: 4px 0 0; }
+    .kv .k { color: var(--muted); }
+    .kv .v { font-family: ui-monospace, Menlo, monospace; color: #d7e2f7; word-break: break-all; }
+
+    /* behavior probe */
+    .bar { height: 10px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--border);
+      overflow: hidden; margin: 8px 0; }
+    .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+
+    .log { font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; color: #cdd8ef;
+      background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+      max-height: 180px; overflow-y: auto; margin: 8px 0 0; }
+    .log div { padding: 1px 0; }
+    .log .t { color: var(--muted); }
+    .log .g { color: var(--green); }
+    .log .r { color: var(--accent2); }
+
+    .btnrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+    .btn.sm { padding: 8px 12px; font-size: 0.82rem; }
+
+    /* reference table */
+    .ref { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .ref th, .ref td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .ref thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .ref tbody td:first-child { font-family: ui-monospace, Menlo, monospace; color: #9cc0ff; white-space: nowrap; }
+    .ref tbody td.d { color: var(--muted); }
+    .ref tbody tr:last-child td { border-bottom: none; }
+
+    .bullets li { margin: 6px 0; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+    pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+      overflow-x: auto; font-size: 0.82rem; line-height: 1.55; color: #d7e2f7; }
+    pre.code .c { color: var(--muted); }
+    .pill { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--panel2); color: var(--muted); }
+    .pill.f { color: var(--blue); border-color: rgba(91,141,239,0.5); }
+    .pill.s { color: var(--green); border-color: rgba(54,211,153,0.5); }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Challenges / Precursor</div>
+    <span class="tag">Security Lab</span>
+    <h1>Cloudflare <span class="grad">Precursor</span></h1>
+    <p class="lead">Most bot defenses judge a <i>single</i> request. <b>Precursor</b> judges the whole <i>session</i>:
+      a client-side script runs continuously in the browser, streams behavioral and environmental signals to
+      Cloudflare, and updates the visitor&rsquo;s trust state in the <code class="inline">cf_clearance</code> cookie
+      over time &mdash; catching automation that looks fine request-by-request but is non-human across a session.</p>
+
+    <div id="status" class="status">
+      <span class="dot"></span>
+      <span class="txt">Inspecting this session for challenge / clearance signals&hellip;</span>
+    </div>
+
+    <nav class="toc">
+      <a href="#how">How it works</a>
+      <a href="#lifecycle">Session lifecycle</a>
+      <a href="#inspector">Session inspector</a>
+      <a href="#enable">Enable &amp; implement</a>
+      <a href="#modes">Modes</a>
+      <a href="#rules">Precursor rules</a>
+      <a href="#relationships">How it fits</a>
+      <a href="#labs">Labs</a>
+      <a href="#resources">Resources</a>
+    </nav>
+
+    <!-- ============================================================= -->
+    <section id="how" class="panel">
+      <h2>What Precursor is</h2>
+      <p class="sub">Client-side, session-based verification that continuously evaluates visitor behavior to identify
+        automation.</p>
+      <p>A one-time challenge is a snapshot: a bot that solves it once (or replays a stolen
+        <code class="inline">cf_clearance</code> cookie) is trusted until the cookie expires. Precursor turns
+        verification into a <b>continuous loop</b> that keeps watching after the visitor is let in:</p>
+      <ul class="bullets">
+        <li>A client-side script is <b>injected into the page</b> by Cloudflare.</li>
+        <li>The script <b>continuously collects signals</b> (environment + behavior) and performs verification.</li>
+        <li>Each execution produces signals that are <b>evaluated by Cloudflare</b> at the edge.</li>
+        <li>Results <b>update session state</b> stored in the <code class="inline">cf_clearance</code> cookie.</li>
+        <li>The process <b>repeats</b> throughout the session &mdash; so trust can go <i>down</i>, not just up.</li>
+      </ul>
+      <p class="muted-small">The result: clearance becomes both <b>time-bound</b> (the interstitial challenge that
+        first set it) and <b>behavior-bound</b> (Precursor, which can reduce or invalidate it mid-session).</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="lifecycle" class="panel">
+      <h2>The verification loop</h2>
+      <p class="sub">One challenge event vs. an ongoing loop that re-scores the session at regular intervals.</p>
+      <figure class="diagram">
+        <svg viewBox="0 0 760 210" role="img" aria-label="Precursor continuous verification loop">
+          <defs>
+            <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L7,3 L0,6 Z" fill="#5b8def"></path>
+            </marker>
+          </defs>
+          <!-- boxes -->
+          <g font-family="ui-monospace, Menlo, monospace" font-size="12">
+            <rect x="12"  y="70" width="128" height="52" rx="10" fill="#0f1528" stroke="#233056"></rect>
+            <text x="76"  y="92"  fill="#e8edf7" text-anchor="middle">Page loads</text>
+            <text x="76"  y="108" fill="#9aa6c0" text-anchor="middle">on your zone</text>
+
+            <rect x="172" y="70" width="140" height="52" rx="10" fill="#0f1528" stroke="#233056"></rect>
+            <text x="242" y="92"  fill="#e8edf7" text-anchor="middle">Script injected</text>
+            <text x="242" y="108" fill="#9aa6c0" text-anchor="middle">runs in browser</text>
+
+            <rect x="344" y="70" width="150" height="52" rx="10" fill="#0f1528" stroke="#f6821f"></rect>
+            <text x="419" y="92"  fill="#e8edf7" text-anchor="middle">Collect signals</text>
+            <text x="419" y="108" fill="#9aa6c0" text-anchor="middle">behavior + env</text>
+
+            <rect x="526" y="70" width="150" height="52" rx="10" fill="#0f1528" stroke="#233056"></rect>
+            <text x="601" y="92"  fill="#e8edf7" text-anchor="middle">Cloudflare</text>
+            <text x="601" y="108" fill="#9aa6c0" text-anchor="middle">evaluates &amp; scores</text>
+
+            <rect x="344" y="150" width="332" height="44" rx="10" fill="#0f1528" stroke="#36d399"></rect>
+            <text x="510" y="177" fill="#e8edf7" text-anchor="middle">Update session state in cf_clearance cookie</text>
+          </g>
+          <!-- arrows -->
+          <g stroke="#5b8def" stroke-width="2" fill="none">
+            <path d="M140,96 L170,96" marker-end="url(#ar)"></path>
+            <path d="M312,96 L342,96" marker-end="url(#ar)"></path>
+            <path d="M494,96 L524,96" marker-end="url(#ar)"></path>
+            <path d="M601,122 L601,148" marker-end="url(#ar)"></path>
+            <path d="M344,172 L250,172 L250,124" marker-end="url(#ar)"></path>
+          </g>
+          <text x="250" y="200" font-family="ui-monospace, Menlo, monospace" font-size="11"
+            fill="#9aa6c0" text-anchor="middle">repeat throughout the session</text>
+        </svg>
+        <figcaption>Continuous loop: inject &rarr; collect &rarr; evaluate &rarr; update clearance &rarr; repeat.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="inspector" class="panel">
+      <h2>Session inspector <span class="pill">client-side, illustrative</span></h2>
+      <p class="sub">This panel reads only what your own browser exposes to page JavaScript &mdash; it approximates the
+        <i>kinds</i> of signals a behavioral system looks at. It is <b>not</b> Cloudflare&rsquo;s actual bot score, which
+        is computed at the edge from signals JS can never see.</p>
+
+      <h3>Clearance &amp; challenge state</h3>
+      <div class="kv" id="clr"></div>
+      <div class="log" id="clrlog"><div class="t">cf_clearance watcher idle&hellip;</div></div>
+
+      <h3>Environment signals</h3>
+      <div class="signals" id="sigs"></div>
+      <p class="muted-small" id="verdict" style="margin-top:10px;"></p>
+
+      <h3>Behavior probe</h3>
+      <p class="sub">Move the mouse, type, and scroll inside this page for a few seconds. Real users produce dense,
+        irregular input; naive automation often produces none or perfectly uniform timing.</p>
+      <div class="bar"><i id="bfill"></i></div>
+      <div class="kv" id="bstats"></div>
+      <div class="btnrow">
+        <button class="btn sm" id="b-start">Record 6s of interaction</button>
+        <button class="btn sm" id="b-refetch">Re-fetch this page (credentials)</button>
+      </div>
+      <div class="log" id="plog"><div class="t">probe idle&hellip;</div></div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="enable" class="panel">
+      <h2>Enable &amp; implement</h2>
+      <p class="sub">Precursor is a zone-level toggle &mdash; no code, no origin changes. Enabling it is the whole
+        &ldquo;implementation&rdquo; for most sites.</p>
+      <ol class="bullets">
+        <li>In the Cloudflare dashboard, select your <b>zone</b>.</li>
+        <li>Go to <b>Security</b> &rarr; <b>Settings</b>.</li>
+        <li>Locate <b>Precursor</b> and turn it <b>on</b>.</li>
+        <li><b>Choose a mode</b> &mdash; <span class="pill f">Minimize Friction</span> (default) or
+          <span class="pill s">Maximize Security</span> (recommended). For most customers this is the only required
+          configuration.</li>
+        <li><b>Disable JavaScript Detections (JSD)</b> &mdash; Precursor supersedes it (see
+          <a style="color:var(--accent);" href="#relationships">How it fits</a>).</li>
+      </ol>
+      <div class="warn" style="margin-top:14px;">Precursor runs <b>across the whole zone</b> once enabled. Verify in
+        <b>Security</b> &rarr; <b>Analytics</b> &rarr; <b>Traffic</b> &rarr; <b>Bot analysis</b> that its detections
+        appear before you build enforcement rules on top of it.</div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="modes" class="panel">
+      <h2>Modes</h2>
+      <p class="sub">A fully verified session may require a lightweight challenge to establish valid state. The mode
+        decides whether that challenge is ever shown.</p>
+      <table class="ref">
+        <thead><tr><th>Mode</th><th>Interstitial?</th><th>Trade-off</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Minimize Friction<br /><span class="pill f">default</span></td>
+            <td class="d">No. Establishes session state <b>in the background</b>.</td>
+            <td class="d">Smoothest UX, but cannot guarantee every session is fully verified.</td>
+          </tr>
+          <tr>
+            <td>Maximize Security<br /><span class="pill s">recommended</span></td>
+            <td class="d">Yes &mdash; a <b>lightweight challenge</b> if no valid session exists yet.</td>
+            <td class="d">Every session is verified before proceeding; may add a little friction.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="rules" class="panel">
+      <h2>Precursor rules (optional)</h2>
+      <p class="sub">Precursor runs everywhere by default. Rules do <b>not</b> turn it on or off &mdash; they choose
+        <i>which mode</i> applies per request. Common patterns:</p>
+      <ul class="bullets">
+        <li>Run <span class="pill f">Minimize Friction</span> across the site, but enforce
+          <span class="pill s">Maximize Security</span> on <code class="inline">/checkout</code> and
+          <code class="inline">/login</code>.</li>
+        <li>Run <span class="pill s">Maximize Security</span> everywhere <i>except</i> the homepage.</li>
+      </ul>
+      <pre class="code"><span class="c"># Security &rarr; Settings &rarr; Precursor &rarr; Rules (conceptual)</span>
+<span class="c"># Sensitive flows: strict verification</span>
+WHEN  http.request.uri.path in {"/checkout" "/login"}
+THEN  mode = Maximize Security
+
+<span class="c"># Everything else: keep it smooth</span>
+DEFAULT
+THEN  mode = Minimize Friction</pre>
+      <p class="muted-small">Rules are evaluated with the same request fields you already use in WAF custom rules, so
+        you can scope by path, host, country, ASN, and so on.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="relationships" class="panel">
+      <h2>How Precursor fits with the rest of the stack</h2>
+
+      <h3>vs. JavaScript Detections (JSD) &mdash; it replaces it</h3>
+      <ul class="bullets">
+        <li>JSD runs <b>once</b> per HTML request and sets a pass/fail flag
+          (<code class="inline">cf.bot_management.js_detection.passed</code>).</li>
+        <li>Precursor moves to <b>continuous</b> verification, adds <b>session state</b>, and enables dynamic runtime
+          control. <b>If you enable Precursor, disable JSD.</b></li>
+      </ul>
+
+      <h3>vs. Challenge Pages &mdash; it strengthens them</h3>
+      <ul class="bullets">
+        <li>Challenges are <b>point-in-time</b>; Precursor is <b>continuous</b>. It does not replace challenges.</li>
+        <li>It decides <b>when extra challenges are needed</b>, re-evaluates visitors <i>after</i> they already passed
+          one, and spots automation that only emerges over time.</li>
+      </ul>
+
+      <h3>The <code class="inline">cf_clearance</code> cookie</h3>
+      <ul class="bullets">
+        <li>Precursor is tightly integrated with clearance. During a session it can <b>reduce or invalidate</b>
+          effective clearance, <b>trigger additional challenges</b>, or <b>re-verify</b> the visitor &mdash; even if the
+          cookie has not expired.</li>
+      </ul>
+
+      <h3>Security Analytics</h3>
+      <ul class="bullets">
+        <li>Once Precursor runs, its behavioral / biometric detections feed the zone&rsquo;s <b>bot score
+          distribution</b> and WAF rule-match counts under <b>Security</b> &rarr; <b>Analytics</b> &rarr;
+          <b>Traffic</b> &rarr; <b>Bot analysis</b>.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="labs" class="panel">
+      <h2>Labs &mdash; test Precursor on this zone</h2>
+      <p class="sub">Concrete experiments to confirm Precursor is working and to see its effect. Run them against a page
+        on a zone where Precursor is enabled.</p>
+      <table class="ref">
+        <thead><tr><th>#</th><th>Experiment</th><th>What to observe</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Load a page in a real browser, then open DevTools &rarr; Application &rarr; Cookies.</td>
+            <td class="d">A <code class="inline">cf_clearance</code> cookie is present. In DevTools &rarr; Network,
+              a <code class="inline">/cdn-cgi/challenge-platform/&hellip;</code> script is fetched.</td></tr>
+          <tr><td>2</td><td>Stay on the page and interact for a minute, watching the cookie value.</td>
+            <td class="d">Clearance is <b>re-evaluated</b> over the session &mdash; the value can change as new signals
+              are scored (behavior-bound clearance).</td></tr>
+          <tr><td>3</td><td>Set a Precursor rule: <span class="pill s">Maximize Security</span> on
+              <code class="inline">/checkout</code>.</td>
+            <td class="d">Hitting that path with no valid session shows a lightweight interstitial; other paths
+              (Minimize Friction) do not.</td></tr>
+          <tr><td>4</td><td>Compare a real browser vs. a headless one (Playwright / Puppeteer) hitting the same page.</td>
+            <td class="d"><code class="inline">navigator.webdriver=true</code>, missing behavior, and uniform timing
+              push the session toward a low bot score / re-challenge.</td></tr>
+          <tr><td>5</td><td><code class="inline">curl</code> the page (no JS engine) and inspect headers.</td>
+            <td class="d">No clearance is established; behind Maximize Security the request is challenged/blocked
+              rather than served.</td></tr>
+          <tr><td>6</td><td>Open <b>Security</b> &rarr; <b>Analytics</b> &rarr; <b>Bot analysis</b>.</td>
+            <td class="d">Precursor detections appear in the bot score distribution and rule-match counts.</td></tr>
+          <tr><td>7</td><td>Add a WAF custom rule acting on the bot score for a sensitive path.</td>
+            <td class="d">Precursor-informed sessions are challenged/blocked; legitimate sessions pass.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>curl vs. browser (lab 5)</h3>
+      <pre class="code"><span class="c"># A scripted client has no JS runtime, so it never runs the Precursor loop.</span>
+<span class="c"># Under Maximize Security it should be challenged instead of served the page.</span>
+curl -sS -o /dev/null -w "%{http_code}\n" https://www.pimenta.fun/precursor-lab/
+
+<span class="c"># Show the mitigation / ray headers Cloudflare returns:</span>
+curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|server"</pre>
+
+      <h3>WAF custom rule on the resulting score (lab 7)</h3>
+      <pre class="code"><span class="c"># Example expression: challenge low-scoring sessions on a sensitive path.</span>
+(http.request.uri.path eq "/checkout") and (cf.bot_management.score lt 30)
+    <span class="c"># action: Managed Challenge</span></pre>
+      <p class="muted-small">Because Precursor feeds the bot score, rules like this become <i>session-aware</i>: a
+        client that passed an initial challenge but then behaves like automation can still be caught.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="resources" class="panel">
+      <h2>Resources</h2>
+      <ul class="bullets">
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/cloudflare-challenges/precursor/">Precursor</a> &mdash; overview, modes, and setup.</li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/cloudflare-challenges/concepts/clearance/">Clearance &amp; <code class="inline">cf_clearance</code></a> &mdash; interstitial vs. Precursor clearance.</li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/cloudflare-challenges/concepts/how-challenges-work/">How challenges work</a> &mdash; JSD, challenge types, and where Precursor sits.</li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/waf/analytics/security-analytics/">Security Analytics</a> &mdash; the Bot analysis view.</li>
+        <li><a style="color:var(--accent);" href="https://www.pimenta.fun/turnstile/pre-clearance/">Turnstile pre-clearance</a> &mdash; establish clearance from a Turnstile widget.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    <a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+
+  <script>
+    "use strict";
+
+    function $(id) { return document.getElementById(id); }
+    function esc(s) { return String(s).replace(/[<>&]/g, function (c) {
+      return c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&amp;"; }); }
+    function now() { var d = new Date(); return d.toTimeString().slice(0, 8); }
+
+    function getCookie(name) {
+      var m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+      return m ? decodeURIComponent(m[1]) : null;
+    }
+
+    /* ---- clearance + challenge-platform detection ---- */
+    function challengeScriptPresent() {
+      var els = document.querySelectorAll("script[src]");
+      for (var i = 0; i < els.length; i++) {
+        if (els[i].src.indexOf("/cdn-cgi/challenge-platform/") !== -1) return true;
+      }
+      return false;
+    }
+
+    function renderClearance() {
+      var clr = getCookie("cf_clearance");
+      var cs = challengeScriptPresent();
+      var rows = [
+        ["cf_clearance cookie", clr ? "present (" + clr.length + " chars)" : "not set (this session)"],
+        ["challenge-platform script", cs ? "detected on page" : "not detected"],
+        ["document.cookie readable", document.cookie ? "yes" : "empty / httpOnly-only"]
+      ];
+      $("clr").innerHTML = rows.map(function (r) {
+        return '<div class="k">' + esc(r[0]) + '</div><div class="v">' + esc(r[1]) + "</div>";
+      }).join("");
+
+      var st = $("status");
+      if (clr || cs) {
+        st.className = "status on";
+        st.querySelector(".txt").innerHTML =
+          "<b>Challenge signals detected</b> in this session (clearance cookie and/or challenge-platform script). " +
+          "Confirm Precursor itself in the dashboard &rarr; Security &rarr; Analytics.";
+      } else {
+        st.className = "status off";
+        st.querySelector(".txt").innerHTML =
+          "<b>No clearance signals yet.</b> This may be normal (Minimize Friction, or Precursor not enabled here). " +
+          "Enablement is a zone setting &mdash; verify in the dashboard.";
+      }
+      return clr;
+    }
+
+    /* ---- live cf_clearance watcher ---- */
+    var lastClr = null, watchStarted = false;
+    function logClr(msg, cls) {
+      var box = $("clrlog");
+      var line = document.createElement("div");
+      line.innerHTML = '<span class="t">' + now() + "</span> " +
+        (cls ? '<span class="' + cls + '">' + esc(msg) + "</span>" : esc(msg));
+      box.appendChild(line); box.scrollTop = box.scrollHeight;
+    }
+    function watchClearance() {
+      var clr = renderClearance();
+      var key = clr ? clr.length + ":" + clr.slice(-6) : "none";
+      if (!watchStarted) {
+        watchStarted = true; lastClr = key;
+        $("clrlog").innerHTML = "";
+        logClr("watching cf_clearance every 2s (change = re-evaluation)");
+        logClr("initial: " + (clr ? "set, " + clr.length + " chars" : "not set"), clr ? "g" : "r");
+      } else if (key !== lastClr) {
+        lastClr = key;
+        logClr("cf_clearance CHANGED -> " + (clr ? "set, " + clr.length + " chars" : "cleared"),
+          clr ? "g" : "r");
+      }
+    }
+
+    /* ---- environment signals ---- */
+    function webglRenderer() {
+      try {
+        var c = document.createElement("canvas");
+        var gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+        if (!gl) return "no webgl";
+        var dbg = gl.getExtension("WEBGL_debug_renderer_info");
+        if (!dbg) return "hidden";
+        return String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)).slice(0, 40);
+      } catch (e) { return "error"; }
+    }
+
+    function renderSignals() {
+      var nav = navigator, scr = screen;
+      var tz = "";
+      try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { tz = "?"; }
+      var wd = nav.webdriver === true;
+      var langs = (nav.languages || []).join(",") || "(none)";
+      var plugins = nav.plugins ? nav.plugins.length : 0;
+      var headlessUA = /headless/i.test(nav.userAgent);
+      var mobile = /mobi|android|iphone|ipad/i.test(nav.userAgent);
+
+      var sigs = [
+        ["navigator.webdriver", wd ? "true" : "false", wd ? "warn" : "ok"],
+        ["userAgent", nav.userAgent, headlessUA ? "warn" : ""],
+        ["languages", langs, langs === "(none)" ? "warn" : ""],
+        ["hardwareConcurrency", String(nav.hardwareConcurrency || "?"),
+          (nav.hardwareConcurrency ? "" : "warn")],
+        ["deviceMemory", (nav.deviceMemory || "?") + " GB", ""],
+        ["maxTouchPoints", String(nav.maxTouchPoints || 0), ""],
+        ["plugins", String(plugins), (plugins === 0 && !mobile) ? "warn" : ""],
+        ["platform", nav.platform || "?", ""],
+        ["timezone", tz, ""],
+        ["screen", scr.width + "x" + scr.height + " @" + (window.devicePixelRatio || 1) + "x", ""],
+        ["webgl renderer", webglRenderer(), ""]
+      ];
+      $("sigs").innerHTML = sigs.map(function (s) {
+        return '<div class="sig ' + (s[2] || "") + '"><div class="k">' + esc(s[0]) +
+          '</div><div class="val">' + esc(s[1]) + "</div></div>";
+      }).join("");
+
+      var flags = [];
+      if (wd) flags.push("navigator.webdriver=true");
+      if (headlessUA) flags.push("Headless in UA");
+      if (langs === "(none)") flags.push("no languages");
+      if (plugins === 0 && !mobile) flags.push("no plugins (desktop)");
+      if (!nav.hardwareConcurrency) flags.push("no hardwareConcurrency");
+      $("verdict").innerHTML = flags.length
+        ? "Illustrative automation hints: <b style='color:var(--accent2)'>" + esc(flags.join(", ")) +
+          "</b>. Cloudflare weighs far more, server-side."
+        : "No obvious client-side automation flags. (Cloudflare&rsquo;s real scoring uses many more, hidden signals.)";
+    }
+
+    /* ---- behavior probe ---- */
+    var probing = false;
+    function startProbe() {
+      if (probing) return;
+      probing = true;
+      var moves = 0, keys = 0, scrolls = 0, tPrev = 0, gaps = [];
+      var DURATION = 6000, t0 = Date.now();
+      $("plog").innerHTML = "";
+      var pl = function (m, c) {
+        var box = $("plog"); var d = document.createElement("div");
+        d.innerHTML = '<span class="t">' + now() + "</span> " +
+          (c ? '<span class="' + c + '">' + esc(m) + "</span>" : esc(m));
+        box.appendChild(d); box.scrollTop = box.scrollHeight;
+      };
+      pl("recording 6s of interaction \u2014 move, type, scroll now");
+
+      var onMove = function () {
+        moves++;
+        var t = Date.now(); if (tPrev) gaps.push(t - tPrev); tPrev = t;
+      };
+      var onKey = function () { keys++; };
+      var onScroll = function () { scrolls++; };
+      window.addEventListener("mousemove", onMove, true);
+      window.addEventListener("pointermove", onMove, true);
+      window.addEventListener("keydown", onKey, true);
+      window.addEventListener("scroll", onScroll, true);
+
+      var tick = setInterval(function () {
+        var frac = Math.min(1, (Date.now() - t0) / DURATION);
+        $("bfill").style.width = (frac * 100).toFixed(0) + "%";
+      }, 100);
+
+      setTimeout(function () {
+        clearInterval(tick);
+        window.removeEventListener("mousemove", onMove, true);
+        window.removeEventListener("pointermove", onMove, true);
+        window.removeEventListener("keydown", onKey, true);
+        window.removeEventListener("scroll", onScroll, true);
+        probing = false;
+        $("bfill").style.width = "100%";
+
+        var total = moves + keys + scrolls;
+        var avg = gaps.length ? Math.round(gaps.reduce(function (a, b) { return a + b; }, 0) / gaps.length) : 0;
+        // crude timing-uniformity check: std-dev of gaps
+        var sd = 0;
+        if (gaps.length > 1) {
+          var m = avg;
+          sd = Math.round(Math.sqrt(gaps.reduce(function (a, b) { return a + (b - m) * (b - m); }, 0) / gaps.length));
+        }
+        $("bstats").innerHTML =
+          '<div class="k">mouse/pointer moves</div><div class="v">' + moves + "</div>" +
+          '<div class="k">key presses</div><div class="v">' + keys + "</div>" +
+          '<div class="k">scroll events</div><div class="v">' + scrolls + "</div>" +
+          '<div class="k">avg move gap</div><div class="v">' + avg + " ms</div>" +
+          '<div class="k">gap std-dev</div><div class="v">' + sd + " ms</div>";
+
+        if (total < 8) {
+          pl("very little interaction (" + total + " events) \u2014 bot-like / idle", "r");
+        } else if (gaps.length > 5 && sd < 3) {
+          pl("dense but suspiciously uniform timing (std-dev " + sd + "ms) \u2014 scripted?", "r");
+        } else {
+          pl("dense, irregular input (" + total + " events) \u2014 looks human", "g");
+        }
+        pl("illustrative only \u2014 Precursor scores this server-side with far richer telemetry");
+      }, DURATION);
+    }
+
+    /* ---- re-fetch probe ---- */
+    function refetch() {
+      var box = $("plog");
+      var pl = function (m, c) {
+        var d = document.createElement("div");
+        d.innerHTML = '<span class="t">' + now() + "</span> " +
+          (c ? '<span class="' + c + '">' + esc(m) + "</span>" : esc(m));
+        box.appendChild(d); box.scrollTop = box.scrollHeight;
+      };
+      var url = location.pathname + "?_p=" + Date.now();
+      pl("GET " + url + " (credentials: include)");
+      fetch(url, { credentials: "include", headers: { "X-Precursor-Lab": "1" } })
+        .then(function (r) {
+          var ray = r.headers.get("cf-ray");
+          var mit = r.headers.get("cf-mitigated");
+          pl("status " + r.status + (ray ? "  cf-ray=" + ray : "") +
+            (mit ? "  cf-mitigated=" + mit : ""), r.status >= 400 || mit ? "r" : "g");
+          if (mit === "challenge" || r.status === 403) {
+            pl("this request was challenged/blocked \u2014 Maximize Security behavior", "r");
+          } else {
+            pl("served normally \u2014 existing session is currently trusted", "g");
+          }
+          // re-read clearance after the round-trip
+          watchClearance();
+        })
+        .catch(function (e) { pl("fetch error: " + e.message, "r"); });
+    }
+
+    /* ---- boot ---- */
+    document.addEventListener("DOMContentLoaded", function () {
+      renderSignals();
+      watchClearance();
+      setInterval(watchClearance, 2000);
+      $("b-start").addEventListener("click", startProbe);
+      $("b-refetch").addEventListener("click", refetch);
+    });
+  </script>
+</body>
+</html>
