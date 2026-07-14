@@ -102,6 +102,7 @@
       <a href="#workflow">Request workflow</a>
       <a href="#forwarding">Connection forwarding</a>
       <a href="#madrid">Madrid example</a>
+      <a href="#twopops">One vs two POPs</a>
       <a href="#benefits">Benefits</a>
       <a href="#implement">Implement</a>
       <a href="#generator">Allowlist generator</a>
@@ -438,6 +439,111 @@
       <p class="muted-small">Trade-off: pinning egress to Madrid adds a POP-to-POP hop for far-away users (e.g. New
         York), so place dedicated IPv4s near your origin and, for global low-latency egress, consider dedicated
         <b>IPv6</b> (deployed globally, no forwarding) or provisioning IPv4 in up to four locations.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="twopops" class="panel">
+      <h2>One egress POP vs two egress POPs</h2>
+      <p class="sub">Adding a second dedicated location (Lisbon alongside Madrid) shortens the egress path for nearby
+        users, splits capacity, and adds redundancy &mdash; at the cost of one more IP to allowlist on the origin.</p>
+      <figure class="diagram">
+        <svg viewBox="0 0 760 340" role="img"
+          aria-label="Comparison of one egress POP versus two egress POPs feeding the same origin">
+          <defs>
+            <marker id="mm" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L7,3 L0,6 Z" fill="#5b8def"></path>
+            </marker>
+            <marker id="mg" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L7,3 L0,6 Z" fill="#36d399"></path>
+            </marker>
+          </defs>
+
+          <!-- divider -->
+          <line x1="0" y1="162" x2="760" y2="162" stroke="#233056" stroke-dasharray="4 5"></line>
+
+          <g font-family="ui-monospace, Menlo, monospace" font-size="10.5">
+            <!-- ============ PANEL A: one egress POP ============ -->
+            <text x="12" y="18" fill="#f6a85f" font-size="12">One egress POP &mdash; all traffic via Madrid</text>
+
+            <rect x="8" y="34" width="112" height="32" rx="8" fill="#0f1528" stroke="#233056"></rect>
+            <text x="64" y="54" fill="#e8edf7" text-anchor="middle">Lisbon user</text>
+            <rect x="8" y="92" width="112" height="32" rx="8" fill="#0f1528" stroke="#233056"></rect>
+            <text x="64" y="112" fill="#e8edf7" text-anchor="middle">Frankfurt user</text>
+
+            <rect x="300" y="46" width="152" height="64" rx="12" fill="#0f1528" stroke="#f6821f" stroke-width="1.5"></rect>
+            <text x="376" y="72" fill="#e8edf7" text-anchor="middle">Madrid POP</text>
+            <text x="376" y="92" fill="#8ef2c4" text-anchor="middle">203.0.113.10</text>
+
+            <rect x="560" y="50" width="150" height="58" rx="12" fill="#0f1528" stroke="#ff6b6b"></rect>
+            <text x="635" y="74" fill="#e8edf7" text-anchor="middle">Origin allows</text>
+            <text x="635" y="93" fill="#8ef2c4" text-anchor="middle">203.0.113.10/32</text>
+
+            <text x="210" y="34" fill="#9aa6c0" text-anchor="middle" font-size="9.5">both forwarded to Madrid</text>
+
+            <!-- ============ PANEL B: two egress POPs ============ -->
+            <text x="12" y="188" fill="#f6a85f" font-size="12">Two egress POPs &mdash; nearest of Lisbon / Madrid</text>
+
+            <rect x="8" y="206" width="112" height="32" rx="8" fill="#0f1528" stroke="#233056"></rect>
+            <text x="64" y="226" fill="#e8edf7" text-anchor="middle">Lisbon user</text>
+            <rect x="8" y="278" width="112" height="32" rx="8" fill="#0f1528" stroke="#233056"></rect>
+            <text x="64" y="298" fill="#e8edf7" text-anchor="middle">Frankfurt user</text>
+
+            <rect x="278" y="198" width="152" height="50" rx="12" fill="#0f1528" stroke="#36d399" stroke-width="1.5"></rect>
+            <text x="354" y="220" fill="#e8edf7" text-anchor="middle">Lisbon POP</text>
+            <text x="354" y="238" fill="#8ef2c4" text-anchor="middle">203.0.113.20</text>
+            <rect x="278" y="268" width="152" height="50" rx="12" fill="#0f1528" stroke="#f6821f" stroke-width="1.5"></rect>
+            <text x="354" y="290" fill="#e8edf7" text-anchor="middle">Madrid POP</text>
+            <text x="354" y="308" fill="#8ef2c4" text-anchor="middle">203.0.113.10</text>
+
+            <rect x="560" y="228" width="150" height="70" rx="12" fill="#0f1528" stroke="#ff6b6b"></rect>
+            <text x="635" y="252" fill="#e8edf7" text-anchor="middle">Origin allows</text>
+            <text x="635" y="271" fill="#8ef2c4" text-anchor="middle">203.0.113.20/32</text>
+            <text x="635" y="289" fill="#8ef2c4" text-anchor="middle">203.0.113.10/32</text>
+
+            <text x="205" y="188" fill="#9aa6c0" text-anchor="middle" font-size="9.5">each user egresses locally</text>
+          </g>
+
+          <!-- Panel A arrows -->
+          <g stroke="#5b8def" stroke-width="1.8" fill="none">
+            <path d="M120,50  C 210,50 220,78 298,72" marker-end="url(#mm)"></path>
+            <path d="M120,108 C 210,108 220,84 298,90" marker-end="url(#mm)"></path>
+          </g>
+          <g stroke="#36d399" stroke-width="2.2" fill="none">
+            <path d="M452,78 L558,78" marker-end="url(#mg)"></path>
+          </g>
+
+          <!-- Panel B arrows -->
+          <g stroke="#5b8def" stroke-width="1.8" fill="none">
+            <path d="M120,222 L276,222" marker-end="url(#mm)"></path>
+            <path d="M120,294 L276,294" marker-end="url(#mm)"></path>
+          </g>
+          <g stroke="#36d399" stroke-width="2.2" fill="none">
+            <path d="M430,222 C 495,222 505,258 558,258" marker-end="url(#mg)"></path>
+            <path d="M430,294 C 495,294 505,272 558,272" marker-end="url(#mg)"></path>
+          </g>
+        </svg>
+        <figcaption>Top: a single dedicated IP in Madrid &mdash; the Frankfurt user is forwarded across Europe to
+          egress. Bottom: a second dedicated IP in Lisbon lets each user egress from the closer POP; the origin simply
+          allowlists both addresses.</figcaption>
+      </figure>
+      <table class="ref">
+        <thead><tr><th>Aspect</th><th>One egress POP (Madrid)</th><th>Two egress POPs (Madrid + Lisbon)</th></tr></thead>
+        <tbody>
+          <tr><td>Egress path</td><td class="d">All users hop to Madrid, even far ones.</td>
+            <td class="d">Each user egresses from the nearer POP &mdash; shorter path, lower latency.</td></tr>
+          <tr><td>Origin allowlist</td><td class="d">One IP: <code class="inline">203.0.113.10/32</code>.</td>
+            <td class="d">Two IPs: <code class="inline">.10/32</code> and <code class="inline">.20/32</code>.</td></tr>
+          <tr><td>Capacity</td><td class="d">40k conns per origin IP:port on one IP.</td>
+            <td class="d">Split across two IPs / locations &mdash; more headroom.</td></tr>
+          <tr><td>Resilience</td><td class="d">Madrid is a single point for egress.</td>
+            <td class="d">If one location is impaired, forwarding falls back to the other.</td></tr>
+          <tr><td>Cost / setup</td><td class="d">Simplest &mdash; one location to provision.</td>
+            <td class="d">More IPs/locations to provision and allowlist.</td></tr>
+        </tbody>
+      </table>
+      <p class="muted-small">A single IPv4 can be split across up to <b>four</b> locations; work with your account team
+        to place them near where your users (and origin) are. For global egress with no forwarding at all, dedicated
+        <b>IPv6</b> is deployed across every data center.</p>
     </section>
 
     <!-- ============================================================= -->
