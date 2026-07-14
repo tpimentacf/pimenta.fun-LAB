@@ -126,7 +126,11 @@
         { name:"CF Echo (request.cf)", href:"/cf-echo/", prod:"Workers",
           badges:["worker","origin"],
           desc:"Reflects the full request.cf object and every CF-injected request header (CF-Connecting-IP, CF-Ray, CF-IPCountry\u2026) that client-side JS can never see.",
-          impl:"A Worker (<code class=\"inline\">workers/cf-echo/</code>) returns the request as JSON; the lab page renders it. Deploy with <code class=\"inline\">wrangler deploy</code> and bind a route." }
+          impl:"A Worker (<code class=\"inline\">workers/cf-echo/</code>) returns the request as JSON; the lab page renders it. Deploy with <code class=\"inline\">wrangler deploy</code> and bind a route." },
+        { name:"Aegis / Dedicated CDN Egress IPs", href:"/aegis-lab/", prod:"Dedicated CDN Egress IPs (Aegis)",
+          badges:["guide","config"],
+          desc:"Guide to Cloudflare Aegis: reserved Cloudflare&rarr;origin egress IPs so you can allowlist a tiny source list on your origin. Covers ingress vs egress, the full request workflow, IPv4 connection forwarding, and setup via the <code class=\"inline\">aegis</code> zone setting \u2014 plus an origin firewall allowlist rule generator.",
+          impl:"Static page with architecture SVGs and inline JS (client-side iptables/nftables/ufw/nginx allowlist generator). Enablement is Enterprise-only via the <code class=\"inline\">aegis</code> zone setting (PATCH with an egress pool_id); not enabled on this zone." }
       ]},
 
       { title: "Images & Media", desc: "Edge image optimization \u2014 resize, recompress, and reformat on the fly.", items: [
