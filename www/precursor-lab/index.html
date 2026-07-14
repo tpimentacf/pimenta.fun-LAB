@@ -17,6 +17,7 @@
       border: 1px solid var(--border); background: var(--panel2); font-size: 0.9rem; margin: 0 0 18px; }
     .status .dot { width: 10px; height: 10px; border-radius: 999px; background: var(--muted); flex: none; }
     .status.on .dot { background: var(--green); box-shadow: 0 0 0 4px rgba(54,211,153,0.15); }
+    .status.warn .dot { background: var(--accent); box-shadow: 0 0 0 4px rgba(246,130,31,0.15); }
     .status.off .dot { background: var(--accent2); box-shadow: 0 0 0 4px rgba(255,107,107,0.15); }
     .status .txt b { color: var(--text); }
 
@@ -406,17 +407,36 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
         return '<div class="k">' + esc(r[0]) + '</div><div class="v">' + esc(r[1]) + "</div>";
       }).join("");
 
-      var st = $("status");
-      if (clr || cs) {
+      var st = $("status"), txt = st.querySelector(".txt");
+      if (clr && cs) {
+        // clearance established AND verification loop running
         st.className = "status on";
-        st.querySelector(".txt").innerHTML =
-          "<b>Challenge signals detected</b> in this session (clearance cookie and/or challenge-platform script). " +
-          "Confirm Precursor itself in the dashboard &rarr; Security &rarr; Analytics.";
+        txt.innerHTML =
+          "<b>Session verified.</b> A <code class=\"inline\">cf_clearance</code> cookie is set <i>and</i> the " +
+          "challenge-platform verification script is running &mdash; the clearance signal is active and being " +
+          "re-evaluated. Confirm Precursor itself in the dashboard &rarr; Security &rarr; Analytics.";
+      } else if (clr && !cs) {
+        // clearance present, but the verification script isn't on this page
+        st.className = "status on";
+        txt.innerHTML =
+          "<b>Clearance present.</b> A <code class=\"inline\">cf_clearance</code> cookie is set, so a valid session " +
+          "exists &mdash; but the challenge-platform verification script is <i>not</i> detected on this page right now. " +
+          "The clearance was likely established earlier in the session.";
+      } else if (!clr && cs) {
+        // verification running, no clearance yet
+        st.className = "status warn";
+        txt.innerHTML =
+          "<b>Verification running &mdash; no clearance yet.</b> The challenge-platform script is present, but no " +
+          "<code class=\"inline\">cf_clearance</code> cookie is set. Session state has not been established yet " +
+          "(typical of Minimize Friction until a signal is scored).";
       } else {
+        // neither signal
         st.className = "status off";
-        st.querySelector(".txt").innerHTML =
-          "<b>No clearance signals yet.</b> This may be normal (Minimize Friction, or Precursor not enabled here). " +
-          "Enablement is a zone setting &mdash; verify in the dashboard.";
+        txt.innerHTML =
+          "<b>No clearance signals yet.</b> No <code class=\"inline\">cf_clearance</code> cookie <i>and</i> no " +
+          "challenge-platform verification script were found. This can be normal (Minimize Friction, a cached page, " +
+          "or an <code class=\"inline\">httpOnly</code> cookie invisible to JS) &mdash; or Precursor may not be enabled " +
+          "on this zone. Enablement is a zone setting &mdash; verify in the dashboard.";
       }
       return clr;
     }
