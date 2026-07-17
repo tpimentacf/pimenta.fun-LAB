@@ -254,10 +254,10 @@
           badges:["origin"],
           desc:"Tests the Cloudflare-specific edge TTL header, independent of the browser's Cache-Control.",
           impl:"Origin sets <code class=\"inline\">Cloudflare-CDN-Cache-Control</code> so the edge and browser TTLs differ." },
-        { name:"Override via Workers", href:"/cache/cache-worker/", prod:"Workers Cache API",
-          badges:["worker"],
-          desc:"A Worker rewrites Cache-Control / cache keys for the route.",
-          impl:"Worker bound to the route manipulating cache headers / the Cache API." }
+        { name:"Cache Control Override via Workers", href:"/cache/cache-worker/", prod:"Workers Cache API",
+          badges:["guide","worker"],
+          desc:"Guide + implementation: a Worker forces a 3600s CDN edge TTL (<code class=\"inline\">s-maxage</code>) whenever the origin sends <code class=\"inline\">Cache-Control: max-age</code>, using the Cache API because <code class=\"inline\">cf.cacheTtl</code> must be set before the response can be read. Covers the six-step logic, header anatomy, a decision tree, CF-Cache-Status, limitations, and a live header checker.",
+          impl:"Worker in <code class=\"inline\">workers/cache-override/</code> (<code class=\"inline\">cache.match</code>/<code class=\"inline\">cache.put</code> + <code class=\"inline\">ctx.waitUntil</code>) bound to the route <code class=\"inline\">www.pimenta.fun/cache/cache-worker*</code>. Deploy with wrangler." }
       ]},
 
       { title: "Rules", desc: "The Cloudflare Rules engine \u2014 redirects and transforms.", items: [

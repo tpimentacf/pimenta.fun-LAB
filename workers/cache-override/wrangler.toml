@@ -1,0 +1,13 @@
+name = "cache-override"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# Route the Worker so it fronts the cache lab page and can override its edge TTL.
+# Adjust the zone_name to your zone. Comment this out to deploy to
+# cache-override.<your-subdomain>.workers.dev instead.
+routes = [
+  { pattern = "www.pimenta.fun/cache/cache-worker*", zone_name = "pimenta.fun" }
+]
+
+# Optional: enable a workers.dev preview URL while testing.
+workers_dev = true
