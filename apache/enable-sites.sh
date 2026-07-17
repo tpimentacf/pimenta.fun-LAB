@@ -20,7 +20,7 @@ CONF_AVAIL="/etc/apache2/conf-available"
 SITES_AVAIL="/etc/apache2/sites-available"
 
 SITES=(www.pimenta.fun shop.pimenta.fun api.pimenta.fun aop.pimenta.fun)
-SNIPPETS=(pimenta-security-headers.conf pimenta-cache-headers.conf pimenta-ssl-params.conf pimenta-ssl-stapling.conf)
+SNIPPETS=(pimenta-security-headers.conf pimenta-cache-headers.conf pimenta-error-pages.conf pimenta-ssl-params.conf pimenta-ssl-stapling.conf)
 AOP_CA="/etc/apache2/cloudflare/origin-pull-ca.pem"
 AOP_CA_URL="https://developers.cloudflare.com/ssl/static/authenticated_origin_pull_ca.pem"
 

@@ -4,7 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>502 Bad Gateway &mdash; Pimenta Lab</title>
+  <meta name="description" content="HTTP 502 Bad Gateway — a gateway/proxy received an invalid response from the upstream origin. Served by the origin (Apache ErrorDocument) with a real 502 status code." />
   <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .ostatus { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--panel2); font-family: ui-monospace, Menlo, monospace;
+      font-size: 0.86rem; color: var(--muted); }
+    .ostatus .dot { width: 9px; height: 9px; border-radius: 999px; background: var(--muted); }
+    .ostatus.ok { border-color: rgba(54,211,153,0.5); color: var(--green); }
+    .ostatus.ok .dot { background: var(--green); box-shadow: 0 0 0 4px rgba(54,211,153,0.15); }
+    .ostatus.bad { border-color: rgba(255,107,107,0.5); color: var(--accent2); }
+    .ostatus.bad .dot { background: var(--accent2); box-shadow: 0 0 0 4px rgba(255,107,107,0.15); }
+    .ecols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 22px 0 0; }
+    @media (max-width: 640px) { .ecols { grid-template-columns: 1fr; } }
+    .ecard { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+    .ecard h3 { margin: 0 0 8px; font-size: 0.95rem; }
+    .ecard ul { margin: 0; padding-left: 18px; }
+    .ecard li { margin: 5px 0; color: var(--muted); font-size: 0.88rem; }
+  </style>
 </head>
 <body>
   <header class="lab">
@@ -20,13 +37,57 @@
     <span class="tag">Error page</span>
     <h1><span class="grad">502</span> Bad Gateway</h1>
     <div class="center"><div class="big-code">502</div></div>
-    <p class="lead center">The origin returned an invalid response.</p>
-    <div class="note">Use this as a <strong>Custom Error Response</strong> page in Cloudflare for HTTP 502, or return it from a WAF/Origin rule.</div>
-    <p class="center"><a class="btn" href="https://www.pimenta.fun">Back to home</a></p>
+    <p class="lead center">A gateway or proxy received an invalid response from the upstream server.</p>
+    <p class="center"><span class="ostatus" id="ostatus"><span class="dot"></span>checking origin status&hellip;</span></p>
+
+    <div class="ecols">
+      <div class="ecard">
+        <h3>What it means</h3>
+        <ul>
+          <li>A server acting as a <b>gateway/proxy</b> (a CDN, load balancer, or reverse proxy) couldn&rsquo;t get a
+            valid reply from the origin behind it.</li>
+          <li>The problem is <i>upstream</i> &mdash; not with your browser or the request itself.</li>
+          <li>Usually transient; a retry often succeeds once the origin recovers.</li>
+        </ul>
+      </div>
+      <div class="ecard">
+        <h3>Common causes</h3>
+        <ul>
+          <li>The origin is down, crashed, or overloaded.</li>
+          <li>A connection timeout or reset between proxy and origin.</li>
+          <li>The origin returned a malformed / empty response.</li>
+          <li>Wrong origin port, or a TLS handshake failure to the origin.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="note">Served by the <strong>origin</strong> (Apache <code class="inline">ErrorDocument 502</code>) with a
+      real HTTP <strong>502</strong> status &mdash; the pill above confirms the status code returned for this page.</div>
+    <p class="center"><a class="btn" href="https://www.pimenta.fun">Back to home</a>
+      <a class="btn ghost" href="https://www.pimenta.fun/#tests">Error tests</a></p>
   </main>
 
   <footer class="lab">
     Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
   </footer>
+
+  <script>
+    "use strict";
+    (function () {
+      var EXPECT = 502;
+      var el = document.getElementById("ostatus");
+      fetch(location.pathname, { cache: "no-store", redirect: "manual" })
+        .then(function (r) {
+          var ok = r.status === EXPECT;
+          el.className = "ostatus " + (ok ? "ok" : "bad");
+          el.innerHTML = '<span class="dot"></span>origin returned: ' + r.status +
+            (r.statusText ? " " + r.statusText : "") + (ok ? "  \u2713" : "  (expected " + EXPECT + ")");
+        })
+        .catch(function (e) {
+          el.className = "ostatus bad";
+          el.innerHTML = '<span class="dot"></span>could not verify status: ' + e.message;
+        });
+    })();
+  </script>
 </body>
 </html>

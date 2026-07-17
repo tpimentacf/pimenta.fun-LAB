@@ -4,7 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>404 Not Found &mdash; Pimenta Lab</title>
+  <meta name="description" content="HTTP 404 Not Found — the server can't find the requested resource. Served by the origin (Apache ErrorDocument) with a real 404 status code." />
   <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .ostatus { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--panel2); font-family: ui-monospace, Menlo, monospace;
+      font-size: 0.86rem; color: var(--muted); }
+    .ostatus .dot { width: 9px; height: 9px; border-radius: 999px; background: var(--muted); }
+    .ostatus.ok { border-color: rgba(54,211,153,0.5); color: var(--green); }
+    .ostatus.ok .dot { background: var(--green); box-shadow: 0 0 0 4px rgba(54,211,153,0.15); }
+    .ostatus.bad { border-color: rgba(255,107,107,0.5); color: var(--accent2); }
+    .ostatus.bad .dot { background: var(--accent2); box-shadow: 0 0 0 4px rgba(255,107,107,0.15); }
+    .ecols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 22px 0 0; }
+    @media (max-width: 640px) { .ecols { grid-template-columns: 1fr; } }
+    .ecard { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+    .ecard h3 { margin: 0 0 8px; font-size: 0.95rem; }
+    .ecard ul { margin: 0; padding-left: 18px; }
+    .ecard li { margin: 5px 0; color: var(--muted); font-size: 0.88rem; }
+  </style>
 </head>
 <body>
   <header class="lab">
@@ -20,13 +37,56 @@
     <span class="tag">Error page</span>
     <h1><span class="grad">404</span> Not Found</h1>
     <div class="center"><div class="big-code">404</div></div>
-    <p class="lead center">The page you requested could not be found.</p>
-    <div class="note">Use this as a <strong>Custom Error Response</strong> page in Cloudflare for HTTP 404, or return it from a WAF/Origin rule.</div>
-    <p class="center"><a class="btn" href="https://www.pimenta.fun">Back to home</a></p>
+    <p class="lead center">The server can&rsquo;t find the resource you requested.</p>
+    <p class="center"><span class="ostatus" id="ostatus"><span class="dot"></span>checking origin status&hellip;</span></p>
+
+    <div class="ecols">
+      <div class="ecard">
+        <h3>What it means</h3>
+        <ul>
+          <li>The URL maps to nothing on the server &mdash; no page, file, or route.</li>
+          <li>It does not say whether the resource is gone forever or just missing now.</li>
+          <li>The most common status on the web &mdash; usually a broken or mistyped link.</li>
+        </ul>
+      </div>
+      <div class="ecard">
+        <h3>Common causes</h3>
+        <ul>
+          <li>A typo in the URL, or wrong letter case on a case-sensitive path.</li>
+          <li>A page that was moved or deleted with no redirect in place.</li>
+          <li>A broken internal or external link.</li>
+          <li>A missing Redirect / Rewrite rule after a site restructure.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="note">Served by the <strong>origin</strong> (Apache <code class="inline">ErrorDocument 404</code>) with a
+      real HTTP <strong>404</strong> status &mdash; the pill above confirms the status code returned for this page.</div>
+    <p class="center"><a class="btn" href="https://www.pimenta.fun">Back to home</a>
+      <a class="btn ghost" href="https://www.pimenta.fun/#tests">Error tests</a></p>
   </main>
 
   <footer class="lab">
     Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
   </footer>
+
+  <script>
+    "use strict";
+    (function () {
+      var EXPECT = 404;
+      var el = document.getElementById("ostatus");
+      fetch(location.pathname, { cache: "no-store", redirect: "manual" })
+        .then(function (r) {
+          var ok = r.status === EXPECT;
+          el.className = "ostatus " + (ok ? "ok" : "bad");
+          el.innerHTML = '<span class="dot"></span>origin returned: ' + r.status +
+            (r.statusText ? " " + r.statusText : "") + (ok ? "  \u2713" : "  (expected " + EXPECT + ")");
+        })
+        .catch(function (e) {
+          el.className = "ostatus bad";
+          el.innerHTML = '<span class="dot"></span>could not verify status: ' + e.message;
+        });
+    })();
+  </script>
 </body>
 </html>

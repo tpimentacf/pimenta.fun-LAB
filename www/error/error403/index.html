@@ -4,7 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>403 Forbidden &mdash; Pimenta Lab</title>
+  <meta name="description" content="HTTP 403 Forbidden — the server understood the request but refuses to authorize it. Served by the origin (Apache ErrorDocument) with a real 403 status code." />
   <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .ostatus { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--panel2); font-family: ui-monospace, Menlo, monospace;
+      font-size: 0.86rem; color: var(--muted); }
+    .ostatus .dot { width: 9px; height: 9px; border-radius: 999px; background: var(--muted); }
+    .ostatus.ok { border-color: rgba(54,211,153,0.5); color: var(--green); }
+    .ostatus.ok .dot { background: var(--green); box-shadow: 0 0 0 4px rgba(54,211,153,0.15); }
+    .ostatus.bad { border-color: rgba(255,107,107,0.5); color: var(--accent2); }
+    .ostatus.bad .dot { background: var(--accent2); box-shadow: 0 0 0 4px rgba(255,107,107,0.15); }
+    .ecols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 22px 0 0; }
+    @media (max-width: 640px) { .ecols { grid-template-columns: 1fr; } }
+    .ecard { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+    .ecard h3 { margin: 0 0 8px; font-size: 0.95rem; }
+    .ecard ul { margin: 0; padding-left: 18px; }
+    .ecard li { margin: 5px 0; color: var(--muted); font-size: 0.88rem; }
+  </style>
 </head>
 <body>
   <header class="lab">
@@ -20,13 +37,56 @@
     <span class="tag">Error page</span>
     <h1><span class="grad">403</span> Forbidden</h1>
     <div class="center"><div class="big-code">403</div></div>
-    <p class="lead center">You don't have permission to access this resource.</p>
-    <div class="note">Use this as a <strong>Custom Error Response</strong> page in Cloudflare for HTTP 403, or return it from a WAF/Origin rule.</div>
-    <p class="center"><a class="btn" href="https://www.pimenta.fun">Back to home</a></p>
+    <p class="lead center">The server understood your request but refuses to authorize it.</p>
+    <p class="center"><span class="ostatus" id="ostatus"><span class="dot"></span>checking origin status&hellip;</span></p>
+
+    <div class="ecols">
+      <div class="ecard">
+        <h3>What it means</h3>
+        <ul>
+          <li>Unlike <b>401</b>, authenticating will <i>not</i> help &mdash; access is denied outright.</li>
+          <li>The resource exists, but you are not permitted to see it.</li>
+          <li>The server may not explain why, to avoid leaking information.</li>
+        </ul>
+      </div>
+      <div class="ecard">
+        <h3>Common causes</h3>
+        <ul>
+          <li>A WAF custom rule or firewall block (IP, country, ASN, user-agent).</li>
+          <li>Directory listing denied / missing <code class="inline">index</code> file.</li>
+          <li>File-system permissions on the origin.</li>
+          <li>Cloudflare Access / mTLS policy denial, or hotlink protection.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="note">Served by the <strong>origin</strong> (Apache <code class="inline">ErrorDocument 403</code>) with a
+      real HTTP <strong>403</strong> status &mdash; the pill above confirms the status code returned for this page.</div>
+    <p class="center"><a class="btn" href="https://www.pimenta.fun">Back to home</a>
+      <a class="btn ghost" href="https://www.pimenta.fun/#tests">Error tests</a></p>
   </main>
 
   <footer class="lab">
     Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
   </footer>
+
+  <script>
+    "use strict";
+    (function () {
+      var EXPECT = 403;
+      var el = document.getElementById("ostatus");
+      fetch(location.pathname, { cache: "no-store", redirect: "manual" })
+        .then(function (r) {
+          var ok = r.status === EXPECT;
+          el.className = "ostatus " + (ok ? "ok" : "bad");
+          el.innerHTML = '<span class="dot"></span>origin returned: ' + r.status +
+            (r.statusText ? " " + r.statusText : "") + (ok ? "  \u2713" : "  (expected " + EXPECT + ")");
+        })
+        .catch(function (e) {
+          el.className = "ostatus bad";
+          el.innerHTML = '<span class="dot"></span>could not verify status: ' + e.message;
+        });
+    })();
+  </script>
 </body>
 </html>
