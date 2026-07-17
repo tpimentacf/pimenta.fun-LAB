@@ -3,8 +3,65 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>E-Commerce Features &mdash; Pimenta Lab</title>
+  <title>Security Features for E-Commerce &mdash; Pimenta Lab</title>
+  <meta name="description" content="A complete reference of Cloudflare products that protect online stores: WAF, Bot Management, Leaked Credentials, DDoS, Page Shield (Magecart), Turnstile, API Shield, Malicious Uploads, and SSL/TLS — with ready-to-use rule expressions, a threat-to-feature map, a where-to-start priority guide, and PCI DSS notes." />
   <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    /* page-specific styling layered on /assets/lab.css */
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel h3 { font-size: 0.95rem; margin: 18px 0 6px; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+    .panel .docy { font-size: 0.8rem; }
+    .panel .docy a { color: var(--accent); }
+
+    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
+    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--panel2); color: var(--muted); text-decoration: none; }
+    .toc a:hover { color: var(--text); border-color: var(--accent); }
+
+    .sec-head { display: flex; align-items: center; gap: 12px; margin: 0 0 4px; }
+    .sec-head .ic { font-size: 20px; }
+    .sec-head h2 { margin: 0; }
+
+    .ref { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    .ref th, .ref td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .ref thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .ref tbody td:first-child { color: #9cc0ff; white-space: nowrap; font-weight: 600; }
+    .ref tbody td.plan { white-space: nowrap; color: var(--muted); font-size: 0.78rem; }
+    .ref tbody tr:last-child td { border-bottom: none; }
+    .ref code { font-size: 0.78rem; }
+
+    .pill { display: inline-block; font-size: 0.66rem; padding: 2px 8px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--panel2); color: var(--muted); }
+    .pill.all { color: var(--green); border-color: rgba(54,211,153,0.5); }
+    .pill.biz { color: var(--blue); border-color: rgba(91,141,239,0.5); }
+    .pill.ent { color: var(--accent); border-color: rgba(246,130,31,0.5); }
+
+    .bullets li { margin: 6px 0; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+    .cap { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 12px 0 5px; }
+    pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+      overflow-x: auto; font-size: 0.8rem; line-height: 1.55; color: #d7e2f7; }
+    pre.code .c { color: var(--muted); }
+    pre.code .op { color: #ff9a76; }
+    pre.code .s { color: #8ef2c4; }
+
+    /* tiers */
+    .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 6px 0 0; }
+    .tier { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+    .tier .t { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); margin-bottom: 8px; }
+    .tier ul { margin: 0; padding-left: 18px; }
+    .tier li { margin: 5px 0; font-size: 0.85rem; color: var(--muted); }
+    .tier li b { color: var(--text); }
+
+    /* threat map */
+    .tmap { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin: 6px 0 0; }
+    .tcard { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .tcard h4 { margin: 0 0 8px; font-size: 0.88rem; }
+    .tcard .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag2 { font-size: 0.7rem; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--panel); color: var(--muted); }
+  </style>
 </head>
 <body>
   <header class="lab">
@@ -16,20 +73,288 @@
   </header>
 
   <main class="lab">
-    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Security Solutions / E-Commerce Features</div>
-    <span class="tag">Security</span>
-    <h1>E-Commerce Features</h1>
-    <p class="lead">Cloudflare features useful for protecting online stores.</p>
-    <ul class="bullets">
-      <li>Bot Management for checkout & inventory hoarding</li>
-      <li>Page Shield for payment-skimmer detection</li>
-      <li>Rate limiting on cart/checkout APIs</li>
-      <li>Turnstile on account creation</li>
-    </ul>
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Security Solutions / E-Commerce</div>
+    <span class="tag">Security Lab</span>
+    <h1>Security Features for <span class="grad">E-Commerce</span></h1>
+    <p class="lead">A reference of the Cloudflare products that protect online stores &mdash; from application-layer
+      attacks and bot abuse to Magecart skimming, credential stuffing, and API abuse &mdash; with ready-to-use rule
+      expressions, a threat-to-feature map, and a where-to-start priority guide.</p>
+
+    <div class="note">Plans shown are indicative and change over time; confirm exact availability with your account
+      team.</div>
+
+    <nav class="toc">
+      <a href="#start">Where to start</a>
+      <a href="#waf">1 &middot; WAF</a>
+      <a href="#bots">2 &middot; Bots</a>
+      <a href="#leaked">3 &middot; Leaked creds</a>
+      <a href="#ddos">4 &middot; DDoS</a>
+      <a href="#pageshield">5 &middot; Page Shield</a>
+      <a href="#turnstile">6 &middot; Turnstile</a>
+      <a href="#api">7 &middot; API Shield</a>
+      <a href="#uploads">8 &middot; Uploads</a>
+      <a href="#ssl">9 &middot; SSL/TLS</a>
+      <a href="#map">Threat map</a>
+      <a href="#resources">Resources</a>
+    </nav>
+
+    <!-- ============================================================= -->
+    <section id="start" class="panel">
+      <h2>Where to start &mdash; defence in depth for a store</h2>
+      <p class="sub">Roll out in priority order. Enable in <b>log/monitor</b> mode first, calibrate in Security
+        Analytics, then enforce.</p>
+      <div class="tiers">
+        <div class="tier"><div class="t">Baseline &mdash; every store</div>
+          <ul>
+            <li><b>Universal SSL</b> + min TLS 1.2 + HSTS</li>
+            <li><b>WAF Managed Rules</b> (OWASP + CMS)</li>
+            <li><b>DDoS protection</b> (automatic, unmetered)</li>
+          </ul></div>
+        <div class="tier"><div class="t">Protect sensitive flows</div>
+          <ul>
+            <li><b>Rate Limiting</b> on login / cart / coupon / checkout</li>
+            <li><b>Bot Management</b> on add-to-cart, search, login</li>
+            <li><b>Turnstile</b> on login, register, checkout</li>
+          </ul></div>
+        <div class="tier"><div class="t">Payments &amp; accounts</div>
+          <ul>
+            <li><b>Page Shield</b> on any page handling card data</li>
+            <li><b>Leaked Credentials</b> on auth endpoints</li>
+            <li><b>WAF Attack Score</b> to catch obfuscated payloads</li>
+          </ul></div>
+        <div class="tier"><div class="t">Backend &amp; supply chain</div>
+          <ul>
+            <li><b>API Shield</b> (schema, JWT, mTLS, sequences)</li>
+            <li><b>Malicious Uploads</b> scanning</li>
+            <li><b>Page Shield policies</b> (CSP) + code-change alerts</li>
+          </ul></div>
+      </div>
+      <div class="note" style="margin-top:16px;"><b>PCI DSS 4.0:</b> the client-side script requirements (6.4.3 and
+        11.6.1) map directly onto <b>Page Shield</b> script/connection monitoring and change detection; TLS 1.2+ and
+        HSTS support the encryption-in-transit requirements.</div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="waf" class="panel">
+      <div class="sec-head"><span class="ic">&#128737;</span><h2>1 &middot; Web Application Firewall</h2></div>
+      <p class="sub">Inspects every HTTP request and filters malicious traffic &mdash; SQLi, XSS, RCE, and CMS-specific
+        exploits (Magento, WooCommerce, WordPress).</p>
+      <table class="ref">
+        <thead><tr><th>Feature</th><th>What it does</th><th>Plan</th></tr></thead>
+        <tbody>
+          <tr><td>Managed Rules</td><td>Pre-built, continuously updated rulesets: OWASP Top 10, CVEs, CMS apps. Zero-day coverage, low false positives.</td><td class="plan">All paid</td></tr>
+          <tr><td>Custom Rules</td><td>Ruleset Engine matches on IP, country, URI, headers, body, and WAF score &mdash; ideal for checkout &amp; login.</td><td class="plan">All</td></tr>
+          <tr><td>Rate Limiting</td><td>Per-endpoint request thresholds (login, cart, coupon). Stops brute-force and flow abuse.</td><td class="plan">All</td></tr>
+          <tr><td>Attack Score</td><td>ML scores each request 1&ndash;99 for SQLi/XSS/RCE likelihood &mdash; catches obfuscated variants signatures miss.</td><td class="plan">Business+</td></tr>
+          <tr><td>Security Analytics</td><td>Visibility over <i>all</i> traffic (even unmatched) &mdash; calibrate before you block.</td><td class="plan">All</td></tr>
+          <tr><td>Security Events</td><td>Sampled log of mitigated requests to fine-tune rules in real time.</td><td class="plan">All</td></tr>
+        </tbody>
+      </table>
+      <div class="cap">Block high-confidence attacks with Attack Score</div>
+      <pre class="code">http.request.uri.path <span class="op">contains</span> <span class="s">"/checkout"</span> <span class="op">and</span>
+cf.waf.score <span class="op">lt</span> 20</pre>
+      <p class="docy">Docs: <a href="https://developers.cloudflare.com/waf/">WAF</a> &middot;
+        <a href="https://developers.cloudflare.com/waf/detections/attack-score/">Attack Score</a></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="bots" class="panel">
+      <div class="sec-head"><span class="ic">&#129302;</span><h2>2 &middot; Bot Management</h2></div>
+      <p class="sub">Mitigates automation: credential stuffing, inventory hoarding, scalping, price scraping, and gift
+        card abuse.</p>
+      <table class="ref">
+        <thead><tr><th>Feature</th><th>What it does</th><th>Plan</th></tr></thead>
+        <tbody>
+          <tr><td>Bot Fight Mode</td><td>Basic detection; challenges known bot patterns. Limited config.</td><td class="plan">Free / Pro</td></tr>
+          <tr><td>Super Bot Fight Mode</td><td>Challenges/blocks known bots, protects static assets, adds Bot Analytics.</td><td class="plan">Pro / Business</td></tr>
+          <tr><td>Bot Management (Ent)</td><td>Full ML + behaviour. Exposes <code class="inline">cf.bot_management.score</code>, JA3/JA4, bot tags, detection IDs. Block AI bots, AI Labyrinth, verified-bot allowlist.</td><td class="plan">Enterprise</td></tr>
+          <tr><td>Bot Analytics</td><td>Score distribution, categories, and trends inside Security Analytics.</td><td class="plan">Business+</td></tr>
+          <tr><td>Verified Bots</td><td>Allow good bots (Googlebot, Bingbot) while challenging unverified automation.</td><td class="plan">Enterprise</td></tr>
+        </tbody>
+      </table>
+      <div class="cap">Challenge automation on add-to-cart / login</div>
+      <pre class="code">(http.request.uri.path <span class="op">in</span> {<span class="s">"/cart/add"</span> <span class="s">"/login"</span>}) <span class="op">and</span>
+cf.bot_management.score <span class="op">lt</span> 30 <span class="op">and</span> <span class="op">not</span> cf.bot_management.verified_bot</pre>
+      <p class="docy">Docs: <a href="https://developers.cloudflare.com/bots/">Bot Management</a> &middot;
+        <a href="https://developers.cloudflare.com/bots/concepts/bot-score/">Bot scores</a></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="leaked" class="panel">
+      <div class="sec-head"><span class="ic">&#128273;</span><h2>3 &middot; Leaked Credentials Detection</h2></div>
+      <p class="sub">Scans login requests against 15B+ compromised credentials (HIBP + Cloudflare-collected). Detects
+        credential stuffing and legitimate users reusing breached passwords.</p>
+      <table class="ref">
+        <thead><tr><th>Field</th><th>What it means</th><th>Plan</th></tr></thead>
+        <tbody>
+          <tr><td>password_leaked</td><td>Password found in breach data.</td><td class="plan">Free+</td></tr>
+          <tr><td>username_and_password_leaked</td><td>The exact pair was leaked &mdash; strong credential-stuffing signal.</td><td class="plan">Pro+</td></tr>
+          <tr><td>username_leaked</td><td>Username known-breached, regardless of this password.</td><td class="plan">Enterprise</td></tr>
+          <tr><td>username_password_similar</td><td>A near-variant of the pair was leaked &mdash; catches small tweaks.</td><td class="plan">Enterprise</td></tr>
+          <tr><td>auth_detected</td><td>Credentials detected in the request (leaked or not) &mdash; monitor all auth.</td><td class="plan">Enterprise</td></tr>
+        </tbody>
+      </table>
+      <div class="cap">Block a known-breached pair; force reset on a leaked password</div>
+      <pre class="code">cf.waf.credential_check.username_and_password_leaked <span class="op">eq</span> <span class="op">true</span></pre>
+      <p class="muted-small">The <b>Exposed-Credential-Check</b> managed transform adds an
+        <code class="inline">Exposed-Credential-Check: 1&ndash;4</code> request header so your origin can trigger 2FA,
+        password reset, or account lock. Custom detection locations let you point at JSON / multipart / header
+        credentials.</p>
+      <p class="docy">Docs: <a href="https://developers.cloudflare.com/waf/detections/leaked-credentials/">Leaked Credentials</a></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="ddos" class="panel">
+      <div class="sec-head"><span class="ic">&#9889;</span><h2>4 &middot; DDoS Protection</h2></div>
+      <p class="sub">Automatic, unmetered protection against volumetric and application-layer attacks on all plans.</p>
+      <table class="ref">
+        <thead><tr><th>Feature</th><th>What it does</th><th>Plan</th></tr></thead>
+        <tbody>
+          <tr><td>HTTP DDoS (L7)</td><td>Autonomous mitigation of app-layer floods on checkout, listings, and APIs.</td><td class="plan">All</td></tr>
+          <tr><td>Network DDoS (L3/L4)</td><td>Protects infrastructure against UDP/SYN/ACK floods &mdash; unmetered.</td><td class="plan">All</td></tr>
+          <tr><td>Adaptive DDoS</td><td>Learns your baseline and adapts thresholds &mdash; fewer false positives during flash sales.</td><td class="plan">Business+</td></tr>
+          <tr><td>Advanced DDoS</td><td>Extra profiling signals (ML score, country, UA, query string), more overrides &amp; alerts.</td><td class="plan">Enterprise + add-on</td></tr>
+        </tbody>
+      </table>
+      <p class="docy">Docs: <a href="https://developers.cloudflare.com/ddos-protection/">DDoS Protection</a></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="pageshield" class="panel">
+      <div class="sec-head"><span class="ic">&#129003;</span><h2>5 &middot; Page Shield (client-side security)</h2></div>
+      <p class="sub">Detects Magecart-style skimming and supply-chain JS compromises that steal card data in the browser
+        &mdash; critical for any page handling payment details.</p>
+      <table class="ref">
+        <thead><tr><th>Feature</th><th>What it does</th><th>Plan</th></tr></thead>
+        <tbody>
+          <tr><td>Script Monitoring</td><td>Inventory of every first/third-party script with origin, page, frequency.</td><td class="plan">All</td></tr>
+          <tr><td>Connection Monitoring</td><td>Watches outbound connections scripts make &mdash; catches data exfiltration.</td><td class="plan">Business+</td></tr>
+          <tr><td>Cookie Monitoring</td><td>Flags unexpected script access to session / payment cookies.</td><td class="plan">Business+</td></tr>
+          <tr><td>Malicious Script Detection</td><td>ML + threat intel classify skimmers on checkout / account pages.</td><td class="plan">Enterprise + add-on</td></tr>
+          <tr><td>Code Change Detection</td><td>Alerts when a known script&rsquo;s content changes &mdash; supply-chain attacks.</td><td class="plan">Enterprise + add-on</td></tr>
+          <tr><td>Policies (CSP)</td><td>Allowlist permitted scripts/connections &mdash; a managed Content Security Policy.</td><td class="plan">Enterprise + add-on</td></tr>
+        </tbody>
+      </table>
+      <p class="muted-small">Directly supports <b>PCI DSS 4.0</b> client-side requirements <b>6.4.3</b> (authorise &amp;
+        inventory scripts) and <b>11.6.1</b> (detect tampering of payment-page scripts/headers).</p>
+      <p class="docy">Docs: <a href="https://developers.cloudflare.com/page-shield/">Page Shield</a></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="turnstile" class="panel">
+      <div class="sec-head"><span class="ic">&#9989;</span><h2>6 &middot; Turnstile</h2></div>
+      <p class="sub">CAPTCHA-free human verification. Deploy on login, registration, checkout, coupon, and review forms
+        &mdash; can even run without proxying traffic through Cloudflare.</p>
+      <table class="ref">
+        <thead><tr><th>Widget</th><th>What it does</th><th>Plan</th></tr></thead>
+        <tbody>
+          <tr><td>Managed</td><td>Interactive checkbox shown only to suspected bots; humans see nothing. Best default.</td><td class="plan">Free</td></tr>
+          <tr><td>Non-interactive</td><td>Fully silent &mdash; no UI. For friction-sensitive luxury checkouts.</td><td class="plan">Free</td></tr>
+          <tr><td>Invisible</td><td>No widget; runs in the background. For API-backed payment flows.</td><td class="plan">Free</td></tr>
+          <tr><td>Pre-clearance</td><td>Issues a clearance cookie so SPAs aren&rsquo;t re-challenged across transitions.</td><td class="plan">Free</td></tr>
+        </tbody>
+      </table>
+      <p class="docy">Docs: <a href="https://developers.cloudflare.com/turnstile/">Turnstile</a> &middot;
+        <a href="https://www.pimenta.fun/turnstile/pre-clearance/">pre-clearance lab</a></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="api" class="panel">
+      <div class="sec-head"><span class="ic">&#128268;</span><h2>7 &middot; API Shield</h2></div>
+      <p class="sub">Discovers, validates, and protects the APIs behind your store &mdash; cart, payment, catalog, and
+        account. Covers the OWASP API Top 10 (BOLA, broken auth, volumetric abuse).</p>
+      <table class="ref">
+        <thead><tr><th>Feature</th><th>What it does</th><th>Plan</th></tr></thead>
+        <tbody>
+          <tr><td>Endpoint Management</td><td>Inventory of API endpoints (method + path); tracks new/changed/deprecated.</td><td class="plan">All</td></tr>
+          <tr><td>Schema Validation</td><td>Upload an OpenAPI schema; block non-conforming requests to payment/order APIs.</td><td class="plan">All (basic)</td></tr>
+          <tr><td>API Discovery</td><td>Auto-discovers endpoints from traffic &mdash; including shadow APIs.</td><td class="plan">Enterprise + add-on</td></tr>
+          <tr><td>JWT Validation</td><td>Verifies JWTs at the edge; blocks invalid/expired/tampered tokens.</td><td class="plan">Enterprise + add-on</td></tr>
+          <tr><td>Mutual TLS (mTLS)</td><td>Require client certs so only authorised apps/webhooks call your APIs.</td><td class="plan">All (CF CA)</td></tr>
+          <tr><td>Volumetric Abuse</td><td>Per-endpoint rate anomaly detection (price check, stock, coupon).</td><td class="plan">Enterprise + add-on</td></tr>
+          <tr><td>Sequence Analytics</td><td>Flags anomalous call sequences (catalog &rarr; cart &rarr; pay with no browsing) &mdash; BOLA / scraping.</td><td class="plan">Enterprise + add-on</td></tr>
+        </tbody>
+      </table>
+      <p class="docy">Docs: <a href="https://developers.cloudflare.com/api-shield/">API Shield</a></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="uploads" class="panel">
+      <div class="sec-head"><span class="ic">&#128206;</span><h2>8 &middot; Malicious Uploads Detection</h2></div>
+      <p class="sub">Edge antivirus scanning of files uploaded to your store (product images, review attachments) &mdash;
+        up to 50&nbsp;MB per object, same engine as Cloudflare Zero Trust.</p>
+      <table class="ref">
+        <thead><tr><th>Field / feature</th><th>What it does</th><th>Plan</th></tr></thead>
+        <tbody>
+          <tr><td>content_scan.has_malicious_obj</td><td>Boolean &mdash; request contains at least one malware file; block before origin.</td><td class="plan">Enterprise + add-on</td></tr>
+          <tr><td>content_scan.obj_results</td><td>Per-file results: clean / suspicious / infected / not scanned.</td><td class="plan">Enterprise + add-on</td></tr>
+          <tr><td>Custom Scan Expressions</td><td>Tell the scanner where files live (e.g. Base64 in JSON) for non-standard uploads.</td><td class="plan">Enterprise + add-on</td></tr>
+        </tbody>
+      </table>
+      <div class="cap">Block infected uploads</div>
+      <pre class="code">http.request.uri.path <span class="op">eq</span> <span class="s">"/account/upload"</span> <span class="op">and</span>
+cf.waf.content_scan.has_malicious_obj</pre>
+      <p class="docy">Docs: <a href="https://developers.cloudflare.com/waf/detections/malicious-uploads/">Malicious Uploads</a></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="ssl" class="panel">
+      <div class="sec-head"><span class="ic">&#128274;</span><h2>9 &middot; SSL/TLS &amp; certificates</h2></div>
+      <p class="sub">Encrypts traffic between visitors and the edge, with controls that help meet PCI-DSS.</p>
+      <table class="ref">
+        <thead><tr><th>Feature</th><th>What it does</th><th>Plan</th></tr></thead>
+        <tbody>
+          <tr><td>Universal SSL</td><td>Free auto-provisioned cert for apex + www; active within 24h, auto-renews.</td><td class="plan">All (Free)</td></tr>
+          <tr><td>Total TLS</td><td>Issues certs for all subdomain levels &mdash; multi-brand nested subdomains.</td><td class="plan">Adv Cert Manager</td></tr>
+          <tr><td>Advanced Cert Manager</td><td>Custom hostnames, wildcards, custom validity, SAN certs.</td><td class="plan">Enterprise</td></tr>
+          <tr><td>Custom TLS Settings</td><td>Enforce min TLS 1.2+ and restrict ciphers &mdash; PCI-DSS for card processing.</td><td class="plan">All paid</td></tr>
+          <tr><td>HTTPS Rewrites &amp; HSTS</td><td>Upgrade HTTP links, set HSTS &mdash; no mixed-content on checkout.</td><td class="plan">All</td></tr>
+        </tbody>
+      </table>
+      <p class="docy">Docs: <a href="https://developers.cloudflare.com/ssl/">SSL/TLS</a></p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="map" class="panel">
+      <h2>Threat &rarr; feature map</h2>
+      <p class="sub">The e-commerce attack surface mapped to the products that mitigate each threat.</p>
+      <div class="tmap">
+        <div class="tcard"><h4>&#128137; SQLi / XSS / RCE</h4><div class="tags"><span class="tag2">WAF Managed</span><span class="tag2">Attack Score</span><span class="tag2">Custom Rules</span></div></div>
+        <div class="tcard"><h4>&#128272; Credential stuffing / ATO</h4><div class="tags"><span class="tag2">Bot Management</span><span class="tag2">Leaked Creds</span><span class="tag2">Rate Limiting</span><span class="tag2">Turnstile</span></div></div>
+        <div class="tcard"><h4>&#128179; Magecart / card skimming</h4><div class="tags"><span class="tag2">Page Shield</span><span class="tag2">Malicious Script</span><span class="tag2">Code Change</span></div></div>
+        <div class="tcard"><h4>&#127754; DDoS on checkout</h4><div class="tags"><span class="tag2">DDoS (auto)</span><span class="tag2">Adaptive DDoS</span></div></div>
+        <div class="tcard"><h4>&#129302; Scalping / hoarding</h4><div class="tags"><span class="tag2">Bot Management</span><span class="tag2">Rate Limiting</span><span class="tag2">Turnstile</span></div></div>
+        <div class="tcard"><h4>&#128375; Price / catalog scraping</h4><div class="tags"><span class="tag2">Bot Management</span><span class="tag2">Rate Limiting</span><span class="tag2">Custom Rules</span></div></div>
+        <div class="tcard"><h4>&#128268; API abuse (cart / pay / stock)</h4><div class="tags"><span class="tag2">API Shield</span><span class="tag2">Schema Validation</span><span class="tag2">JWT</span><span class="tag2">Rate Limiting</span></div></div>
+        <div class="tcard"><h4>&#128193; Malicious file uploads</h4><div class="tags"><span class="tag2">Malicious Uploads</span><span class="tag2">Custom Rules</span></div></div>
+        <div class="tcard"><h4>&#127903; Fake accounts / coupon abuse</h4><div class="tags"><span class="tag2">Turnstile</span><span class="tag2">Rate Limiting</span><span class="tag2">Bot Management</span></div></div>
+        <div class="tcard"><h4>&#128279; Supply-chain JS</h4><div class="tags"><span class="tag2">Page Shield</span><span class="tag2">Code Change Alerts</span><span class="tag2">CSP Policies</span></div></div>
+        <div class="tcard"><h4>&#128275; Broken API auth (BOLA/IDOR)</h4><div class="tags"><span class="tag2">API Shield</span><span class="tag2">Sequence Analytics</span><span class="tag2">JWT</span><span class="tag2">mTLS</span></div></div>
+        <div class="tcard"><h4>&#127760; Data in transit</h4><div class="tags"><span class="tag2">Universal SSL</span><span class="tag2">Custom TLS</span><span class="tag2">HSTS</span></div></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="resources" class="panel">
+      <h2>Resources</h2>
+      <ul class="bullets">
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/waf/">WAF</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/waf/detections/leaked-credentials/">Leaked Credentials</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/waf/detections/malicious-uploads/">Malicious Uploads</a></li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/bots/">Bot Management</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/ddos-protection/">DDoS</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/page-shield/">Page Shield</a></li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/turnstile/">Turnstile</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/api-shield/">API Shield</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/ssl/">SSL/TLS</a></li>
+        <li>Related labs: <a style="color:var(--accent);" href="https://www.pimenta.fun/security-solutions/password-spraying/">Password spraying</a> &middot; <a style="color:var(--accent);" href="https://www.pimenta.fun/page-shield/">Page Shield</a> &middot; <a style="color:var(--accent);" href="https://www.pimenta.fun/api-shield/">API Shield</a></li>
+      </ul>
+    </section>
   </main>
 
+      <section class="disclaimer"><div class="box">
+      <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
+      Please consult the official documentation for the most accurate and up-to-date information.
+      We are not responsible for any issues, damages, or data loss that may occur from using this information.
+      <span class="risk">USE AT YOUR OWN RISK.</span>
+    </div></section>
   <footer class="lab">
-    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    <a href="https://www.pimenta.fun/#tests">Back to tests</a>
   </footer>
 </body>
 </html>

@@ -89,6 +89,12 @@
     <div class="no-results hidden" id="no-results">No implementations match that filter.</div>
   </main>
 
+      <section class="disclaimer"><div class="box">
+      <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
+      Please consult the official documentation for the most accurate and up-to-date information.
+      We are not responsible for any issues, damages, or data loss that may occur from using this information.
+      <span class="risk">USE AT YOUR OWN RISK.</span>
+    </div></section>
   <footer class="lab">
     <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
     &nbsp;&middot;&nbsp;<a href="https://www.pimenta.fun/#tests">Back to tests</a>
@@ -343,10 +349,10 @@
           badges:["guide","config"],
           desc:"Layered defence for login endpoints where credentials are in the POST body: per-username Advanced Rate Limiting, Bot Management scoring, WAF body inspection, Leaked Credential Check (<code class=\"inline\">cf.waf.credential_check.*</code>), and Turnstile/Access &mdash; each with ready-to-use rule expressions and a defence-in-depth table.",
           impl:"Static guide with copy-paste Cloudflare rule expressions (rate-limit by <code class=\"inline\">http.request.body.form[\"username\"]</code>, <code class=\"inline\">cf.bot_management.score</code>, leaked-credential fields) and a curl spray test." },
-        { name:"E-commerce features", href:"/security-solutions/e-commerce/", prod:"Various",
-          badges:["guide"],
-          desc:"Cloudflare features useful for protecting online stores.",
-          impl:"Documentation page." },
+        { name:"E-commerce features", href:"/security-solutions/e-commerce/", prod:"WAF / Bots / Page Shield / API Shield / Turnstile / SSL",
+          badges:["guide","config"],
+          desc:"A reference of the Cloudflare products that protect online stores &mdash; WAF &amp; Attack Score, Bot Management, Leaked Credentials, DDoS, Page Shield (Magecart / PCI DSS 4.0 client-side), Turnstile, API Shield, Malicious Uploads, and SSL/TLS &mdash; with a threat-to-feature map and a where-to-start priority guide.",
+          impl:"Static guide with per-product feature/plan tables and copy-paste rule expressions (<code class=\"inline\">cf.waf.score</code>, <code class=\"inline\">cf.bot_management.score</code>, <code class=\"inline\">cf.waf.credential_check.*</code>, <code class=\"inline\">cf.waf.content_scan.has_malicious_obj</code>)." },
         { name:"Firewall for AI & LLMs", href:"/security-solutions/firewall-for-ai-llm/", prod:"Firewall for AI",
           badges:["config","guide"],
           desc:"Guardrails for AI/LLM-backed endpoints (prompt abuse, PII, rate).",
