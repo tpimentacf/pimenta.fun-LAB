@@ -67,5 +67,9 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .metric { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; min-width: 120px; }
 .metric .n { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
 .metric .l { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.4px; }
+.disclaimer { max-width: 820px; margin: 0 auto; padding: 8px 6vw 0; }
+.disclaimer .box { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; color: var(--muted); font-size: 0.8rem; line-height: 1.6; }
+.disclaimer .box b { color: var(--text); }
+.disclaimer .box .risk { color: var(--accent2); font-weight: 700; letter-spacing: 0.3px; }
 footer.lab { border-top: 1px solid var(--border); padding: 22px 6vw; color: var(--muted); font-size: 0.82rem; text-align: center; }
 footer.lab a { color: var(--accent); text-decoration: none; }

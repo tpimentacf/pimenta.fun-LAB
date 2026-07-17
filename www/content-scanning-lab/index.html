@@ -49,9 +49,6 @@
     <p class="lead">Exercise Cloudflare WAF Content Scanning: upload files that trigger the
       <code>cf.waf.content_scan.*</code> fields and watch how WAF custom rules react.</p>
 
-    <div class="warn"><strong>Use at your own risk.</strong> This lab was built by TPimenta LAB for hands-on testing.
-      Always consult the official Cloudflare documentation for accurate, up-to-date guidance.</div>
-
     <div class="note"><strong>Before you start:</strong> disable the Cloudflare WARP client so your test traffic hits the
       zone directly. Content Scanning requires <strong>Malicious Uploads Detection</strong> enabled on the zone
       (Enterprise plan + add-on).</div>
@@ -188,6 +185,12 @@
 lookup_json_string(http.request.body.raw, "file")</pre>
   </main>
 
+      <section class="disclaimer"><div class="box">
+      <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
+      Please consult the official documentation for the most accurate and up-to-date information.
+      We are not responsible for any issues, damages, or data loss that may occur from using this information.
+      <span class="risk">USE AT YOUR OWN RISK.</span>
+    </div></section>
   <footer class="lab">
     Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a> &middot;
     <a href="https://developers.cloudflare.com/waf/" target="_blank" rel="noopener">WAF docs</a> &middot;
