@@ -1,0 +1,73 @@
+www/aegis-lab/index.html
+  s_45d7e19da6ce2d::t_a58dab2eaea642 671-676
+www/agent/index.html
+  s_45d7e19da6ce2d::t_8d6f1f80d2f0a2 92,94,256-261
+www/ai-lab/index.html
+  s_45d7e19da6ce2d::t_12d0fd5601b36d 101,858-863
+www/api-shield/index.html
+  s_45d7e19da6ce2d::t_f80bcbaaa62dc6 73-78
+www/cache/cache-worker/index.html
+  s_45d7e19da6ce2d::t_134cc01644cf01 381-386
+www/cache/cloudflare-cdn-cache-control/index.html
+  s_45d7e19da6ce2d::t_59ac2c2149b2a1 29-34
+www/cf-echo/index.html
+  s_45d7e19da6ce2d::t_4998372bb7b9c5 132-137
+www/content-scanning-lab/index.html
+  s_45d7e19da6ce2d::t_b44dc1600c9333 188-193
+www/ddns/index.html
+  s_45d7e19da6ce2d::t_567364e38ed0f8 265-270
+www/delay-action/index.html
+  s_45d7e19da6ce2d::t_f85916539f8795 27-32
+www/deploy/index.html
+  s_45d7e19da6ce2d::t_da69e803822dab 282-287
+www/docs/index.html
+  s_45d7e19da6ce2d::t_df9e295b9220fd 92-97,352-355
+www/edge-inspector/index.html
+  s_45d7e19da6ce2d::t_22fa44ff688b98 139-144
+www/gotestwaf/index.html
+  s_45d7e19da6ce2d::t_bddb7ae20b25f3 31-36
+www/images-lab/index.html
+  s_45d7e19da6ce2d::t_e142282de808b2 476-481
+www/maintenance-snippets/index.html
+  s_45d7e19da6ce2d::t_f4d23b4bc0859a 27-32
+www/mtls-guide/index.html
+  s_45d7e19da6ce2d::t_afe64b7bd0eb28 248-253
+www/page-shield/index.html
+  s_45d7e19da6ce2d::t_8f703659bda565 28-33
+www/precursor-lab/index.html
+  s_45d7e19da6ce2d::t_01dc4c880f1c78 371-376
+www/ratelimiting/worker-rl/index.html
+  s_45d7e19da6ce2d::t_850a6bb8e086a6 160-165
+www/redirect-rules/index.html
+  s_45d7e19da6ce2d::t_a725838035063d 120-125
+www/response-headers.html
+  s_45d7e19da6ce2d::t_091ad9ed19df10 40-45
+www/security-solutions/e-commerce/index.html
+  s_45d7e19da6ce2d::t_c36d746d67acfd 6-7,9-64,76-346,349-354,356-357
+www/security-solutions/firewall-for-ai-llm/index.html
+  s_45d7e19da6ce2d::t_a38418c539ab49 31-36
+www/security-solutions/password-spraying/index.html
+  s_45d7e19da6ce2d::t_d732e8de4040bf 264-269
+www/transform-rules/index.html
+  s_45d7e19da6ce2d::t_214defd988b0ca 111-116
+www/waiting-room/index.html
+  s_45d7e19da6ce2d::t_445639f3d96a8e 106-111
+www/zaraz/index.html
+  s_45d7e19da6ce2d::t_4e604b26518929 114-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "10cc8c8ffce50b15b894117fb230aa46aa55d917",
+  "prompts": {},
+  "sessions": {
+    "s_45d7e19da6ce2d": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10621ba67ffeb0finUXEc7EfXx",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "tpimenta <tpimenta@cloudflare.com>"
+    }
+  }
+}
