@@ -3,8 +3,96 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cache Override via Workers &mdash; Pimenta Lab</title>
+  <title>Cache Control Override via Workers &mdash; Pimenta Lab</title>
+  <meta name="description" content="Implement a Cloudflare Worker that forces a 3600s CDN edge TTL whenever the origin responds with Cache-Control: max-age. Uses the Cache API (cache.match, cache.put), s-maxage, and ctx.waitUntil. Full worker code, decision tree, CF-Cache-Status reference, limitations, and a live cache-header checker." />
   <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    /* page-specific styling layered on /assets/lab.css */
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel h3 { font-size: 0.95rem; margin: 18px 0 6px; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+
+    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
+    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--panel2); color: var(--muted); text-decoration: none; }
+    .toc a:hover { color: var(--text); border-color: var(--accent); }
+
+    /* flow diagram */
+    .flow { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 0; }
+    .flow .fstep { flex: 1; min-width: 130px; background: var(--panel2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 12px; text-align: center; position: relative; }
+    .flow .fstep .fi { font-size: 20px; }
+    .flow .fstep .fl { font-size: 0.82rem; font-weight: 700; color: var(--text); margin-top: 6px; }
+    .flow .fstep .fs { font-size: 0.72rem; color: var(--muted); margin-top: 2px;
+      font-family: ui-monospace, Menlo, monospace; }
+    .flow .fstep:not(:last-child)::after { content: "\2192"; position: absolute; right: -11px; top: 50%;
+      transform: translateY(-50%); color: var(--accent); font-size: 16px; z-index: 2; }
+    @media (max-width: 620px) { .flow { flex-direction: column; }
+      .flow .fstep:not(:last-child)::after { content: "\2193"; right: 50%; top: auto; bottom: -14px;
+        transform: translateX(50%); } }
+
+    /* step / info cards */
+    .cards2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin: 6px 0 0; }
+    .card2 { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+    .card2 .n { width: 28px; height: 28px; border-radius: 999px; background: rgba(246,130,31,0.15);
+      border: 1px solid var(--accent); color: var(--accent); font-weight: 700; font-size: 0.82rem;
+      display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+    .card2 h4 { margin: 0 0 6px; font-size: 0.9rem; color: var(--text); }
+    .card2 p { margin: 0; font-size: 0.82rem; color: var(--muted); }
+    .card2.l-green { border-left: 3px solid var(--green); }
+    .card2.l-blue { border-left: 3px solid var(--blue); }
+    .card2.l-orange { border-left: 3px solid var(--accent); }
+    .card2.l-red { border-left: 3px solid var(--accent2); }
+
+    /* reference table */
+    .ref { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .ref th, .ref td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .ref thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .ref tbody td:first-child { font-family: ui-monospace, Menlo, monospace; color: #9cc0ff; white-space: nowrap; }
+    .ref tbody tr:last-child td { border-bottom: none; }
+    .yes { color: var(--green); font-weight: 700; }
+    .no { color: var(--accent2); font-weight: 700; }
+
+    /* decision tree */
+    .tree { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px;
+      font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; line-height: 1.95; color: #cdd8ef;
+      overflow-x: auto; white-space: pre; }
+    .tree .root { color: var(--text); font-weight: 700; }
+    .tree .y { color: var(--green); font-weight: 700; }
+    .tree .nn { color: var(--accent2); font-weight: 700; }
+    .tree .act { color: var(--blue); font-weight: 700; }
+    .tree .cm { color: var(--muted); }
+
+    /* CF-Cache-Status badges */
+    .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 6px 0 0; }
+    .scard { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-align: center; }
+    .sbadge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 0.68rem; font-weight: 700;
+      font-family: ui-monospace, Menlo, monospace; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .b-hit { background: rgba(54,211,153,0.18); color: var(--green); }
+    .b-miss { background: rgba(255,107,107,0.18); color: var(--accent2); }
+    .b-exp { background: rgba(246,130,31,0.18); color: var(--accent); }
+    .b-byp { background: rgba(91,141,239,0.18); color: var(--blue); }
+    .b-dyn { background: rgba(154,166,192,0.18); color: var(--muted); }
+    .scard p { margin: 0; font-size: 0.76rem; color: var(--muted); }
+
+    /* live checker */
+    .hdrbox { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 12px; }
+    #hdr { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+      font-family: ui-monospace, Menlo, monospace; font-size: 0.82rem; color: #d7e2f7; white-space: pre-wrap;
+      word-break: break-all; margin: 0; }
+
+    .bullets li { margin: 6px 0; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+    pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+      overflow-x: auto; font-size: 0.82rem; line-height: 1.6; color: #d7e2f7; }
+    pre.code .c { color: var(--muted); }
+    pre.code .k { color: #ff9a76; }
+    pre.code .s { color: #8ef2c4; }
+    pre.code .fn { color: #c9a6ff; }
+    .btn.sm { padding: 8px 12px; font-size: 0.82rem; }
+    .copied { color: var(--green); font-size: 0.8rem; opacity: 0; transition: opacity 0.2s; }
+    .copied.show { opacity: 1; }
+  </style>
 </head>
 <body>
   <header class="lab">
@@ -16,29 +104,316 @@
   </header>
 
   <main class="lab">
-    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Cache / Cache Override via Workers</div>
-    <span class="tag">Cache</span>
-    <h1>Cache Override via Workers</h1>
-    <p class="lead">A Worker rewrites Cache-Control / cache keys for this route.</p>
-    <button class="btn" id="go">&#8635; Check cache headers</button>
-    <h2>Cache headers</h2>
-    <pre id="hdr">…</pre>
-    <div class="note">Look at <code class="inline">cf-cache-status</code> (HIT/MISS/DYNAMIC) and the TTL headers.</div>
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Cache / Cache Control Override via Workers</div>
+    <span class="tag">Cache Lab</span>
+    <h1>Cache Control Override <span class="grad">via Workers</span></h1>
+    <p class="lead">Force a <b>3600&nbsp;second CDN edge TTL</b> whenever the origin responds with a
+      <code class="inline">Cache-Control: max-age=x</code> header &mdash; using the Workers <b>Cache API</b>, because
+      the <code class="inline">cf.cacheTtl</code> option can&rsquo;t be set after you&rsquo;ve read the response.</p>
+
+    <nav class="toc">
+      <a href="#problem">The problem</a>
+      <a href="#flow">Flow</a>
+      <a href="#steps">Six steps</a>
+      <a href="#code">Worker code</a>
+      <a href="#anatomy">Header anatomy</a>
+      <a href="#api">API details</a>
+      <a href="#decision">Decision tree</a>
+      <a href="#status">CF-Cache-Status</a>
+      <a href="#checker">Live check</a>
+      <a href="#limits">Limitations</a>
+      <a href="#deploy">Deploy</a>
+    </nav>
+
+    <!-- ============================================================= -->
+    <section id="problem" class="panel">
+      <h2>The core problem</h2>
+      <p class="sub">Why not just use <code class="inline">fetch()</code> with <code class="inline">cf</code> options?</p>
+      <p>Cloudflare&rsquo;s <code class="inline">cf.cacheTtl</code> option must be set <i>before</i> the
+        <code class="inline">fetch()</code> call is made. But the origin&rsquo;s <code class="inline">Cache-Control</code>
+        header is only readable <i>after</i> the response arrives &mdash; and you can&rsquo;t retroactively change the
+        cache instruction on a request that already went out.</p>
+      <div class="warn" style="margin-top:12px;"><b>The bind:</b> you need to read the response header to decide the
+        TTL, but the <code class="inline">cf</code> object must be provided before you can read that header. With a
+        single <code class="inline">fetch()</code> those two requirements are mutually exclusive &mdash; so we use the
+        <b>Cache API</b> to store the response ourselves, after inspecting it.</div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="flow" class="panel">
+      <h2>Request flow</h2>
+      <p class="sub">What the Worker does on every incoming request.</p>
+      <div class="flow">
+        <div class="fstep"><div class="fi">&#127760;</div><div class="fl">Request arrives</div><div class="fs">GET / HEAD</div></div>
+        <div class="fstep"><div class="fi">&#128194;</div><div class="fl">Check cache</div><div class="fs">cache.match()</div></div>
+        <div class="fstep"><div class="fi">&#128230;</div><div class="fl">Fetch origin</div><div class="fs">no cf override</div></div>
+        <div class="fstep"><div class="fi">&#128269;</div><div class="fl">Inspect headers</div><div class="fs">read max-age</div></div>
+        <div class="fstep"><div class="fi">&#128190;</div><div class="fl">Store &amp; respond</div><div class="fs">cache.put()</div></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="steps" class="panel">
+      <h2>How the Worker operates</h2>
+      <p class="sub">Six logical steps executed on every request.</p>
+      <div class="cards2">
+        <div class="card2"><div class="n">1</div><h4>Skip non-cacheable methods</h4>
+          <p>Only <code class="inline">GET</code> and <code class="inline">HEAD</code> are cacheable by spec. Anything
+            else (<code class="inline">POST</code>, <code class="inline">PUT</code>&hellip;) is forwarded straight to
+            the origin.</p></div>
+        <div class="card2"><div class="n">2</div><h4>Check the cache first</h4>
+          <p><code class="inline">cache.match(cacheKey)</code> looks up the URL in this data center&rsquo;s cache. A
+            <b>HIT</b> returns immediately &mdash; the origin is never contacted.</p></div>
+        <div class="card2"><div class="n">3</div><h4>Fetch origin (no cf override)</h4>
+          <p>On a <b>MISS</b>, a plain <code class="inline">fetch(request)</code> hits the origin. No
+            <code class="inline">cf</code> options, because we don&rsquo;t yet know the origin&rsquo;s
+            <code class="inline">max-age</code>.</p></div>
+        <div class="card2"><div class="n">4</div><h4>Skip errors</h4>
+          <p>If the origin returns non-2xx (<code class="inline">!originResponse.ok</code>), pass it through unchanged
+            &mdash; never cache 4xx/5xx and poison the cache.</p></div>
+        <div class="card2"><div class="n">5</div><h4>Parse max-age</h4>
+          <p>A regex <code class="inline">/\bmax-age=(\d+)\b/</code> reads the origin
+            <code class="inline">Cache-Control</code>. Present &rarr; override; absent &rarr; pass through unmodified.</p></div>
+        <div class="card2"><div class="n">6</div><h4>Override CDN TTL &amp; store</h4>
+          <p>Clone the response, rewrite <code class="inline">Cache-Control</code> to
+            <code class="inline">s-maxage=3600</code> (CDN TTL) while keeping the original
+            <code class="inline">max-age</code> (browser TTL), then <code class="inline">cache.put()</code> via
+            <code class="inline">ctx.waitUntil()</code>.</p></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="code" class="panel">
+      <h2>Complete Worker code</h2>
+      <p class="sub">Plain JavaScript &mdash; drop it into your <code class="inline">worker.js</code>.</p>
+      <div class="hdrbox">
+        <button class="btn sm" id="copy">Copy code</button>
+        <span class="copied" id="copied">copied</span>
+      </div>
+      <pre class="code" id="worker-code"><span class="k">export default</span> {
+  <span class="k">async</span> <span class="fn">fetch</span>(request, env, ctx) {
+
+    <span class="c">// Step 1 — Skip non-cacheable HTTP methods</span>
+    <span class="k">if</span> (![<span class="s">"GET"</span>, <span class="s">"HEAD"</span>].includes(request.method)) {
+      <span class="k">return</span> <span class="fn">fetch</span>(request);
+    }
+
+    <span class="k">const</span> CLOUDFLARE_CDN_TTL = 3600; <span class="c">// 1 hour</span>
+    <span class="k">const</span> cache    = caches.default;
+    <span class="k">const</span> cacheKey = <span class="k">new</span> <span class="fn">Request</span>(request.url, request);
+
+    <span class="c">// Step 2 — Return cached response if available (cache HIT)</span>
+    <span class="k">const</span> cachedResponse = <span class="k">await</span> cache.<span class="fn">match</span>(cacheKey);
+    <span class="k">if</span> (cachedResponse) {
+      <span class="k">return</span> cachedResponse;
+    }
+
+    <span class="c">// Step 3 — Cache MISS: fetch from origin without cf overrides</span>
+    <span class="k">const</span> originResponse = <span class="k">await</span> <span class="fn">fetch</span>(request);
+
+    <span class="c">// Step 4 — Do not cache error responses</span>
+    <span class="k">if</span> (!originResponse.ok) {
+      <span class="k">return</span> originResponse;
+    }
+
+    <span class="c">// Step 5 — Read and parse the origin's Cache-Control header</span>
+    <span class="k">const</span> originCacheControl = originResponse.headers.<span class="fn">get</span>(<span class="s">"Cache-Control"</span>) ?? <span class="s">""</span>;
+    <span class="k">const</span> maxAgeMatch       = originCacheControl.<span class="fn">match</span>(/\bmax-age=(\d+)\b/);
+
+    <span class="k">if</span> (maxAgeMatch) {
+      <span class="k">const</span> originMaxAge = <span class="fn">parseInt</span>(maxAgeMatch[1], 10);
+
+      <span class="c">// Step 6a — Clone the response (origin Response is immutable)</span>
+      <span class="k">const</span> response = <span class="k">new</span> <span class="fn">Response</span>(originResponse.body, originResponse);
+
+      <span class="c">// Step 6b — Override CDN TTL via s-maxage, preserve browser TTL</span>
+      response.headers.<span class="fn">set</span>(
+        <span class="s">"Cache-Control"</span>,
+        `public, s-maxage=${CLOUDFLARE_CDN_TTL}, max-age=${originMaxAge}`
+      );
+
+      <span class="c">// Step 6c — Store non-blocking (don't delay the response)</span>
+      ctx.<span class="fn">waitUntil</span>(cache.<span class="fn">put</span>(cacheKey, response.<span class="fn">clone</span>()));
+
+      <span class="k">return</span> response;
+    }
+
+    <span class="c">// Step 6d — No max-age from origin: pass through without caching</span>
+    <span class="k">return</span> originResponse;
+  },
+};</pre>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="anatomy" class="panel">
+      <h2>Cache-Control header anatomy</h2>
+      <p class="sub">The difference between the <b>browser</b> TTL and the <b>CDN</b> TTL is the whole point.</p>
+      <pre class="code">Cache-Control: public, s-maxage=3600, max-age=300
+                       <span class="c">|                    |</span>
+                       <span class="c">|                    +- browser TTL: 300s (from origin)</span>
+                       <span class="c">+- CDN / Cloudflare edge TTL: 3600s (set by the Worker)</span></pre>
+      <table class="ref">
+        <thead><tr><th>Directive</th><th>Controls</th><th>Who sets it</th><th>Seen by browser?</th></tr></thead>
+        <tbody>
+          <tr><td>max-age</td><td>Browser / client cache TTL</td><td>Origin (preserved by Worker)</td><td><span class="yes">Yes</span></td></tr>
+          <tr><td>s-maxage</td><td>CDN / proxy TTL (Cloudflare edge)</td><td>Worker (set to 3600)</td><td><span class="no">No</span> &mdash; stripped at edge</td></tr>
+          <tr><td>cf.cacheTtl</td><td>Edge TTL, ignores origin headers</td><td>fetch() cf option (before request)</td><td><span class="no">No</span></td></tr>
+          <tr><td>cf.cacheTtlByStatus</td><td>Edge TTL per HTTP status</td><td>fetch() cf option (before request)</td><td><span class="no">No</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="api" class="panel">
+      <h2>Why each API call matters</h2>
+      <div class="cards2">
+        <div class="card2 l-green"><h4>cache.match(cacheKey)</h4>
+          <p>Looks up the request in this data center&rsquo;s cache. Returns the cached
+            <code class="inline">Response</code> or <code class="inline">undefined</code>. Check it first to avoid
+            needless origin trips.</p></div>
+        <div class="card2 l-blue"><h4>new Response(body, init)</h4>
+          <p>Origin responses are <b>immutable</b> &mdash; you can&rsquo;t edit their headers. Cloning into a
+            <code class="inline">new Response()</code> gives a mutable copy to rewrite before caching.</p></div>
+        <div class="card2 l-orange"><h4>cache.put(key, response.clone())</h4>
+          <p>Stores the response. <code class="inline">.clone()</code> is mandatory: a body stream is consumed once
+            &mdash; one copy goes to the user, the other to the cache.</p></div>
+        <div class="card2 l-red"><h4>ctx.waitUntil()</h4>
+          <p>Keeps the Worker alive to finish <code class="inline">cache.put()</code> <i>after</i> the response is sent.
+            Without it, the cache write is cancelled when the handler returns.</p></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="decision" class="panel">
+      <h2>Decision tree</h2>
+      <p class="sub">The Worker&rsquo;s branching logic on every request.</p>
+      <div class="tree"><span class="root">Request received</span>
+  |-- <span>Method is GET or HEAD?</span>
+  |     |-- <span class="nn">NO</span>  -> <span class="act">fetch(request) and return</span>  <span class="cm">(pass-through)</span>
+  |     +-- <span class="y">YES</span> -> check cache
+  |
+  |-- <span>cache.match() returns a response?</span>
+  |     |-- <span class="y">YES</span> -> <span class="act">return cached response</span>  <span class="cm">(CF-Cache-Status: HIT)</span>
+  |     +-- <span class="nn">NO</span>  -> fetch from origin
+  |
+  |-- <span>originResponse.ok (2xx)?</span>
+  |     |-- <span class="nn">NO</span>  -> <span class="act">return error response</span>  <span class="cm">(not cached)</span>
+  |     +-- <span class="y">YES</span> -> parse Cache-Control
+  |
+  +-- <span>Origin header has max-age=x?</span>
+        |-- <span class="nn">NO</span>  -> <span class="act">return originResponse</span>  <span class="cm">(pass-through, not cached)</span>
+        +-- <span class="y">YES</span> -> <span class="act">clone -> set s-maxage=3600 -> cache.put() -> return</span></div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="status" class="panel">
+      <h2>CF-Cache-Status header</h2>
+      <p class="sub">Cloudflare adds <code class="inline">CF-Cache-Status</code> so you can verify behaviour in DevTools
+        or <code class="inline">curl -I</code>.</p>
+      <div class="status-grid">
+        <div class="scard"><span class="sbadge b-hit">HIT</span><p>Served from edge cache. Origin not contacted.</p></div>
+        <div class="scard"><span class="sbadge b-miss">MISS</span><p>Not cached. Fetched from origin and stored for next time.</p></div>
+        <div class="scard"><span class="sbadge b-exp">EXPIRED</span><p>Was cached but the s-maxage TTL elapsed. Re-fetched.</p></div>
+        <div class="scard"><span class="sbadge b-byp">BYPASS</span><p>Cache intentionally skipped (cookie, no-store, etc.).</p></div>
+        <div class="scard"><span class="sbadge b-dyn">DYNAMIC</span><p>Not cached &mdash; no matching rule / CF chose not to.</p></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="checker" class="panel">
+      <h2>Live check on this route</h2>
+      <p class="sub">Fetch this page and read the cache-related response headers. Once the Worker is deployed on this
+        route, repeated loads should flip <code class="inline">cf-cache-status</code> from MISS to HIT.</p>
+      <div class="hdrbox">
+        <button class="btn sm" id="go">&#8635; Check cache headers</button>
+      </div>
+      <pre id="hdr">&hellip;</pre>
+      <p class="muted-small">Watch <code class="inline">cf-cache-status</code> (HIT / MISS / DYNAMIC), plus
+        <code class="inline">cache-control</code>, <code class="inline">age</code>, and
+        <code class="inline">cloudflare-cdn-cache-control</code>.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="limits" class="panel">
+      <h2>What to watch out for</h2>
+      <div class="cards2">
+        <div class="card2 l-red"><h4>No Tiered Cache</h4>
+          <p><code class="inline">caches.default</code> does <b>not</b> propagate through Cloudflare&rsquo;s Tiered
+            Cache. If you need it, use <code class="inline">fetch()</code> with
+            <code class="inline">cf.cacheTtl</code> (which requires knowing the TTL up front).</p></div>
+        <div class="card2 l-orange"><h4>Cache is per data center</h4>
+          <p>The Cache API stores per edge PoP. A request landing on a different PoP is a MISS and re-fetches until that
+            PoP warms up too.</p></div>
+        <div class="card2 l-blue"><h4>Body consumed once</h4>
+          <p>Always <code class="inline">response.clone()</code> before <code class="inline">cache.put()</code>, or one
+            of the user / cache copies gets an empty body.</p></div>
+        <div class="card2 l-green"><h4>Vary interactions</h4>
+          <p>An origin <code class="inline">Vary</code> header (e.g. <code class="inline">Accept-Encoding</code>) adds
+            those request headers to the cache key &mdash; watch for cache fragmentation.</p></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="deploy" class="panel">
+      <h2>Deploy it</h2>
+      <p class="sub">The source lives in <code class="inline">workers/cache-override/</code>. Bind it to this route so
+        the page above is served through it.</p>
+      <pre class="code"><span class="c"># workers/cache-override/wrangler.toml (route)</span>
+routes = [
+  { pattern = <span class="s">"www.pimenta.fun/cache/cache-worker*"</span>, zone_name = <span class="s">"pimenta.fun"</span> }
+]
+
+<span class="c"># deploy</span>
+cd workers/cache-override
+npx wrangler deploy</pre>
+      <ul class="bullets">
+        <li>Verify with <code class="inline">curl -sI https://www.pimenta.fun/cache/cache-worker/ | grep -i cf-cache-status</code>.</li>
+        <li>First request: <code class="inline">MISS</code>; subsequent (same PoP, within the TTL):
+          <code class="inline">HIT</code>.</li>
+        <li>Full runtime docs:
+          <a style="color:var(--accent);" href="https://developers.cloudflare.com/workers/runtime-apis/cache/">Cache API</a>
+          &middot;
+          <a style="color:var(--accent);" href="https://developers.cloudflare.com/workers/examples/cache-api/">Examples</a>.</li>
+      </ul>
+    </section>
   </main>
 
   <footer class="lab">
-    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    <a href="https://www.pimenta.fun/#tests">Back to tests</a>
   </footer>
+
   <script>
-    async function check(){
-      var out = document.getElementById('hdr'); out.textContent='Fetching…';
-      try{ var res = await fetch(location.href, {cache:'no-store'});
-        var keys=['cf-cache-status','age','cache-control','cloudflare-cdn-cache-control','last-modified','etag','cf-ray'];
-        var lines=[]; keys.forEach(function(k){ var v=res.headers.get(k); if(v) lines.push(k+': '+v); });
-        out.textContent = lines.length ? lines.join('\n') : '(no cache headers readable)';
-      }catch(e){ out.textContent='Error: '+e.message; }
+    "use strict";
+    function $(id) { return document.getElementById(id); }
+
+    /* copy the worker code */
+    $("copy").addEventListener("click", function () {
+      var text = $("worker-code").innerText;
+      var done = function () {
+        var c = $("copied"); c.classList.add("show");
+        setTimeout(function () { c.classList.remove("show"); }, 1200);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, done);
+      } else { done(); }
+    });
+
+    /* live cache-header check */
+    async function check() {
+      var out = $("hdr");
+      out.textContent = "Fetching\u2026";
+      try {
+        var res = await fetch(location.href, { cache: "no-store" });
+        var keys = ["cf-cache-status", "age", "cache-control", "cloudflare-cdn-cache-control",
+          "last-modified", "etag", "cf-ray"];
+        var lines = [];
+        keys.forEach(function (k) { var v = res.headers.get(k); if (v) lines.push(k + ": " + v); });
+        out.textContent = lines.length ? lines.join("\n") : "(no cache headers readable from JS)";
+      } catch (e) { out.textContent = "Error: " + e.message; }
     }
-    document.getElementById('go').addEventListener('click', check); check();
+    $("go").addEventListener("click", check);
+    check();
   </script>
 </body>
 </html>
