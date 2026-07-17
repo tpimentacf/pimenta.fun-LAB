@@ -4,7 +4,47 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Password Spraying Protection &mdash; Pimenta Lab</title>
+  <meta name="description" content="How Cloudflare protects login endpoints where credentials are passed in the request body against password spraying: per-username Advanced Rate Limiting, Bot Management, WAF custom rules on the body, Leaked Credential Check, Turnstile/Access, and a layered defence-in-depth approach with ready-to-use rule expressions." />
   <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    /* page-specific styling layered on /assets/lab.css */
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel h3 { font-size: 0.95rem; margin: 18px 0 6px; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+
+    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
+    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--panel2); color: var(--muted); text-decoration: none; }
+    .toc a:hover { color: var(--text); border-color: var(--accent); }
+
+    /* layer header */
+    .layer { display: flex; align-items: center; gap: 12px; margin: 0 0 4px; }
+    .layer .num { width: 30px; height: 30px; border-radius: 999px; background: rgba(246,130,31,0.15);
+      border: 1px solid var(--accent); color: var(--accent); font-weight: 700; display: flex; align-items: center;
+      justify-content: center; flex: none; }
+    .layer h2 { margin: 0; }
+
+    .pill { display: inline-block; font-size: 0.68rem; padding: 2px 9px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--panel2); color: var(--muted); vertical-align: middle; }
+    .pill.ent { color: var(--accent); border-color: rgba(246,130,31,0.5); }
+    .pill.pro { color: var(--green); border-color: rgba(54,211,153,0.5); }
+
+    .ref { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .ref th, .ref td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .ref thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .ref tbody td:first-child { font-family: ui-monospace, Menlo, monospace; color: #9cc0ff; white-space: nowrap; }
+    .ref tbody tr:last-child td { border-bottom: none; }
+
+    .bullets li { margin: 6px 0; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+    .cap { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 12px 0 5px; }
+    pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+      overflow-x: auto; font-size: 0.82rem; line-height: 1.6; color: #d7e2f7; }
+    pre.code .c { color: var(--muted); }
+    pre.code .fn { color: #c9a6ff; }
+    pre.code .op { color: #ff9a76; }
+    pre.code .s { color: #8ef2c4; }
+  </style>
 </head>
 <body>
   <header class="lab">
@@ -17,19 +57,215 @@
 
   <main class="lab">
     <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Security Solutions / Password Spraying Protection</div>
-    <span class="tag">Security</span>
-    <h1>Password Spraying Protection</h1>
-    <p class="lead">Detect and stop credential-stuffing / password-spraying against login endpoints.</p>
-    <ul class="bullets">
-      <li>Rate limit by IP + username on POST /login</li>
-      <li>WAF rule on leaked-credential checks</li>
-      <li>Turnstile on the login form</li>
-      <li>Account lockout via Worker + KV</li>
-    </ul>
+    <span class="tag">Security Lab</span>
+    <h1>Password Spraying <span class="grad">Protection</span></h1>
+    <p class="lead">Password spraying tries a <b>few common passwords against many accounts</b> to stay under
+      per-account lockout thresholds &mdash; often from many IPs. The credentials arrive in the <b>request body</b>, so
+      the defence has to inspect the POST body, not just the URL. This is how Cloudflare stops it, layer by layer.</p>
+
+    <div class="note">The credentials are submitted in the body, e.g.
+      <code class="inline">--data-raw 'username=user%40example.com&amp;password=Winter2025'</code>. Every rule below keys
+      off <code class="inline">http.request.body.form[&hellip;]</code> (URL-encoded) or
+      <code class="inline">lookup_json_string()</code> (JSON).</div>
+
+    <nav class="toc">
+      <a href="#threat">The threat</a>
+      <a href="#layer1">1 &middot; Rate limiting</a>
+      <a href="#layer2">2 &middot; Bot Management</a>
+      <a href="#layer3">3 &middot; WAF rules</a>
+      <a href="#layer4">4 &middot; Leaked creds</a>
+      <a href="#layer5">5 &middot; Turnstile / Access</a>
+      <a href="#stack">Layered approach</a>
+      <a href="#fields">Key fields</a>
+      <a href="#test">Test it</a>
+      <a href="#resources">Resources</a>
+    </nav>
+
+    <!-- ============================================================= -->
+    <section id="threat" class="panel">
+      <h2>Spraying vs. brute force vs. stuffing</h2>
+      <table class="ref">
+        <thead><tr><th>Attack</th><th>Pattern</th><th>Why lockouts miss it</th></tr></thead>
+        <tbody>
+          <tr><td>Brute force</td><td>Many passwords vs. <b>one</b> account</td><td>Per-account lockout catches it fast.</td></tr>
+          <tr><td>Password spraying</td><td>Few common passwords vs. <b>many</b> accounts</td><td>Only 1&ndash;2 tries per account &mdash; under the lockout threshold.</td></tr>
+          <tr><td>Credential stuffing</td><td>Leaked user:pass pairs replayed</td><td>Each pair tried once; looks like normal logins.</td></tr>
+        </tbody>
+      </table>
+      <p class="muted-small" style="margin-top:12px;">The through-line: <b>rate limiting by IP alone is not enough</b>.
+        Effective defence tracks the <i>account</i> being targeted, scores <i>automation</i>, and checks whether the
+        <i>password itself</i> is already compromised.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="layer1" class="panel">
+      <div class="layer"><span class="num">1</span><h2>Advanced Rate Limiting &mdash; per-username</h2></div>
+      <p class="sub"><span class="pill ent">Enterprise + Advanced Rate Limiting</span></p>
+      <p>Rate limit by the <code class="inline">username</code> value extracted from the body, <b>not</b> the client IP.
+        This is the single most important control: it catches <b>distributed</b> spraying where each IP only sends a
+        request or two, but the same account is hammered from all of them.</p>
+      <div class="cap">Rule expression (when to count)</div>
+      <pre class="code"><span class="c"># POST to the login endpoint that carries a password</span>
+http.request.uri.path <span class="op">eq</span> <span class="s">"/login"</span> <span class="op">and</span>
+http.request.method <span class="op">eq</span> <span class="s">"POST"</span> <span class="op">and</span>
+http.request.body.form[<span class="s">"password"</span>] <span class="op">ne</span> <span class="s">""</span></pre>
+      <div class="cap">Counting characteristic (track the rate per account)</div>
+      <pre class="code">http.request.body.form[<span class="s">"username"</span>]</pre>
+      <p class="muted-small">Tune: e.g. <b>5 requests / 10 minutes</b> per username, action <b>Managed Challenge</b>
+        (softer) or <b>Block</b>. Add a second rule counting per IP as a backstop. For JSON logins, count on
+        <code class="inline">lookup_json_string(http.request.body.raw, "username")</code>.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="layer2" class="panel">
+      <div class="layer"><span class="num">2</span><h2>Bot Management &mdash; block automation</h2></div>
+      <p class="sub"><span class="pill ent">Enterprise + Bot Management</span></p>
+      <p>Spraying is almost always automated (hydra, Burp Intruder, scripted <code class="inline">curl</code> loops,
+        headless browsers). Bot Management scores every request <b>1&ndash;99</b> (1 = certainly a bot, 99 = certainly
+        human). Challenge or block low scores at the login endpoint.</p>
+      <pre class="code"><span class="c"># Challenge automated requests hitting the login page</span>
+http.request.uri.path <span class="op">eq</span> <span class="s">"/login"</span> <span class="op">and</span>
+cf.bot_management.score <span class="op">lt</span> 30</pre>
+      <p class="muted-small">Prefer <b>Managed Challenge</b> over Block for the 1&ndash;30 band to avoid blocking real
+        users on shared networks; reserve hard <b>Block</b> for very low scores or combine with Layer&nbsp;1/4 signals.
+        <code class="inline">verified_bot</code> traffic (uptime monitors, etc.) can be allowed explicitly.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="layer3" class="panel">
+      <div class="layer"><span class="num">3</span><h2>WAF custom rules &mdash; body inspection</h2></div>
+      <p class="sub"><span class="pill pro">Pro / Business (limited)</span> <span class="pill ent">Enterprise (full body)</span></p>
+      <p>Inspect the body to block malformed logins and obviously scripted shapes &mdash; a cheap first filter that runs
+        before the heavier layers.</p>
+      <div class="cap">Block malformed requests (missing password field)</div>
+      <pre class="code">http.request.uri.path <span class="op">eq</span> <span class="s">"/login"</span> <span class="op">and</span>
+http.request.method <span class="op">eq</span> <span class="s">"POST"</span> <span class="op">and</span>
+<span class="op">not</span> http.request.body.form[<span class="s">"password"</span>] <span class="op">ne</span> <span class="s">""</span></pre>
+      <div class="cap">Match a weak / templated password format with regex</div>
+      <pre class="code"><span class="c"># Example: exactly 8 lowercase-alnum chars — a common generated pattern</span>
+http.request.uri.path <span class="op">eq</span> <span class="s">"/login"</span> <span class="op">and</span>
+http.request.body.form[<span class="s">"password"</span>] <span class="op">matches</span> <span class="s">"^[a-z0-9]{8}$"</span></pre>
+      <p class="muted-small">Use pattern rules sparingly &mdash; they are easy to evade and can cause false positives.
+        Treat them as signals feeding a challenge, not a sole defence.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="layer4" class="panel">
+      <div class="layer"><span class="num">4</span><h2>Leaked Credential Check (LCC)</h2></div>
+      <p class="sub"><span class="pill ent">Enterprise WAF add-on</span> &middot; the strongest single signal</p>
+      <p>Cloudflare checks submitted credentials against known-breached databases <b>in-line</b>, exposing the result as
+        <code class="inline">cf.waf.credential_check.*</code> fields you can act on &mdash; without your origin ever
+        handling the raw comparison.</p>
+      <div class="cap">Challenge logins using a known-leaked password</div>
+      <pre class="code">http.request.uri.path <span class="op">eq</span> <span class="s">"/login"</span> <span class="op">and</span>
+cf.waf.credential_check.password_leaked <span class="op">eq</span> <span class="op">true</span></pre>
+      <div class="cap">Highest confidence &mdash; the exact user:pass pair is known-breached</div>
+      <pre class="code">cf.waf.credential_check.username_and_password_leaked <span class="op">eq</span> <span class="op">true</span></pre>
+      <ul class="bullets">
+        <li><code class="inline">password_leaked</code> &mdash; the submitted password appears in a breach set.</li>
+        <li><code class="inline">username_and_password_leaked</code> &mdash; the exact pair is known-compromised (block outright).</li>
+        <li><code class="inline">username_leaked</code>, <code class="inline">similar_password</code> &mdash; weaker signals for step-up auth.</li>
+      </ul>
+      <p class="muted-small">Best practice: don&rsquo;t just block &mdash; on a leaked match, force <b>MFA / password
+        reset</b> so you also protect the legitimate owner of a compromised credential.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="layer5" class="panel">
+      <div class="layer"><span class="num">5</span><h2>Turnstile &amp; Access &mdash; raise the cost</h2></div>
+      <p class="sub"><span class="pill pro">All plans (Turnstile free)</span></p>
+      <p>Beyond detection, make automation expensive up front:</p>
+      <ul class="bullets">
+        <li><b>Turnstile</b> on the login form issues a token the backend validates &mdash; with
+          <b>pre-clearance</b> it also sets <code class="inline">cf_clearance</code>, so a WAF rule can require a valid
+          challenge before <code class="inline">/login</code> is even reachable.</li>
+        <li><b>Cloudflare Access</b> in front of admin / internal logins removes password auth from the public Internet
+          entirely (SSO + device posture).</li>
+        <li><b>Account-based rate limiting + progressive delay</b> at the origin (e.g. Worker + KV) as a backstop for
+          the account being targeted.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="stack" class="panel">
+      <h2>Recommended layered approach</h2>
+      <p class="sub">Defence in depth &mdash; each layer catches what the others miss. Run them <b>log-only first</b>,
+        then enforce.</p>
+      <table class="ref">
+        <thead><tr><th>Layer</th><th>Catches</th><th>Suggested action</th><th>Plan</th></tr></thead>
+        <tbody>
+          <tr><td>1 &middot; Rate limit / username</td><td>Volume &amp; distributed spraying on one account</td><td>Managed Challenge &rarr; Block</td><td>Ent + Adv RL</td></tr>
+          <tr><td>2 &middot; Bot Management</td><td>Automated tools, scripts, headless</td><td>Challenge low scores</td><td>Ent + Bot Mgmt</td></tr>
+          <tr><td>3 &middot; WAF custom rules</td><td>Malformed / templated requests</td><td>Block obvious, else signal</td><td>Pro / Biz / Ent</td></tr>
+          <tr><td>4 &middot; Leaked Credential Check</td><td>Breached passwords &amp; pairs</td><td>Block pair; MFA on password</td><td>Ent WAF add-on</td></tr>
+          <tr><td>5 &middot; Turnstile / Access</td><td>Bulk automation up front</td><td>Require token / SSO</td><td>All / Zero Trust</td></tr>
+        </tbody>
+      </table>
+      <div class="note" style="margin-top:16px;"><b>Best combined rule of thumb:</b> hard-<b>block</b> only on
+        high-confidence signals (<code class="inline">username_and_password_leaked</code>, bot score &lt; 5).
+        For everything else, <b>challenge</b> and let real users through &mdash; then watch Security Analytics and
+        tighten. This minimises false positives while still shutting down the spray.</div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="fields" class="panel">
+      <h2>Key fields for a form body</h2>
+      <p class="sub">For <code class="inline">application/x-www-form-urlencoded</code>; use
+        <code class="inline">lookup_json_string(http.request.body.raw, "field")</code> for JSON.</p>
+      <table class="ref">
+        <thead><tr><th>Field</th><th>What it is</th></tr></thead>
+        <tbody>
+          <tr><td>http.request.body.form["username"]</td><td>The <code class="inline">username</code> POST parameter &mdash; use as the rate-limit characteristic to track per-account attempts.</td></tr>
+          <tr><td>http.request.body.form["password"]</td><td>The <code class="inline">password</code> parameter &mdash; match, inspect, or pattern-match the submitted value.</td></tr>
+          <tr><td>http.request.body.raw</td><td>Raw body string &mdash; for custom parsing or non-standard encodings / JSON.</td></tr>
+          <tr><td>cf.bot_management.score</td><td>Bot score 1&ndash;99 (1 = certainly automated). Requires Bot Management.</td></tr>
+          <tr><td>cf.waf.credential_check.password_leaked</td><td>Boolean &mdash; true if the submitted password matches a breached-credential entry.</td></tr>
+          <tr><td>cf.waf.credential_check.username_and_password_leaked</td><td>Boolean &mdash; true if the exact user:pass pair is known-breached.</td></tr>
+        </tbody>
+      </table>
+      <p class="muted-small">Body fields require the rule to run on requests with a parsed body &mdash; scope to
+        <code class="inline">POST</code> on the login path. Full raw-body inspection is an Enterprise capability.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="test" class="panel">
+      <h2>Test it</h2>
+      <p class="sub">Simulate a spray and confirm the layers fire in Security Analytics / the rule&rsquo;s log.</p>
+      <pre class="code"><span class="c"># A crude spray: one common password across many usernames</span>
+for u in alice bob carol dave erin; do
+  curl -s -o /dev/null -w <span class="s">"%{http_code}\n"</span> https://www.pimenta.fun/login \
+    -X POST \
+    --data-raw <span class="s">"username=${u}@example.com&amp;password=Winter2025"</span>
+done
+
+<span class="c"># Expect: first few 200/401 from origin, then 403 (Block) or 429</span>
+<span class="c"># (Rate Limiting) / a challenge interstitial once a layer trips.</span></pre>
+      <ul class="bullets">
+        <li>Watch <b>Security</b> &rarr; <b>Analytics</b> &mdash; events attributed to Rate Limiting, Bot Management,
+          WAF, or Leaked Credentials.</li>
+        <li>Deploy each rule in <b>Log</b> mode first to size false positives before switching to Challenge/Block.</li>
+      </ul>
+      <div class="warn" style="margin-top:12px;">Only test against endpoints you own. These examples target this
+        lab&rsquo;s own login path for demonstration.</div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="resources" class="panel">
+      <h2>Resources</h2>
+      <ul class="bullets">
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/waf/rate-limiting-rules/">Rate Limiting Rules</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/waf/rate-limiting-rules/parameters/">parameters</a> (body-field characteristics).</li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/waf/managed-rules/check-for-exposed-credentials/">Leaked Credential Check</a> &mdash; the <code class="inline">cf.waf.credential_check.*</code> fields.</li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/bots/concepts/bot-score/">Bot scores</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/bots/">Bot Management</a>.</li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/waf/custom-rules/">WAF custom rules</a> &middot; <a style="color:var(--accent);" href="https://www.pimenta.fun/turnstile/pre-clearance/">Turnstile pre-clearance</a>.</li>
+      </ul>
+      <p class="muted-small" style="margin-top:14px;">Reference material developed by TPimenta LAB. Always consult the
+        official Cloudflare documentation for the most accurate, up-to-date guidance. Use at your own risk.</p>
+    </section>
   </main>
 
   <footer class="lab">
-    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    <a href="https://www.pimenta.fun/#tests">Back to tests</a>
   </footer>
 </body>
 </html>
