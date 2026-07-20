@@ -4,7 +4,7 @@ compatibility_date = "2024-09-23"
 
 # Public Turnstile site key (safe to expose in HTML).
 [vars]
-TURNSTILE_SITEKEY = "1x00000000000000000000AA"  # replace with your real site key
+TURNSTILE_SITEKEY = "0x4AAAAAAD52oqYbnL94i_7v"  # replace with your real site key
 INJECT_SELECTOR = "form"                         # CSS selector for widget placement
 VERIFY_METHODS = "POST"                          # methods to verify before hitting origin
 # ORIGIN_URL = "https://origin.example.com"      # uncomment to proxy to a different origin
@@ -35,6 +35,6 @@ MAX_TOKEN_AGE_SECONDS = "300"                         # reject tokens older than
 # Route the Worker in front of YOUR zone (this is a reference sample — do NOT
 # point it at a whole production zone until you have tested it). Adjust to your
 # domain and uncomment:
-# [[routes]]
-# pattern = "example.com/*"
-# zone_name = "example.com"
+[[routes]]
+ pattern = "www.pimenta.fun/turnstile/injection-worker*"
+ zone_name = "pimenta.fun"

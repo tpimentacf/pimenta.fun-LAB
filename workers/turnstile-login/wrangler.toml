@@ -5,7 +5,7 @@ compatibility_date = "2024-09-23"
 # Public Turnstile site key (safe to expose in HTML). Default = Cloudflare test
 # key that always passes so the demo works with zero config.
 [vars]
-TURNSTILE_SITEKEY = "1x00000000000000000000AA"  # replace with your real site key
+TURNSTILE_SITEKEY = "0x4AAAAAAD52oqYbnL94i_7v"  # replace with your real site key
 INJECT_SELECTOR = "form"                         # where HTMLRewriter injects the widget
 
 # ---- Demo credentials -------------------------------------------------------
@@ -15,7 +15,7 @@ DEMO_USERNAME = "tpimentacf@gmail.com"
 DEMO_PASSWORD = "1z1muef2"
 
 # ---- Anti-bypass hardening (all optional; unset = check skipped) ----
-# EXPECTED_HOSTNAMES = "www.pimenta.fun"   # token hostname must match one of these
+EXPECTED_HOSTNAMES = "www.pimenta.fun"   # token hostname must match one of these
 # EXPECTED_ACTION = "login"                # token action must equal this (data-action)
 # EXPECTED_CDATA = ""                      # token cdata must equal this (data-cdata)
 MAX_TOKEN_AGE_SECONDS = "300"              # reject tokens older than this (freshness)
@@ -38,6 +38,6 @@ MAX_TOKEN_AGE_SECONDS = "300"              # reject tokens older than this (fres
 # id = "<your-kv-namespace-id>"
 
 # Route the Worker on the lab zone. Uncomment to deploy:
-# [[routes]]
-# pattern = "www.pimenta.fun/turnstile/secure-login*"
-# zone_name = "pimenta.fun"
+[[routes]]
+ pattern = "www.pimenta.fun/turnstile/secure-login*"
+ zone_name = "pimenta.fun"
