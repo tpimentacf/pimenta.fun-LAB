@@ -1,0 +1,14 @@
+name = "precursor-clearance"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# Route the Worker so it fronts the precursor-lab page and can read the
+# incoming request's cf_clearance cookie on the actual page request.
+# Adjust the zone_name to your zone. Comment this out to deploy to
+# precursor-clearance.<your-subdomain>.workers.dev instead.
+routes = [
+  { pattern = "www.pimenta.fun/precursor-lab*", zone_name = "pimenta.fun" }
+]
+
+# Optional: enable a workers.dev preview URL while testing.
+workers_dev = true
