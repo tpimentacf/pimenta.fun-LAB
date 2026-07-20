@@ -29,7 +29,8 @@ const CHECK_PATH = "/precursor-clearance";
 
 function detectClearance(cookieHeader) {
   const m = (cookieHeader || "").match(/(?:^|;\s*)cf_clearance=([^;]*)/);
-  return { present: !!m, len: m ? m[1].length : 0 };
+  const value = m ? m[1] : "";
+  return { present: !!m, len: value.length, value: value };
 }
 
 function clearanceHeaders(clr, extra) {

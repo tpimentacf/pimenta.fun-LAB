@@ -81,6 +81,7 @@
     .sigtable td.g { color: var(--green); }
     .sigtable td.r { color: var(--accent2); }
     .sigtable td.m { color: var(--muted); }
+    .sigtable td.val { white-space: normal; word-break: break-all; max-width: 340px; color: #9cc0ff; }
     .sigtable .empty { color: var(--muted); text-align: center; padding: 16px; }
 
     .bullets li { margin: 6px 0; }
@@ -217,14 +218,14 @@
         add a row. The check hits the dedicated <code class="inline">/precursor-clearance</code> Worker endpoint (not the
         challenged page path, so it is never blocked with a 403). Values come from that request&rsquo;s response:
         <code class="inline">cf-ray</code>, <code class="inline">cf-mitigated</code>, HTTP status, and the server-read
-        <code class="inline">cf_clearance</code> presence (<code class="inline">X-CF-Clearance</code>). Newest first;
-        last 25 requests.</p>
+        <code class="inline">cf_clearance</code> presence <b>and full value</b> (read from the request
+        <code class="inline">Cookie</code> header). Newest first; last 25 requests.</p>
       <div class="sigwrap">
         <table class="sigtable">
           <thead><tr>
-            <th>#</th><th>time</th><th>cf-ray</th><th>cf_clearance</th><th>cf-mitigated</th><th>status</th>
+            <th>#</th><th>time</th><th>cf-ray</th><th>cf_clearance</th><th>cf_clearance value</th><th>cf-mitigated</th><th>status</th>
           </tr></thead>
-          <tbody id="sigrows"><tr><td class="empty" colspan="6">no requests yet &mdash; press &ldquo;Re-fetch this page&rdquo;&hellip;</td></tr></tbody>
+          <tbody id="sigrows"><tr><td class="empty" colspan="7">no requests yet &mdash; press &ldquo;Check clearance now&rdquo;&hellip;</td></tr></tbody>
         </table>
       </div>
 
@@ -444,27 +445,34 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
        response header on each re-fetch. No separate/external request is made.
        If the Worker is not deployed we fall back to document.cookie. */
 
-    // clrState: { present, len, source }
+    // clrState: { present, len, value, source }
     var clrState = readInjectedClearance();
 
     function readInjectedClearance() {
       var w = window.__cfClearance;
       if (w && typeof w.present === "boolean") {
-        return { present: w.present, len: w.len || 0, source: "page request (Worker)" };
+        return { present: w.present, len: w.len || 0, value: w.value || "", source: "page request (Worker)" };
       }
       var c = getCookie("cf_clearance");
-      return { present: !!c, len: c ? c.length : 0,
+      return { present: !!c, len: c ? c.length : 0, value: c || "",
         source: c ? "document.cookie" : "document.cookie (HttpOnly hidden)" };
     }
 
-    // Update clrState from an X-CF-Clearance response header (per re-fetch).
-    function clearanceFromResponse(r) {
+    // Update clrState from the /precursor-clearance check response.
+    // Prefer the JSON body (carries the value); fall back to the headers.
+    function clearanceFromCheck(json, r) {
+      if (json && typeof json.present === "boolean") {
+        clrState = { present: json.present, len: json.len || 0, value: json.value || "",
+          source: "clearance check (Worker)" };
+        return true;
+      }
       var x = r.headers.get("x-cf-clearance");
       if (x === null) return false;
       clrState = {
         present: x === "present",
         len: parseInt(r.headers.get("x-cf-clearance-len") || "0", 10) || 0,
-        source: "page re-fetch (Worker)"
+        value: "",
+        source: "clearance check (Worker)"
       };
       return true;
     }
@@ -480,6 +488,7 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
         ray: ray === "\u2014" ? ray : ray.split("-")[0],
         clr: clrState.present ? ("\u2713 " + clrState.len) : (failed ? "?" : "\u2014"),
         clrOk: clrState.present,
+        val: clrState.present ? (clrState.value || "(value not exposed)") : "\u2014",
         mit: resp.mit || "\u2014",
         status: failed ? "fetch err" : String(resp.status),
         bad: failed || resp.mit === "challenge" || resp.status >= 400
@@ -491,7 +500,7 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
     function renderSigTable() {
       var tb = $("sigrows");
       if (!sigRows.length) {
-        tb.innerHTML = '<tr><td class="empty" colspan="6">no requests yet \u2014 press \u201cRe-fetch this page\u201d\u2026</td></tr>';
+        tb.innerHTML = '<tr><td class="empty" colspan="7">no requests yet \u2014 press \u201cCheck clearance now\u201d\u2026</td></tr>';
         return;
       }
       tb.innerHTML = sigRows.map(function (row, i) {
@@ -501,6 +510,7 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
           "<td class=\"m\">" + esc(row.time) + "</td>" +
           "<td>" + esc(row.ray) + "</td>" +
           "<td class=\"" + (row.clrOk ? "g" : "m") + "\">" + esc(row.clr) + "</td>" +
+          "<td class=\"val\" title=\"" + esc(row.val) + "\">" + esc(row.val) + "</td>" +
           "<td class=\"" + (row.mit === "\u2014" ? "m" : "r") + "\">" + esc(row.mit) + "</td>" +
           "<td class=\"" + (row.bad ? "r" : "g") + "\">" + esc(row.status) + "</td>" +
           "</tr>";
@@ -517,10 +527,13 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
       var rows = [
         ["cf_clearance cookie", present
           ? "present (" + len + " chars, HttpOnly)"
-          : (viaWorker ? "not in request cookies" : "not visible to JS (HttpOnly or not set)")],
-        ["challenge-platform script", cs ? "detected on page" : "not detected"],
-        ["detection method", esc(clrState.source)]
+          : (viaWorker ? "not in request cookies" : "not visible to JS (HttpOnly or not set)")]
       ];
+      if (present) {
+        rows.push(["cf_clearance value", esc(clrState.value || "(value not exposed by Worker)")]);
+      }
+      rows.push(["challenge-platform script", cs ? "detected on page" : "not detected"]);
+      rows.push(["detection method", esc(clrState.source)]);
       $("clr").innerHTML = rows.map(function (r) {
         return '<div class="k">' + esc(r[0]) + '</div><div class="v">' + r[1] + "</div>";
       }).join("");
@@ -729,19 +742,21 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
           var mit = r.headers.get("cf-mitigated");
           pl("status " + r.status + (ray ? "  cf-ray=" + ray : "") +
             (mit ? "  cf-mitigated=" + mit : ""), r.status >= 400 || mit ? "r" : "g");
-          if (r.status === 403 || mit === "challenge") {
-            pl("check endpoint was challenged \u2014 scope the challenge to /precursor-lab only " +
-              "so it does not match /precursor-clearance", "r");
-          } else if (!r.headers.get("x-cf-clearance")) {
-            pl("no X-CF-Clearance header \u2014 is the precursor-clearance Worker deployed on this route?", "r");
-          } else {
-            var updated = clearanceFromResponse(r);
-            pl(updated
-              ? "clearance read from request: " + (clrState.present ? "present (" + clrState.len + " chars)" : "not in request cookies")
-              : "responded, but no clearance header", clrState.present ? "g" : "r");
-          }
-          addSignalRow({ status: r.status, ray: ray, mit: mit }, false);
-          watchClearance();
+          var challenged = r.status === 403 || mit === "challenge";
+          return r.json().catch(function () { return null; }).then(function (json) {
+            if (challenged) {
+              pl("check endpoint was challenged \u2014 scope the challenge to /precursor-lab only " +
+                "so it does not match /precursor-clearance", "r");
+            } else if (clearanceFromCheck(json, r)) {
+              pl(clrState.present
+                ? "cf_clearance present (" + clrState.len + " chars): " + (clrState.value || "(value not exposed)")
+                : "cf_clearance not in request cookies", clrState.present ? "g" : "r");
+            } else {
+              pl("no clearance data \u2014 is the precursor-clearance Worker deployed on this route?", "r");
+            }
+            addSignalRow({ status: r.status, ray: ray, mit: mit }, false);
+            watchClearance();
+          });
         })
         .catch(function (e) {
           pl("fetch error: " + e.message, "r");
