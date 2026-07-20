@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mock Origin — Turnstile Test</title>
+    <!--
+      NOTE: This page intentionally has NO Turnstile script or widget.
+      The Worker injects both. If you see the widget + script below when
+      loaded through the Worker, injection works.
+    -->
+  </head>
+  <body>
+    <h1>Mock Origin</h1>
+    <p>This is the origin page. The Worker should inject Turnstile into the form below.</p>
+
+    <form method="POST" action="/submit">
+      <label>Name: <input type="text" name="name" value="alice" /></label>
+      <!-- Worker injects <div class="cf-turnstile" ...> here -->
+      <button type="submit">Submit</button>
+    </form>
+  </body>
+</html>

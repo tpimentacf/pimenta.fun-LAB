@@ -1,0 +1,2 @@
+# Copy to .dev.vars for local `wrangler dev`. NEVER commit the real .dev.vars.
+TURNSTILE_SECRET="1x0000000000000000000000000000000AA"
