@@ -13,19 +13,39 @@ the page making any separate/external request.
 
 ## How it works
 
-1. Read the incoming request `Cookie` header and match `cf_clearance=...`.
-2. `fetch(request)` the origin page as normal.
-3. Add response headers `X-CF-Clearance: present|absent` and
-   `X-CF-Clearance-Len: <n>` so a re-fetch of the actual page URL can read the
-   per-request state.
-4. For HTML responses, use `HTMLRewriter` to inject
+It serves two routes:
+
+1. `www.pimenta.fun/precursor-lab*` — the HTML page. The Worker `fetch()`es the
+   origin page, adds `X-CF-Clearance: present|absent` / `X-CF-Clearance-Len`
+   headers, and uses `HTMLRewriter` to inject
    `<script>window.__cfClearance = {present, len}</script>` into `<head>` so the
    state is available on the very first page load.
+2. `www.pimenta.fun/precursor-clearance` — a dedicated JSON check endpoint
+   answered **directly** by the Worker (no origin fetch). It returns
+   `{ present, len }` plus the same headers. Because it is a separate path and
+   is answered by the Worker, the page can `fetch()` it via XHR without being
+   blocked by the page's interactive challenge.
 
-The precursor-lab page reads `window.__cfClearance` on load and the
-`X-CF-Clearance` header on each "Re-fetch this page" request; it falls back to
+The precursor-lab page reads `window.__cfClearance` on load and calls
+`/precursor-clearance` from its "Check clearance now" button; it falls back to
 `document.cookie` (which normally can't see the cookie) when the Worker is not
 deployed.
+
+## Route / order (important)
+
+Cloudflare evaluates WAF/challenge rules **before** Workers. If a challenge
+protects the page, an XHR/`fetch()` to the **page path** returns `403`
+(`cf-mitigated: challenge`) — a challenge can't be solved by a background fetch.
+That is why the check endpoint lives on a **separate path**.
+
+Scope any challenge to the page path only, e.g.:
+
+```
+(starts_with(http.request.uri.path, "/precursor-lab"))
+```
+
+Make sure it does **not** match `/precursor-clearance`, otherwise the check
+endpoint would be challenged too and the button would still see a `403`.
 
 ## Deploy
 
@@ -34,16 +54,15 @@ cd workers/precursor-clearance
 npx wrangler deploy
 ```
 
-Verify (a request without a passed challenge has no cf_clearance):
+Verify the check endpoint (not challenged; a request without a passed challenge
+has no cf_clearance):
 
 ```bash
-curl -sI https://www.pimenta.fun/precursor-lab/ | grep -i x-cf-clearance
-# X-CF-Clearance: absent
-# X-CF-Clearance-Len: 0
+curl -s https://www.pimenta.fun/precursor-clearance
+# {"present":false,"len":0}
 
-curl -sI https://www.pimenta.fun/precursor-lab/ -H 'Cookie: cf_clearance=abc123' | grep -i x-cf-clearance
-# X-CF-Clearance: present
-# X-CF-Clearance-Len: 6
+curl -s https://www.pimenta.fun/precursor-clearance -H 'Cookie: cf_clearance=abc123'
+# {"present":true,"len":6}
 ```
 
 ## Notes / limitations

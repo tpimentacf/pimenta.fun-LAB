@@ -213,10 +213,10 @@
       <div class="log" id="clrlog"><div class="t">cf_clearance watcher idle&hellip;</div></div>
 
       <h3>Per-request signals</h3>
-      <p class="sub">One row per <b>actual request to this page</b> &mdash; press
-        <b>&ldquo;Re-fetch this page&rdquo;</b> below to add a row. No background or external requests are made.
-        Values come from that request&rsquo;s own response: <code class="inline">cf-ray</code>,
-        <code class="inline">cf-mitigated</code>, HTTP status, and the server-read
+      <p class="sub">One row per <b>clearance check</b> &mdash; press <b>&ldquo;Check clearance now&rdquo;</b> below to
+        add a row. The check hits the dedicated <code class="inline">/precursor-clearance</code> Worker endpoint (not the
+        challenged page path, so it is never blocked with a 403). Values come from that request&rsquo;s response:
+        <code class="inline">cf-ray</code>, <code class="inline">cf-mitigated</code>, HTTP status, and the server-read
         <code class="inline">cf_clearance</code> presence (<code class="inline">X-CF-Clearance</code>). Newest first;
         last 25 requests.</p>
       <div class="sigwrap">
@@ -239,7 +239,7 @@
       <div class="kv" id="bstats"></div>
       <div class="btnrow">
         <button class="btn sm" id="b-start">Record 6s of interaction</button>
-        <button class="btn sm" id="b-refetch">Re-fetch this page (credentials)</button>
+        <button class="btn sm" id="b-refetch">Check clearance now</button>
       </div>
       <div class="log" id="plog"><div class="t">probe idle&hellip;</div></div>
     </section>
@@ -707,7 +707,12 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
       }, DURATION);
     }
 
-    /* ---- re-fetch probe ---- */
+    /* ---- clearance check probe ----
+       Hits the dedicated, un-challenged Worker endpoint (/precursor-clearance)
+       instead of the challenged page path, so an XHR/fetch is not blocked (403)
+       by the interactive challenge. The Worker reads the request Cookie header
+       and reports cf_clearance for this actual request. */
+    var CLR_CHECK = "/precursor-clearance";
     function refetch() {
       var box = $("plog");
       var pl = function (m, c) {
@@ -716,21 +721,25 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
           (c ? '<span class="' + c + '">' + esc(m) + "</span>" : esc(m));
         box.appendChild(d); box.scrollTop = box.scrollHeight;
       };
-      var url = location.pathname + "?_p=" + Date.now();
+      var url = CLR_CHECK + "?_p=" + Date.now();
       pl("GET " + url + " (credentials: include)");
-      fetch(url, { credentials: "include", headers: { "X-Precursor-Lab": "1" } })
+      fetch(url, { credentials: "include", headers: { "Accept": "application/json" } })
         .then(function (r) {
           var ray = r.headers.get("cf-ray");
           var mit = r.headers.get("cf-mitigated");
           pl("status " + r.status + (ray ? "  cf-ray=" + ray : "") +
             (mit ? "  cf-mitigated=" + mit : ""), r.status >= 400 || mit ? "r" : "g");
-          if (mit === "challenge" || r.status === 403) {
-            pl("this request was challenged/blocked \u2014 Maximize Security behavior", "r");
+          if (r.status === 403 || mit === "challenge") {
+            pl("check endpoint was challenged \u2014 scope the challenge to /precursor-lab only " +
+              "so it does not match /precursor-clearance", "r");
+          } else if (!r.headers.get("x-cf-clearance")) {
+            pl("no X-CF-Clearance header \u2014 is the precursor-clearance Worker deployed on this route?", "r");
           } else {
-            pl("served normally \u2014 existing session is currently trusted", "g");
+            var updated = clearanceFromResponse(r);
+            pl(updated
+              ? "clearance read from request: " + (clrState.present ? "present (" + clrState.len + " chars)" : "not in request cookies")
+              : "responded, but no clearance header", clrState.present ? "g" : "r");
           }
-          // update clearance from this actual request's response, then log it
-          clearanceFromResponse(r);
           addSignalRow({ status: r.status, ray: ray, mit: mit }, false);
           watchClearance();
         })
