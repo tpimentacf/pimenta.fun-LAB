@@ -70,6 +70,19 @@
     .ref tbody td.d { color: var(--muted); }
     .ref tbody tr:last-child td { border-bottom: none; }
 
+    /* live per-request signals table */
+    .sigwrap { border: 1px solid var(--border); border-radius: 12px; overflow: auto; max-height: 320px; margin: 4px 0 0; }
+    .sigtable { width: 100%; border-collapse: collapse; font-family: ui-monospace, Menlo, monospace; font-size: 0.75rem; white-space: nowrap; }
+    .sigtable thead th { position: sticky; top: 0; background: var(--panel2); color: var(--accent); text-align: left;
+      font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.4px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    .sigtable tbody td { padding: 6px 10px; border-bottom: 1px solid rgba(35,48,86,0.6); color: #d7e2f7; }
+    .sigtable tbody tr:hover td { background: rgba(91,141,239,0.06); }
+    .sigtable tbody tr.new td { background: rgba(54,211,153,0.08); }
+    .sigtable td.g { color: var(--green); }
+    .sigtable td.r { color: var(--accent2); }
+    .sigtable td.m { color: var(--muted); }
+    .sigtable .empty { color: var(--muted); text-align: center; padding: 16px; }
+
     .bullets li { margin: 6px 0; }
     .muted-small { color: var(--muted); font-size: 0.8rem; }
     pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
@@ -196,6 +209,21 @@
         header the edge actually received &mdash; which does include HttpOnly cookies the browser sends.</p>
       <div class="kv" id="clr"></div>
       <div class="log" id="clrlog"><div class="t">cf_clearance watcher idle&hellip;</div></div>
+
+      <h3>Per-request edge signals <span class="pill">live</span></h3>
+      <p class="sub">One row per request the watcher makes to the edge (via <code class="inline">/cf-echo/echo</code>,
+        every 2s and on each re-fetch). Precursor scores the session server-side, so these are the request-level
+        signals the edge <i>exposes</i> back &mdash; the closest observable proxy from the browser. Newest first;
+        last 25 requests. Bot-score fields require Bot Management on the zone (otherwise <span class="muted-small">&mdash;</span>).</p>
+      <div class="sigwrap">
+        <table class="sigtable">
+          <thead><tr>
+            <th>#</th><th>time</th><th>cf-ray</th><th>cf_clearance</th><th>bot score</th>
+            <th>verified</th><th>http</th><th>colo</th><th>cc</th><th>tls</th><th>status</th>
+          </tr></thead>
+          <tbody id="sigrows"><tr><td class="empty" colspan="11">waiting for first request&hellip;</td></tr></tbody>
+        </table>
+      </div>
 
       <h3>Environment signals</h3>
       <div class="signals" id="sigs"></div>
@@ -412,14 +440,25 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
     var CLR_ECHO = "/cf-echo/echo";
     var serverClr = { checked: false, ok: false, present: false, len: 0, fp: "" };
 
-    function checkServerClearance() {
+    /* live per-request signals table */
+    var sigRows = [], reqCount = 0, MAX_SIG_ROWS = 25;
+
+    function checkServerClearance(source) {
       return fetch(CLR_ECHO + "?_c=" + Date.now(), {
         credentials: "include",
         headers: { "Accept": "application/json" }
       })
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          var ck = (d && d.headers && d.headers.cookie) || "";
+        .then(function (r) {
+          var resp = {
+            status: r.status,
+            ray: r.headers.get("cf-ray"),
+            mit: r.headers.get("cf-mitigated")
+          };
+          return r.json().then(function (d) { return { resp: resp, data: d }; });
+        })
+        .then(function (o) {
+          var d = o.data || {};
+          var ck = (d.headers && d.headers.cookie) || "";
           var m = ck.match(/(?:^|; )cf_clearance=([^;]*)/);
           serverClr = {
             checked: true, ok: true,
@@ -427,10 +466,60 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
             len: m ? m[1].length : 0,
             fp: m ? m[1].slice(-6) : ""
           };
+          addSignalRow(o.resp, d, source);
         })
         .catch(function () {
           serverClr = { checked: true, ok: false, present: false, len: 0, fp: "" };
+          addSignalRow({ status: 0, ray: null, mit: null }, null, source, true);
         });
+    }
+
+    function addSignalRow(resp, d, source, failed) {
+      var cf = (d && d.cf) || {};
+      var bm = cf.botManagement || {};
+      var ray = resp.ray || (d && d.headers && d.headers["cf-ray"]) || "\u2014";
+      sigRows.unshift({
+        n: ++reqCount,
+        time: now(),
+        ray: ray === "\u2014" ? ray : ray.split("-")[0],
+        clr: serverClr.present ? ("\u2713 " + serverClr.len) : (failed ? "?" : "\u2014"),
+        clrOk: serverClr.present,
+        score: (bm.score != null ? String(bm.score) : (cf.botManagement ? "?" : "\u2014")),
+        vbot: (bm.verifiedBot === true ? "yes" : (bm.verifiedBot === false ? "no" : "\u2014")),
+        http: cf.httpProtocol || "\u2014",
+        colo: cf.colo || "\u2014",
+        cc: cf.country || "\u2014",
+        tls: cf.tlsVersion || "\u2014",
+        status: failed ? "fetch err" : (resp.status + (resp.mit ? " / " + resp.mit : "")),
+        bad: failed || resp.mit === "challenge" || resp.status >= 400,
+        src: source || "watch"
+      });
+      if (sigRows.length > MAX_SIG_ROWS) sigRows.length = MAX_SIG_ROWS;
+      renderSigTable();
+    }
+
+    function renderSigTable() {
+      var tb = $("sigrows");
+      if (!sigRows.length) {
+        tb.innerHTML = '<tr><td class="empty" colspan="11">waiting for first request\u2026</td></tr>';
+        return;
+      }
+      tb.innerHTML = sigRows.map(function (row, i) {
+        var cls = i === 0 ? ' class="new"' : "";
+        return "<tr" + cls + ">" +
+          "<td class=\"m\">" + row.n + "</td>" +
+          "<td class=\"m\">" + esc(row.time) + "</td>" +
+          "<td>" + esc(row.ray) + "</td>" +
+          "<td class=\"" + (row.clrOk ? "g" : "m") + "\">" + esc(row.clr) + "</td>" +
+          "<td>" + esc(row.score) + "</td>" +
+          "<td>" + esc(row.vbot) + "</td>" +
+          "<td>" + esc(row.http) + "</td>" +
+          "<td>" + esc(row.colo) + "</td>" +
+          "<td>" + esc(row.cc) + "</td>" +
+          "<td>" + esc(row.tls) + "</td>" +
+          "<td class=\"" + (row.bad ? "r" : "g") + "\">" + esc(row.status) + "</td>" +
+          "</tr>";
+      }).join("");
     }
 
     function renderClearance() {
@@ -518,8 +607,8 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
         (cls ? '<span class="' + cls + '">' + esc(msg) + "</span>" : esc(msg));
       box.appendChild(line); box.scrollTop = box.scrollHeight;
     }
-    function watchClearance() {
-      return checkServerClearance().then(function () {
+    function watchClearance(source) {
+      return checkServerClearance(source || "watch").then(function () {
         var clr = renderClearance();
         var key = clr ? clr.len + ":" + clr.fp : "none";
         if (!watchStarted) {
@@ -678,7 +767,7 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
             pl("served normally \u2014 existing session is currently trusted", "g");
           }
           // re-read clearance after the round-trip
-          watchClearance();
+          watchClearance("refetch");
         })
         .catch(function (e) { pl("fetch error: " + e.message, "r"); });
     }
