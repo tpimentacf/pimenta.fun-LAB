@@ -1,0 +1,20 @@
+name = "precursor-clearance"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# Route the Worker so it (1) fronts the precursor-lab page to read the incoming
+# cf_clearance cookie and inject the state, and (2) serves a dedicated, direct
+# check endpoint at /precursor-clearance that the page can fetch without hitting
+# the challenged page path. Adjust zone_name to your zone. Comment out to deploy
+# to precursor-clearance.<your-subdomain>.workers.dev instead.
+#
+# route/order: keep any challenge protecting the page scoped to the page path
+# only (e.g. path starts with "/precursor-lab"); it must NOT match
+# "/precursor-clearance", or the check endpoint would be challenged too.
+routes = [
+  { pattern = "www.pimenta.fun/precursor-lab*", zone_name = "pimenta.fun" },
+  { pattern = "www.pimenta.fun/precursor-clearance", zone_name = "pimenta.fun" }
+]
+
+# Optional: enable a workers.dev preview URL while testing.
+workers_dev = true
