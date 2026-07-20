@@ -1,8 +1,19 @@
 /**
  * Cloudflare Worker: Turnstile-protected login demo.
  *
- * GET  /turnstile/secure-login   -> renders a login page with the Turnstile
- *                                   widget injected into the form.
+ * This is the companion demo for the Injection & Verification Worker guide
+ * (https://www.pimenta.fun/turnstile/injection-worker/). It shows BOTH halves
+ * of that technique on one page:
+ *
+ *   - INJECTION: the login HTML it serves contains NO Turnstile markup. The
+ *     Worker streams it through HTMLRewriter and injects the api.js script into
+ *     <head> and the cf-turnstile widget into the <form> — exactly like the
+ *     injector Worker fronting an origin, but here the "origin" is this Worker.
+ *   - VERIFICATION: on submit it runs the full server-side pipeline before
+ *     accepting the login.
+ *
+ * GET  /turnstile/secure-login   -> builds a widget-less login page, then
+ *                                   HTMLRewriter-injects the script + widget.
  * POST /turnstile/secure-login   -> runs the FULL verification pipeline from the
  *                                   Injection & Verification Worker guide, then
  *                                   checks demo credentials. On success it serves
@@ -22,6 +33,7 @@
  * Config (vars):
  *   TURNSTILE_SITEKEY      site key (public)   default: test key 1x00..AA (pass)
  *   TURNSTILE_SECRET       secret [wrangler secret put] default: test secret (pass)
+ *   INJECT_SELECTOR        widget target selector, default "form"
  *   DEMO_USERNAME          expected username   default: tpimentacf@gmail.com
  *   DEMO_PASSWORD          expected password   default: 1z1muef2   (DEMO ONLY)
  *   EXPECTED_HOSTNAMES, EXPECTED_ACTION, EXPECTED_CDATA, MAX_TOKEN_AGE_SECONDS,
@@ -49,7 +61,7 @@ export default {
     if (request.method.toUpperCase() === "POST") {
       return handleLogin(request, env, ctx, sitekey);
     }
-    return htmlResponse(loginPage(sitekey, null), 200);
+    return loginResponse(env, sitekey, null, 200);
   },
 };
 
@@ -60,18 +72,18 @@ async function handleLogin(request, env, ctx, sitekey) {
   // ---- 1. Pre-flight edge signals -----------------------------------------
   const blockedAsns = parseList(env.BLOCKED_ASNS);
   if (blockedAsns.length && cf.asn != null && blockedAsns.includes(String(cf.asn))) {
-    return htmlResponse(loginPage(sitekey, "Blocked network (ASN)."), 403);
+    return loginResponse(env, sitekey, "Blocked network (ASN).", 403);
   }
   const minBotScore = toInt(env.MIN_BOT_SCORE);
   const botScore = cf.botManagement && cf.botManagement.score;
   if (minBotScore && typeof botScore === "number" && botScore < minBotScore) {
-    return htmlResponse(loginPage(sitekey, "Blocked (bot score too low)."), 403);
+    return loginResponse(env, sitekey, "Blocked (bot score too low).", 403);
   }
 
   // ---- 2. Parse the submission --------------------------------------------
   const { token, username, password } = await parseSubmission(request);
   if (!token) {
-    return htmlResponse(loginPage(sitekey, "Missing Turnstile token — solve the widget."), 403);
+    return loginResponse(env, sitekey, "Missing Turnstile token — solve the widget.", 403);
   }
 
   const tokenHash = await sha256Hex(token);
@@ -80,7 +92,7 @@ async function handleLogin(request, env, ctx, sitekey) {
   if (env.TOKEN_REPLAY) {
     const seen = await env.TOKEN_REPLAY.get(`t:${tokenHash}`);
     if (seen) {
-      return htmlResponse(loginPage(sitekey, "Token already used (replay detected)."), 403);
+      return loginResponse(env, sitekey, "Token already used (replay detected).", 403);
     }
   }
 
@@ -100,13 +112,13 @@ async function handleLogin(request, env, ctx, sitekey) {
     if (String(env.FAIL_OPEN).toLowerCase() === "true") {
       outcome = { success: true, "failed-open": true };
     } else {
-      return htmlResponse(loginPage(sitekey, "Turnstile verification request failed."), 502);
+      return loginResponse(env, sitekey, "Turnstile verification request failed.", 502);
     }
   }
 
   if (!outcome.success) {
     const codes = (outcome["error-codes"] || []).join(", ") || "verification failed";
-    return htmlResponse(loginPage(sitekey, "Turnstile verification failed: " + codes), 403);
+    return loginResponse(env, sitekey, "Turnstile verification failed: " + codes, 403);
   }
 
   // ---- 5. Validate the FULL outcome ---------------------------------------
@@ -122,7 +134,7 @@ async function handleLogin(request, env, ctx, sitekey) {
     if (!Number.isFinite(ageSec) || ageSec > maxAge || ageSec < -60) reasons.push("token-stale");
   }
   if (reasons.length) {
-    return htmlResponse(loginPage(sitekey, "Turnstile outcome rejected: " + reasons.join(", ")), 403);
+    return loginResponse(env, sitekey, "Turnstile outcome rejected: " + reasons.join(", "), 403);
   }
 
   // Ephemeral-id abuse counter (optional).
@@ -134,7 +146,7 @@ async function handleLogin(request, env, ctx, sitekey) {
     const count = (toInt(await env.TOKEN_REPLAY.get(key)) || 0) + 1;
     ctx.waitUntil(env.TOKEN_REPLAY.put(key, String(count), { expirationTtl: windowSec }));
     if (count > epMax) {
-      return htmlResponse(loginPage(sitekey, "Device rate limit exceeded."), 429);
+      return loginResponse(env, sitekey, "Device rate limit exceeded.", 429);
     }
   }
 
@@ -147,8 +159,10 @@ async function handleLogin(request, env, ctx, sitekey) {
   const expectedUser = env.DEMO_USERNAME || "tpimentacf@gmail.com";
   const expectedPass = env.DEMO_PASSWORD || "1z1muef2";
   if (username !== expectedUser || password !== expectedPass) {
-    return htmlResponse(
-      loginPage(sitekey, "Turnstile passed \u2713 \u2014 but the email or password is incorrect."),
+    return loginResponse(
+      env,
+      sitekey,
+      "Turnstile passed \u2713 \u2014 but the email or password is incorrect.",
       401
     );
   }
@@ -190,7 +204,7 @@ function shell(title, bodyHtml) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>${escapeHtml(title)}</title>
 <link rel="stylesheet" href="/assets/lab.css" />
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<!-- NOTE: no Turnstile <script> here. The Worker injects it via HTMLRewriter. -->
 <style>
   .kvt { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 6px 0 0; }
   .kvt th, .kvt td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
@@ -233,7 +247,10 @@ ${bodyHtml}
 </html>`;
 }
 
-function loginPage(sitekey, message) {
+// The HTML this returns contains NO Turnstile widget or script — the Worker
+// injects both via HTMLRewriter in loginResponse(). This is the same technique
+// the Injection & Verification Worker uses in front of a real origin.
+function loginPage(message) {
   const banner = message
     ? `<div class="warn">${escapeHtml(message)}</div>`
     : `<div class="note">Sign in to see every Turnstile field, all Bot Management data, and the full set of
@@ -252,13 +269,47 @@ function loginPage(sitekey, message) {
       <input id="username" name="username" type="email" autocomplete="username" placeholder="you@example.com" required />
       <label for="password">Password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required />
-      <div class="cf-turnstile" data-sitekey="${escapeHtml(sitekey)}" data-theme="dark" style="margin:16px 0;"></div>
+      <!-- The Worker prepends <div class="cf-turnstile"> into this form via HTMLRewriter. -->
       <button class="btn" type="submit">Sign in</button>
     </form>
-    <p class="muted-small" style="color:var(--muted);font-size:0.8rem;">The Turnstile widget adds a hidden
-      <code class="inline">cf-turnstile-response</code> token to this form; the Worker verifies it at
-      <code class="inline">/siteverify</code> before checking credentials. Test sitekey shown always passes.</p>`
+    <p class="muted-small" style="color:var(--muted);font-size:0.8rem;">This page&rsquo;s HTML ships with
+      <b>no Turnstile markup</b> &mdash; view source and you won&rsquo;t find the widget. The Worker injects the
+      <code class="inline">api.js</code> script and the <code class="inline">cf-turnstile</code> widget on the fly with
+      <code class="inline">HTMLRewriter</code>, then verifies the resulting
+      <code class="inline">cf-turnstile-response</code> token at <code class="inline">/siteverify</code> before
+      checking credentials. Test sitekey always passes.</p>`
   );
+}
+
+// Build the login page and inject the Turnstile script + widget with
+// HTMLRewriter — the same inject-at-the-edge technique as the injector Worker.
+function loginResponse(env, sitekey, message, status) {
+  const res = new Response(loginPage(message), {
+    status: status || 200,
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+  });
+
+  const scriptTag =
+    '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>';
+  const actionAttr = env.EXPECTED_ACTION ? ` data-action="${escapeHtml(env.EXPECTED_ACTION)}"` : "";
+  const cdataAttr = env.EXPECTED_CDATA ? ` data-cdata="${escapeHtml(env.EXPECTED_CDATA)}"` : "";
+  const widgetHtml =
+    `<div class="cf-turnstile" data-sitekey="${escapeHtml(sitekey)}" data-theme="dark"` +
+    `${actionAttr}${cdataAttr} style="margin:16px 0;"></div>`;
+  const selector = env.INJECT_SELECTOR || "form";
+
+  return new HTMLRewriter()
+    .on("head", {
+      element(el) {
+        el.append(scriptTag, { html: true });
+      },
+    })
+    .on(selector, {
+      element(el) {
+        el.prepend(widgetHtml, { html: true });
+      },
+    })
+    .transform(res);
 }
 
 function resultPage(username, outcome, request) {

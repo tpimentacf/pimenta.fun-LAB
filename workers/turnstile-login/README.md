@@ -4,8 +4,21 @@ A self-contained Cloudflare Worker that serves a **Turnstile-protected login
 demo** and, on a successful sign-in, dumps every signal the edge saw for the
 request.
 
-- `GET  /turnstile/secure-login` → a lab-themed login page (email + password +
-  Turnstile widget) that posts back to the same path.
+It is the companion demo for the
+[Injection & Verification Worker](https://www.pimenta.fun/turnstile/injection-worker/)
+and shows **both halves of that technique on one page**:
+
+- **Injection** — the login HTML it serves contains **no Turnstile markup**. The
+  Worker streams it through `HTMLRewriter` and injects the `api.js` script into
+  `<head>` and the `cf-turnstile` widget into the `<form>` — exactly like the
+  injector Worker fronting an origin, except here the "origin" is this Worker.
+  View source and you won't find the widget; it's added at the edge.
+- **Verification** — on submit it runs the full server-side pipeline before
+  accepting the login.
+
+- `GET  /turnstile/secure-login` → builds a widget-less login page (email +
+  password), then HTMLRewriter-injects the script + widget, and posts back to
+  the same path.
 - `POST /turnstile/secure-login` → runs the **full verification pipeline** from
   the [Injection & Verification Worker](https://www.pimenta.fun/turnstile/injection-worker/)
   guide, then checks the demo credentials. On success it renders a page listing:
@@ -43,7 +56,8 @@ Zero-config: with nothing set, the Worker falls back to the Cloudflare **test
 keys** (always pass) and the default demo credentials, so it runs immediately.
 
 Key vars (see `wrangler.toml` for the full list): `TURNSTILE_SITEKEY`,
-`TURNSTILE_SECRET` (secret), `DEMO_USERNAME`, `DEMO_PASSWORD`, plus the optional
+`TURNSTILE_SECRET` (secret), `INJECT_SELECTOR` (widget target, default `form`),
+`DEMO_USERNAME`, `DEMO_PASSWORD`, plus the optional
 hardening knobs `EXPECTED_HOSTNAMES`, `EXPECTED_ACTION`, `EXPECTED_CDATA`,
 `MAX_TOKEN_AGE_SECONDS`, `BLOCKED_ASNS`, `MIN_BOT_SCORE`,
 `EPHEMERAL_ID_MAX_USES`, `EPHEMERAL_ID_WINDOW`, `FAIL_OPEN`, and the
@@ -76,8 +90,8 @@ secret `1x0000000000000000000000000000000AA` always passes,
   ship hardcoded creds; use an identity provider and hashed secrets.
 - Bot Management data is real on the `pimenta.fun` zone; on zones without the
   entitlement `request.cf.botManagement` is absent and that section says so.
-- The widget is only UI — the **server-side `/siteverify` check** is what
-  actually gates the login. Never skip it.
+- The widget is injected at the edge and is only UI — the **server-side
+  `/siteverify` check** is what actually gates the login. Never skip it.
 - Never commit `.dev.vars` (holds the real secret) — it is git-ignored.
 
 Docs: <https://developers.cloudflare.com/turnstile/> ·
