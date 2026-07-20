@@ -203,25 +203,26 @@
         is computed at the edge from signals JS can never see.</p>
 
       <h3>Clearance &amp; challenge state</h3>
-      <p class="sub"><code class="inline">cf_clearance</code> is an <code class="inline">HttpOnly</code> cookie, so
-        <code class="inline">document.cookie</code> can never read it. This panel detects it by asking a same-origin
-        echo Worker (<code class="inline">/cf-echo/echo</code>) to report the request <code class="inline">Cookie</code>
-        header the edge actually received &mdash; which does include HttpOnly cookies the browser sends.</p>
+      <p class="sub">This panel reads <code class="inline">cf_clearance</code> only from
+        <code class="inline">document.cookie</code> and makes <b>no extra requests</b> to probe for it. Note that
+        <code class="inline">cf_clearance</code> is an <code class="inline">HttpOnly</code> cookie, so it is invisible to
+        page JavaScript &mdash; it will usually read as &ldquo;not visible to JS&rdquo; even when a valid session
+        exists. Confirm the real cookie in DevTools &rarr; Application &rarr; Cookies.</p>
       <div class="kv" id="clr"></div>
       <div class="log" id="clrlog"><div class="t">cf_clearance watcher idle&hellip;</div></div>
 
-      <h3>Per-request edge signals <span class="pill">live</span></h3>
-      <p class="sub">One row per request the watcher makes to the edge (via <code class="inline">/cf-echo/echo</code>,
-        every 2s and on each re-fetch). Precursor scores the session server-side, so these are the request-level
-        signals the edge <i>exposes</i> back &mdash; the closest observable proxy from the browser. Newest first;
-        last 25 requests. Bot-score fields require Bot Management on the zone (otherwise <span class="muted-small">&mdash;</span>).</p>
+      <h3>Per-request signals</h3>
+      <p class="sub">One row per <b>actual request to this page</b> &mdash; press
+        <b>&ldquo;Re-fetch this page&rdquo;</b> below to add a row. No background or external requests are made.
+        Values come from that request&rsquo;s own response: <code class="inline">cf-ray</code>,
+        <code class="inline">cf-mitigated</code>, HTTP status, and the JS-visible
+        <code class="inline">cf_clearance</code> state. Newest first; last 25 requests.</p>
       <div class="sigwrap">
         <table class="sigtable">
           <thead><tr>
-            <th>#</th><th>time</th><th>cf-ray</th><th>cf_clearance</th><th>bot score</th>
-            <th>verified</th><th>http</th><th>colo</th><th>cc</th><th>tls</th><th>status</th>
+            <th>#</th><th>time</th><th>cf-ray</th><th>cf_clearance</th><th>cf-mitigated</th><th>status</th>
           </tr></thead>
-          <tbody id="sigrows"><tr><td class="empty" colspan="11">waiting for first request&hellip;</td></tr></tbody>
+          <tbody id="sigrows"><tr><td class="empty" colspan="6">no requests yet &mdash; press &ldquo;Re-fetch this page&rdquo;&hellip;</td></tr></tbody>
         </table>
       </div>
 
@@ -433,66 +434,26 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
       return false;
     }
 
-    /* cf_clearance is an HttpOnly cookie: the browser SENDS it on every request,
-       but page JavaScript can NEVER read it via document.cookie. To detect it
-       reliably we ask a same-origin echo Worker to report the request Cookie
-       header it received (which does include HttpOnly cookies). */
-    var CLR_ECHO = "/cf-echo/echo";
-    var serverClr = { checked: false, ok: false, present: false, len: 0, fp: "" };
+    /* cf_clearance is an HttpOnly cookie set by Cloudflare: the browser sends it
+       on every request, but it is invisible to page JavaScript. We read only what
+       document.cookie exposes and make NO extra requests to probe for it. When the
+       cookie is HttpOnly (the default) it simply reads as "not visible to JS". */
 
-    /* live per-request signals table */
+    /* per-request signals table (one row per actual page re-fetch) */
     var sigRows = [], reqCount = 0, MAX_SIG_ROWS = 25;
 
-    function checkServerClearance(source) {
-      return fetch(CLR_ECHO + "?_c=" + Date.now(), {
-        credentials: "include",
-        headers: { "Accept": "application/json" }
-      })
-        .then(function (r) {
-          var resp = {
-            status: r.status,
-            ray: r.headers.get("cf-ray"),
-            mit: r.headers.get("cf-mitigated")
-          };
-          return r.json().then(function (d) { return { resp: resp, data: d }; });
-        })
-        .then(function (o) {
-          var d = o.data || {};
-          var ck = (d.headers && d.headers.cookie) || "";
-          var m = ck.match(/(?:^|; )cf_clearance=([^;]*)/);
-          serverClr = {
-            checked: true, ok: true,
-            present: !!m,
-            len: m ? m[1].length : 0,
-            fp: m ? m[1].slice(-6) : ""
-          };
-          addSignalRow(o.resp, d, source);
-        })
-        .catch(function () {
-          serverClr = { checked: true, ok: false, present: false, len: 0, fp: "" };
-          addSignalRow({ status: 0, ray: null, mit: null }, null, source, true);
-        });
-    }
-
-    function addSignalRow(resp, d, source, failed) {
-      var cf = (d && d.cf) || {};
-      var bm = cf.botManagement || {};
-      var ray = resp.ray || (d && d.headers && d.headers["cf-ray"]) || "\u2014";
+    function addSignalRow(resp, failed) {
+      var ray = resp.ray || "\u2014";
+      var clr = getCookie("cf_clearance");
       sigRows.unshift({
         n: ++reqCount,
         time: now(),
         ray: ray === "\u2014" ? ray : ray.split("-")[0],
-        clr: serverClr.present ? ("\u2713 " + serverClr.len) : (failed ? "?" : "\u2014"),
-        clrOk: serverClr.present,
-        score: (bm.score != null ? String(bm.score) : (cf.botManagement ? "?" : "\u2014")),
-        vbot: (bm.verifiedBot === true ? "yes" : (bm.verifiedBot === false ? "no" : "\u2014")),
-        http: cf.httpProtocol || "\u2014",
-        colo: cf.colo || "\u2014",
-        cc: cf.country || "\u2014",
-        tls: cf.tlsVersion || "\u2014",
-        status: failed ? "fetch err" : (resp.status + (resp.mit ? " / " + resp.mit : "")),
-        bad: failed || resp.mit === "challenge" || resp.status >= 400,
-        src: source || "watch"
+        clr: clr ? ("\u2713 " + clr.length) : (failed ? "?" : "\u2014"),
+        clrOk: !!clr,
+        mit: resp.mit || "\u2014",
+        status: failed ? "fetch err" : String(resp.status),
+        bad: failed || resp.mit === "challenge" || resp.status >= 400
       });
       if (sigRows.length > MAX_SIG_ROWS) sigRows.length = MAX_SIG_ROWS;
       renderSigTable();
@@ -501,7 +462,7 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
     function renderSigTable() {
       var tb = $("sigrows");
       if (!sigRows.length) {
-        tb.innerHTML = '<tr><td class="empty" colspan="11">waiting for first request\u2026</td></tr>';
+        tb.innerHTML = '<tr><td class="empty" colspan="6">no requests yet \u2014 press \u201cRe-fetch this page\u201d\u2026</td></tr>';
         return;
       }
       tb.innerHTML = sigRows.map(function (row, i) {
@@ -511,44 +472,24 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
           "<td class=\"m\">" + esc(row.time) + "</td>" +
           "<td>" + esc(row.ray) + "</td>" +
           "<td class=\"" + (row.clrOk ? "g" : "m") + "\">" + esc(row.clr) + "</td>" +
-          "<td>" + esc(row.score) + "</td>" +
-          "<td>" + esc(row.vbot) + "</td>" +
-          "<td>" + esc(row.http) + "</td>" +
-          "<td>" + esc(row.colo) + "</td>" +
-          "<td>" + esc(row.cc) + "</td>" +
-          "<td>" + esc(row.tls) + "</td>" +
+          "<td class=\"" + (row.mit === "\u2014" ? "m" : "r") + "\">" + esc(row.mit) + "</td>" +
           "<td class=\"" + (row.bad ? "r" : "g") + "\">" + esc(row.status) + "</td>" +
           "</tr>";
       }).join("");
     }
 
     function renderClearance() {
-      // Authoritative source: the request Cookie header (reads HttpOnly cf_clearance).
-      // document.cookie is only a fallback and normally cannot see cf_clearance.
-      var jsClr = getCookie("cf_clearance");
-      var present = serverClr.present || !!jsClr;
-      var len = serverClr.present ? serverClr.len : (jsClr ? jsClr.length : 0);
-      var fp = serverClr.present ? serverClr.fp : (jsClr ? jsClr.slice(-6) : "");
+      // cf_clearance is HttpOnly, so document.cookie normally cannot see it.
+      var clr = getCookie("cf_clearance");
+      var present = !!clr;
+      var len = clr ? clr.length : 0;
+      var fp = clr ? clr.slice(-6) : "";
       var cs = challengeScriptPresent();
 
-      var cookieDesc;
-      if (present) {
-        cookieDesc = "present (" + len + " chars)" +
-          (serverClr.present && !jsClr ? " \u2014 HttpOnly, read from request header" : "");
-      } else if (!serverClr.checked) {
-        cookieDesc = "checking\u2026";
-      } else if (!serverClr.ok) {
-        cookieDesc = "unknown \u2014 echo endpoint unreachable";
-      } else {
-        cookieDesc = "not set (this session)";
-      }
-
       var rows = [
-        ["cf_clearance cookie", cookieDesc],
+        ["cf_clearance cookie", present ? "present (" + len + " chars)" : "not visible to JS (HttpOnly or not set)"],
         ["challenge-platform script", cs ? "detected on page" : "not detected"],
-        ["detection method", serverClr.ok
-          ? "server echo via " + CLR_ECHO + " (sees HttpOnly cookies)"
-          : "document.cookie only \u2014 HttpOnly cf_clearance is hidden from JS"]
+        ["detection method", "document.cookie only \u2014 no extra requests"]
       ];
       $("clr").innerHTML = rows.map(function (r) {
         return '<div class="k">' + esc(r[0]) + '</div><div class="v">' + esc(r[1]) + "</div>";
@@ -556,44 +497,34 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
 
       var st = $("status"), txt = st.querySelector(".txt");
       if (present && cs) {
-        // clearance established AND verification loop running
         st.className = "status on";
         txt.innerHTML =
-          "<b>Session verified.</b> A <code class=\"inline\">cf_clearance</code> cookie is set <i>and</i> the " +
+          "<b>Session verified.</b> A <code class=\"inline\">cf_clearance</code> cookie is readable <i>and</i> the " +
           "challenge-platform verification script is running &mdash; the clearance signal is active and being " +
           "re-evaluated. Confirm Precursor itself in the dashboard &rarr; Security &rarr; Analytics.";
       } else if (present && !cs) {
-        // clearance present, but the verification script isn't on this page
         st.className = "status on";
         txt.innerHTML =
-          "<b>Clearance present.</b> A <code class=\"inline\">cf_clearance</code> cookie is set (read from the " +
-          "request header &mdash; it is <code class=\"inline\">HttpOnly</code>, so invisible to " +
-          "<code class=\"inline\">document.cookie</code>), so a valid session exists. The challenge-platform " +
-          "verification script is <i>not</i> detected on this page right now; the clearance was likely established " +
+          "<b>Clearance present.</b> A <code class=\"inline\">cf_clearance</code> cookie is readable from " +
+          "<code class=\"inline\">document.cookie</code>, so a valid session exists &mdash; but the challenge-platform " +
+          "verification script is <i>not</i> detected on this page right now. The clearance was likely established " +
           "earlier in the session.";
       } else if (!present && cs) {
-        // verification running, no clearance yet
         st.className = "status warn";
         txt.innerHTML =
-          "<b>Verification running &mdash; no clearance yet.</b> The challenge-platform script is present, but no " +
-          "<code class=\"inline\">cf_clearance</code> cookie is set. Session state has not been established yet " +
-          "(typical of Minimize Friction until a signal is scored).";
-      } else if (!serverClr.ok && !jsClr) {
-        // couldn't determine server-side and JS can't read it
-        st.className = "status off";
-        txt.innerHTML =
-          "<b>Clearance state unknown.</b> <code class=\"inline\">cf_clearance</code> is " +
-          "<code class=\"inline\">HttpOnly</code> and cannot be read by page JavaScript, and the echo endpoint " +
-          "(<code class=\"inline\">" + esc(CLR_ECHO) + "</code>) was unreachable, so presence can&rsquo;t be " +
-          "confirmed from this page right now. Check DevTools &rarr; Application &rarr; Cookies.";
+          "<b>Verification running.</b> The challenge-platform script is present, but no " +
+          "<code class=\"inline\">cf_clearance</code> cookie is readable from page JavaScript. Note that " +
+          "<code class=\"inline\">cf_clearance</code> is <code class=\"inline\">HttpOnly</code>, so it stays invisible " +
+          "to <code class=\"inline\">document.cookie</code> even when set &mdash; check DevTools &rarr; Application " +
+          "&rarr; Cookies to confirm.";
       } else {
-        // genuinely no clearance and no script
         st.className = "status off";
         txt.innerHTML =
-          "<b>No clearance signals yet.</b> No <code class=\"inline\">cf_clearance</code> cookie (confirmed from the " +
-          "request header) <i>and</i> no challenge-platform verification script were found. This can be normal " +
-          "(Minimize Friction, or a cached page) &mdash; or Precursor may not be enabled on this zone. Enablement is " +
-          "a zone setting &mdash; verify in the dashboard.";
+          "<b>No clearance visible to JavaScript.</b> No <code class=\"inline\">cf_clearance</code> cookie is readable " +
+          "via <code class=\"inline\">document.cookie</code> and no challenge-platform script was found. Because " +
+          "<code class=\"inline\">cf_clearance</code> is <code class=\"inline\">HttpOnly</code> by default, this is " +
+          "expected even when a valid session exists &mdash; inspect DevTools &rarr; Application &rarr; Cookies to see " +
+          "the real value. It can also mean Minimize Friction, a cached page, or that Precursor is not enabled here.";
       }
       return present ? { len: len, fp: fp } : null;
     }
@@ -607,21 +538,18 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
         (cls ? '<span class="' + cls + '">' + esc(msg) + "</span>" : esc(msg));
       box.appendChild(line); box.scrollTop = box.scrollHeight;
     }
-    function watchClearance(source) {
-      return checkServerClearance(source || "watch").then(function () {
-        var clr = renderClearance();
-        var key = clr ? clr.len + ":" + clr.fp : "none";
-        if (!watchStarted) {
-          watchStarted = true; lastClr = key;
-          $("clrlog").innerHTML = "";
-          logClr("watching cf_clearance every 2s via " + CLR_ECHO + " (change = re-evaluation)");
-          logClr("initial: " + (clr ? "set, " + clr.len + " chars" : "not set"), clr ? "g" : "r");
-        } else if (key !== lastClr) {
-          lastClr = key;
-          logClr("cf_clearance CHANGED -> " + (clr ? "set, " + clr.len + " chars" : "cleared"),
-            clr ? "g" : "r");
-        }
-      });
+    function watchClearance() {
+      var clr = renderClearance();
+      var key = clr ? clr.len + ":" + clr.fp : "none";
+      if (!watchStarted) {
+        watchStarted = true; lastClr = key;
+        $("clrlog").innerHTML = "";
+        logClr("watching cf_clearance via document.cookie (no extra requests)");
+        logClr("initial: " + (clr ? "set, " + clr.len + " chars" : "not visible to JS"), clr ? "g" : "r");
+      } else if (key !== lastClr) {
+        lastClr = key;
+        logClr("cf_clearance CHANGED -> " + (clr ? "set, " + clr.len + " chars" : "cleared"), clr ? "g" : "r");
+      }
     }
 
     /* ---- environment signals ---- */
@@ -766,10 +694,14 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
           } else {
             pl("served normally \u2014 existing session is currently trusted", "g");
           }
-          // re-read clearance after the round-trip
-          watchClearance("refetch");
+          // record this actual page request in the signals table + re-read clearance
+          addSignalRow({ status: r.status, ray: ray, mit: mit }, false);
+          watchClearance();
         })
-        .catch(function (e) { pl("fetch error: " + e.message, "r"); });
+        .catch(function (e) {
+          pl("fetch error: " + e.message, "r");
+          addSignalRow({ status: 0, ray: null, mit: null }, true);
+        });
     }
 
     /* ---- boot ---- */
