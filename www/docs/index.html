@@ -208,7 +208,11 @@
         { name:"Injection &amp; Verification Worker", href:"/turnstile/injection-worker/", prod:"Turnstile / Workers",
           badges:["worker","guide","config"],
           desc:"A Worker that fronts your origin, injects the Turnstile widget with <code class=\"inline\">HTMLRewriter</code> (no origin code changes), and verifies the token server-side at <code class=\"inline\">/siteverify</code> before any form POST reaches origin &mdash; plus multi-signal anti-bypass hardening (full outcome validation, single-use tokens, ASN &amp; bot-score floors, ephemeral-id caps, CSP).",
-          impl:"Cloudflare Worker (<code class=\"inline\">workers/turnstile-injector/</code>): HTMLRewriter injection on HTML responses, <code class=\"inline\">POST</code> gating via <code class=\"inline\">/siteverify</code> with stable <code class=\"inline\">idempotency_key = sha256(token)</code>, plus optional KV replay cache and edge signal checks." }
+          impl:"Cloudflare Worker (<code class=\"inline\">workers/turnstile-injector/</code>): HTMLRewriter injection on HTML responses, <code class=\"inline\">POST</code> gating via <code class=\"inline\">/siteverify</code> with stable <code class=\"inline\">idempotency_key = sha256(token)</code>, plus optional KV replay cache and edge signal checks." },
+        { name:"Secure Login Worker (signals dump)", href:"/turnstile/secure-login", prod:"Turnstile / Workers",
+          badges:["worker","guide","config"],
+          desc:"A self-contained Worker serving a Turnstile-gated login. It runs the full server-side verification pipeline, then on a valid token + demo credentials dumps every Turnstile <code class=\"inline\">/siteverify</code> field, all Bot Management data, every <code class=\"inline\">request.cf.*</code> signal, and all request headers.",
+          impl:"Cloudflare Worker (<code class=\"inline\">workers/turnstile-login/</code>): <code class=\"inline\">GET</code> renders the login page, <code class=\"inline\">POST</code> verifies via <code class=\"inline\">/siteverify</code> (secret + remoteip + stable <code class=\"inline\">idempotency_key</code>) with full outcome validation, then checks credentials and renders the request-signals page. Falls back to Turnstile test keys for zero-config." }
       ]},
 
       { title: "Error Pages", desc: "Custom error responses and the block experience.", items: [
