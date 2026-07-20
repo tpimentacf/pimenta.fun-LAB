@@ -1,0 +1,25 @@
+workers/turnstile-injector/.dev.vars.example
+  s_45d7e19da6ce2d::t_a49156f8d2319f 1-2
+workers/turnstile-injector/test/curl-tests.sh
+  s_45d7e19da6ce2d::t_f43c4e7f930d89 1-171
+workers/turnstile-injector/test/origin.html
+  s_45d7e19da6ce2d::t_11973b8c80ff2e 1-23
+workers/turnstile-injector/worker.js
+  s_45d7e19da6ce2d::t_1dfe4590698db6 1-349
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "963db33e8a6437d5fdb717488b430595d8008a13",
+  "prompts": {},
+  "sessions": {
+    "s_45d7e19da6ce2d": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10621ba67ffeb0finUXEc7EfXx",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "tpimenta <tpimenta@cloudflare.com>"
+    }
+  }
+}
