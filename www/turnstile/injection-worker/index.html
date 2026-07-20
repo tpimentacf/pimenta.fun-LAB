@@ -96,6 +96,13 @@
       outgoing pages and enforces it on incoming submissions &mdash; ideal for legacy apps, third-party platforms, or
       anywhere you can&rsquo;t easily edit the backend.</div>
 
+    <div class="note"><b>&#9654; Try the live demo:</b> the
+      <a style="color:var(--accent)" href="https://www.pimenta.fun/turnstile/secure-login">Turnstile Secure Login</a>
+      is a Worker that serves a login page whose HTML has <b>no widget in it</b> &mdash; it injects the script + widget
+      with <code class="inline">HTMLRewriter</code> exactly as described here, then runs the full verification pipeline
+      on submit and, on success, dumps every Turnstile field and request signal it saw. View source: no
+      <code class="inline">cf-turnstile</code> markup &mdash; it&rsquo;s all added at the edge.</div>
+
     <nav class="toc">
       <a href="#idea">The idea</a>
       <a href="#how">How it works</a>
@@ -224,7 +231,7 @@ form.append(<span class="s">"idempotency_key"</span>, <span class="k">await</spa
 &#9500;&#9472;&#9472; .dev.vars.example     <span class="c"># template for local TURNSTILE_SECRET</span>
 &#9500;&#9472;&#9472; README.md             <span class="c"># deploy + test walkthrough</span>
 &#9492;&#9472;&#9472; test/
-    &#9500;&#9472;&#9472; origin.html       <span class="c"># mock origin page with a form (no Turnstile)</span>
+    &#9500;&#9472;&#9472; origin.html       <span class="c"># mock origin login page, no Turnstile (Worker injects it)</span>
     &#9492;&#9472;&#9472; curl-tests.sh     <span class="c"># pass/fail + hardening path tests</span></div>
       <p class="muted-small">Source in the repo under <code class="inline">workers/turnstile-injector/</code>. The
         <code class="inline">.dev.vars</code> file (your real local secret) is git-ignored.</p>
@@ -294,7 +301,7 @@ zone_name = <span class="s">"example.com"</span></pre></li>
     <section id="test" class="panel">
       <h2>Test it locally</h2>
       <p class="sub">Two terminals &mdash; a mock origin and the Worker &mdash; then run the curl script.</p>
-<pre class="code"><span class="c"># Terminal 1 &mdash; serve the mock origin</span>
+<pre class="code"><span class="c"># Terminal 1 &mdash; serve the mock origin (a login page with no Turnstile)</span>
 cd workers/turnstile-injector/test &amp;&amp; python3 -m http.server 8080
 
 <span class="c"># Terminal 2 &mdash; run the Worker (ORIGIN_URL=http://localhost:8080)</span>
@@ -305,9 +312,9 @@ cd workers/turnstile-injector/test &amp;&amp; ./curl-tests.sh</pre>
       <table class="ref">
         <thead><tr><th>#</th><th>Request</th><th>Expected</th></tr></thead>
         <tbody>
-          <tr><td>1</td><td><code>GET /</code></td><td class="d">HTML contains injected script + <code>cf-turnstile</code> widget</td></tr>
-          <tr><td>2</td><td><code>POST</code> no token</td><td class="d"><code>403</code> &mdash; origin never hit</td></tr>
-          <tr><td>3</td><td><code>POST</code> form + dummy token</td><td class="d"><code>200</code> with the PASS test secret</td></tr>
+          <tr><td>1</td><td><code>GET /</code></td><td class="d">Login HTML comes back with an injected script + <code>cf-turnstile</code> widget in the form</td></tr>
+          <tr><td>2</td><td><code>POST</code> login, no token</td><td class="d"><code>403</code> &mdash; origin never hit</td></tr>
+          <tr><td>3</td><td><code>POST</code> login form + dummy token</td><td class="d"><code>200</code> with the PASS test secret</td></tr>
           <tr><td>4</td><td><code>POST</code> JSON + dummy token</td><td class="d"><code>200</code> &mdash; JSON body path works</td></tr>
         </tbody>
       </table>
@@ -371,6 +378,7 @@ cd workers/turnstile-injector/test &amp;&amp; ./curl-tests.sh</pre>
       <ul class="bullets">
         <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/turnstile/">Turnstile docs</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/turnstile/get-started/server-side-validation/">Server-side validation (/siteverify)</a></li>
         <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/workers/runtime-apis/html-rewriter/">HTMLRewriter</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/turnstile/troubleshooting/testing/">Turnstile test keys</a></li>
+        <li>Live demo: <a style="color:var(--accent);" href="https://www.pimenta.fun/turnstile/secure-login">Turnstile Secure Login</a> (this technique end-to-end)</li>
         <li>Related labs: <a style="color:var(--accent);" href="https://www.pimenta.fun/turnstile/managed/">Turnstile managed</a> &middot; <a style="color:var(--accent);" href="https://www.pimenta.fun/turnstile/invisible/">invisible</a> &middot; <a style="color:var(--accent);" href="https://www.pimenta.fun/precursor-lab/">Precursor</a></li>
       </ul>
     </section>

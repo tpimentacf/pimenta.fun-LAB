@@ -6,6 +6,7 @@ compatibility_date = "2024-09-23"
 # key that always passes so the demo works with zero config.
 [vars]
 TURNSTILE_SITEKEY = "1x00000000000000000000AA"  # replace with your real site key
+INJECT_SELECTOR = "form"                         # where HTMLRewriter injects the widget
 
 # ---- Demo credentials -------------------------------------------------------
 # Lab-only convenience. In a real app NEVER hardcode credentials — use an

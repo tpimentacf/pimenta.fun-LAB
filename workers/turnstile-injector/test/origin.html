@@ -3,21 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mock Origin — Turnstile Test</title>
+    <title>Mock Origin — Login (Turnstile Test)</title>
     <!--
       NOTE: This page intentionally has NO Turnstile script or widget.
       The Worker injects both. If you see the widget + script below when
-      loaded through the Worker, injection works.
+      loaded through the Worker, injection works. This mirrors the live
+      demo at https://www.pimenta.fun/turnstile/secure-login
     -->
   </head>
   <body>
-    <h1>Mock Origin</h1>
-    <p>This is the origin page. The Worker should inject Turnstile into the form below.</p>
+    <h1>Mock Origin — Sign in</h1>
+    <p>This is the origin login page. The Worker should inject Turnstile into the form below.</p>
 
     <form method="POST" action="/submit">
-      <label>Name: <input type="text" name="name" value="alice" /></label>
+      <label>Email: <input type="email" name="username" value="user@example.com" /></label>
+      <label>Password: <input type="password" name="password" value="hunter2" /></label>
       <!-- Worker injects <div class="cf-turnstile" ...> here -->
-      <button type="submit">Submit</button>
+      <button type="submit">Sign in</button>
     </form>
   </body>
 </html>

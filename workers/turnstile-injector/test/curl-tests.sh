@@ -72,27 +72,27 @@ baseline() {
 
   hr "2. POST with NO token — expect 403 (origin never hit)"
   assert_code 403 "missing token rejected" \
-    -X POST "$SUBMIT" -H "Content-Type: application/x-www-form-urlencoded" --data "name=alice"
+    -X POST "$SUBMIT" -H "Content-Type: application/x-www-form-urlencoded" --data "username=user@example.com&password=hunter2"
 
   hr "3. POST with token (urlencoded) — pass path (secret must be 1x...PASS key)"
   assert_not_403 "urlencoded token accepted" \
     -X POST "$SUBMIT" -H "Content-Type: application/x-www-form-urlencoded" \
-    --data-urlencode "name=alice" --data-urlencode "cf-turnstile-response=$DUMMY_TOKEN"
+    --data-urlencode "username=user@example.com" --data-urlencode "password=hunter2" --data-urlencode "cf-turnstile-response=$DUMMY_TOKEN"
 
   hr "4. POST as JSON — same verify path via JSON body"
   assert_not_403 "json token accepted" \
     -X POST "$SUBMIT" -H "Content-Type: application/json" \
-    --data "{\"name\":\"alice\",\"cf-turnstile-response\":\"$DUMMY_TOKEN\"}"
+    --data "{\"username\":\"user@example.com\",\"password\":\"hunter2\",\"cf-turnstile-response\":\"$DUMMY_TOKEN\"}"
 
   hr "5. Replay — same token twice (needs TOKEN_REPLAY KV bound)"
   info "1st use should reach origin; 2nd identical token should be 403 token-replayed."
   local uniq="RE.$(date +%s).$RANDOM"
   assert_not_403 "replay: first use accepted" \
     -X POST "$SUBMIT" -H "Content-Type: application/json" \
-    --data "{\"name\":\"a\",\"cf-turnstile-response\":\"$uniq\"}"
+    --data "{\"username\":\"user@example.com\",\"cf-turnstile-response\":\"$uniq\"}"
   assert_code 403 "replay: second use rejected" \
     -X POST "$SUBMIT" -H "Content-Type: application/json" \
-    --data "{\"name\":\"a\",\"cf-turnstile-response\":\"$uniq\"}"
+    --data "{\"username\":\"user@example.com\",\"cf-turnstile-response\":\"$uniq\"}"
   info "If BOTH were accepted, TOKEN_REPLAY KV is not bound — see wrangler.toml."
 
   hr "Done (baseline)"
