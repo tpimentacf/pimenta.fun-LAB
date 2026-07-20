@@ -1,0 +1,40 @@
+name = "turnstile-injector"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+# Public Turnstile site key (safe to expose in HTML).
+[vars]
+TURNSTILE_SITEKEY = "1x00000000000000000000AA"  # replace with your real site key
+INJECT_SELECTOR = "form"                         # CSS selector for widget placement
+VERIFY_METHODS = "POST"                          # methods to verify before hitting origin
+# ORIGIN_URL = "https://origin.example.com"      # uncomment to proxy to a different origin
+
+# ---- Anti-bypass hardening (all optional; unset = check skipped) ----
+# EXPECTED_HOSTNAMES = "example.com,www.example.com"  # token hostname must match one of these
+# EXPECTED_ACTION = "login"                           # token action must equal this (data-action)
+# EXPECTED_CDATA = ""                                 # token cdata must equal this (data-cdata)
+MAX_TOKEN_AGE_SECONDS = "300"                         # reject tokens older than this (freshness)
+# BLOCKED_ASNS = "26548,43444,214216,62240"          # hosting/solver ASNs to hard-block
+# MIN_BOT_SCORE = "30"                                # block below this Bot Mgmt score (needs BM)
+# EPHEMERAL_ID_MAX_USES = "10"                        # max solves per device/window (Enterprise + KV)
+# EPHEMERAL_ID_WINDOW = "3600"                        # ephemeral_id counter window seconds
+# ADD_CSP = "true"                                    # inject a Turnstile-scoped CSP on HTML
+# FAIL_OPEN = "false"                                 # "true" = allow through if siteverify errors
+
+# TURNSTILE_SECRET is a SECRET — do NOT put it here. Set it with:
+#   npx wrangler secret put TURNSTILE_SECRET
+# Local dev: create a .dev.vars file with TURNSTILE_SECRET="..." (git-ignored).
+
+# ---- Replay defense + ephemeral_id counters (optional) ----
+# Create the namespace:  npx wrangler kv namespace create TOKEN_REPLAY
+# then paste the returned id below and uncomment.
+# [[kv_namespaces]]
+# binding = "TOKEN_REPLAY"
+# id = "<your-kv-namespace-id>"
+
+# Route the Worker in front of YOUR zone (this is a reference sample — do NOT
+# point it at a whole production zone until you have tested it). Adjust to your
+# domain and uncomment:
+# [[routes]]
+# pattern = "example.com/*"
+# zone_name = "example.com"

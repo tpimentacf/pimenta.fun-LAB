@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turnstile Injection &amp; Verification Worker &mdash; Pimenta Lab</title>
+  <meta name="description" content="A Cloudflare Worker that sits in front of your origin, injects the Turnstile widget into your HTML with HTMLRewriter (no origin code changes), and verifies the token server-side at /siteverify before any form POST reaches origin — plus multi-signal anti-bypass hardening (full outcome validation, single-use tokens, ASN and bot-score floors, ephemeral-id caps, CSP)." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel h3 { font-size: 0.95rem; margin: 18px 0 6px; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+    .panel .docy { font-size: 0.8rem; }
+    .panel .docy a { color: var(--accent); }
+
+    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
+    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--panel2); color: var(--muted); text-decoration: none; }
+    .toc a:hover { color: var(--text); border-color: var(--accent); }
+
+    .cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 6px 0 0; }
+    .mini { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+    .mini .ic { font-size: 20px; }
+    .mini h3 { margin: 8px 0 4px; font-size: 0.92rem; }
+    .mini p { margin: 0; color: var(--muted); font-size: 0.82rem; }
+
+    .ref { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    .ref th, .ref td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .ref thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .ref tbody td:first-child { color: #9cc0ff; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; }
+    .ref tbody td.d { color: var(--muted); }
+    .ref tbody tr:last-child td { border-bottom: none; }
+    .ref code { font-size: 0.78rem; }
+
+    .tag2 { font-size: 0.66rem; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--panel2); color: var(--muted); white-space: nowrap; }
+    .tag2.pub { color: var(--green); border-color: rgba(54,211,153,0.5); }
+    .tag2.sec { color: var(--accent2); border-color: rgba(255,107,107,0.5); }
+    .tag2.opt { color: var(--muted); }
+    .tag2.kv  { color: var(--blue); border-color: rgba(91,141,239,0.5); }
+
+    .bullets li { margin: 6px 0; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+    .cap { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 12px 0 5px; }
+    pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+      overflow-x: auto; font-size: 0.8rem; line-height: 1.55; color: #d7e2f7; }
+    pre.code .c { color: var(--muted); }
+    pre.code .k { color: #ff9a76; }
+    pre.code .s { color: #8ef2c4; }
+    pre.code .f { color: #c9a3ff; }
+
+    .filetree { font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; white-space: pre; color: #d7e2f7;
+      background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; overflow-x: auto; }
+    .filetree .c { color: var(--muted); }
+
+    /* step list */
+    ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 8px 0 0; }
+    ol.steps > li { position: relative; padding: 2px 0 16px 40px; border-left: 2px solid var(--border); margin-left: 14px; }
+    ol.steps > li:last-child { border-left: 2px solid transparent; padding-bottom: 0; }
+    ol.steps > li::before { counter-increment: step; content: counter(step); position: absolute; left: -15px; top: -2px;
+      width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #1a1205; font-weight: 700;
+      display: grid; place-items: center; font-size: 0.82rem; }
+    ol.steps h3 { margin: 0 0 6px; }
+
+    /* flow diagram */
+    .flow { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 4px; }
+    .flow-row { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+    .fbox { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+      font-size: 0.8rem; flex: 1; min-width: 130px; }
+    .fbox .t { font-weight: 700; font-size: 0.82rem; color: var(--text); }
+    .fbox .s { color: var(--muted); font-size: 0.76rem; }
+    .fbox.accent { border-color: var(--accent); }
+    .fbox.green { border-color: var(--green); }
+    .fbox.red { border-color: var(--accent2); }
+    .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Turnstile / Injection Worker</div>
+    <span class="tag">Turnstile</span>
+    <h1>Turnstile <span class="grad">Injection &amp; Verification</span> Worker</h1>
+    <p class="lead">A Cloudflare Worker that sits in front of your origin, <b>injects the Turnstile widget into your
+      HTML on the fly</b> (no origin code changes), and <b>verifies the token server-side</b> before any form
+      submission is allowed to reach the origin.</p>
+
+    <div class="note">The big idea: your origin never has to know about Turnstile. The Worker adds the challenge to
+      outgoing pages and enforces it on incoming submissions &mdash; ideal for legacy apps, third-party platforms, or
+      anywhere you can&rsquo;t easily edit the backend.</div>
+
+    <nav class="toc">
+      <a href="#idea">The idea</a>
+      <a href="#how">How it works</a>
+      <a href="#inject">GET: inject</a>
+      <a href="#verify">POST: verify</a>
+      <a href="#files">Project files</a>
+      <a href="#config">Configuration</a>
+      <a href="#implement">Implement</a>
+      <a href="#test">Test</a>
+      <a href="#hardening">Anti-bypass</a>
+      <a href="#notes">Gotchas</a>
+      <a href="#resources">Resources</a>
+    </nav>
+
+    <!-- ============================================================= -->
+    <section id="idea" class="panel">
+      <h2>Three jobs, all at the edge</h2>
+      <div class="cards3">
+        <div class="mini"><div class="ic">&#129513;</div><h3>Inject</h3>
+          <p>Uses <code class="inline">HTMLRewriter</code> to stream the API script into <code class="inline">&lt;head&gt;</code>
+            and a widget into your forms.</p></div>
+        <div class="mini"><div class="ic">&#128737;</div><h3>Verify</h3>
+          <p>Intercepts <code class="inline">POST</code>s, validates the token at
+            <code class="inline">/siteverify</code>, and blocks failures with <code class="inline">403</code>.</p></div>
+        <div class="mini"><div class="ic">&#9889;</div><h3>Zero origin changes</h3>
+          <p>All logic lives at the edge. The origin serves plain HTML and receives only verified traffic.</p></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="how" class="panel">
+      <h2>How it works</h2>
+      <p class="sub">The Worker&rsquo;s <code class="inline">fetch</code> handler branches on the HTTP method. Mutating
+        methods (default <code class="inline">POST</code>) go through verification; everything else is proxied and
+        rewritten.</p>
+<pre class="code"><span class="k">export default</span> {
+  <span class="k">async</span> <span class="f">fetch</span>(request, env, ctx) {
+    <span class="k">const</span> verifyMethods = (env.VERIFY_METHODS || <span class="s">"POST"</span>).split(<span class="s">","</span>)...
+
+    <span class="c">// 1. Mutating request? Verify Turnstile BEFORE touching origin.</span>
+    <span class="k">if</span> (verifyMethods.includes(request.method.toUpperCase())) {
+      <span class="k">return</span> <span class="f">handleVerifiedSubmission</span>(request, env, ctx);
+    }
+
+    <span class="c">// 2. Otherwise: proxy to origin + inject Turnstile into HTML.</span>
+    <span class="k">const</span> originResponse = <span class="k">await</span> <span class="f">fetchOrigin</span>(request, env);
+    ...
+  }
+};</pre>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="inject" class="panel">
+      <h2>GET / page load &rarr; inject</h2>
+      <div class="flow">
+        <div class="flow-row">
+          <div class="fbox"><div class="t">Browser</div><div class="s">GET /page</div></div>
+          <div class="arrow">&rarr;</div>
+          <div class="fbox accent"><div class="t">Worker</div><div class="s">fetch origin</div></div>
+          <div class="arrow">&rarr;</div>
+          <div class="fbox"><div class="t">Origin</div><div class="s">plain HTML</div></div>
+        </div>
+        <div class="flow-row">
+          <div class="fbox accent"><div class="t">Worker &middot; HTMLRewriter</div><div class="s">append script to head, prepend widget to form</div></div>
+          <div class="arrow">&rarr;</div>
+          <div class="fbox green"><div class="t">Browser</div><div class="s">HTML + Turnstile renders</div></div>
+        </div>
+      </div>
+<pre class="code"><span class="k">const</span> rewriter = <span class="k">new</span> <span class="f">HTMLRewriter</span>()
+  .on(<span class="s">"head"</span>, {
+    <span class="f">element</span>(el) { el.append(scriptTag, { html: <span class="k">true</span> }); }
+  })
+  .on(injectSelector, {                 <span class="c">// default "form"</span>
+    <span class="f">element</span>(el) { el.prepend(widgetHtml, { html: <span class="k">true</span> }); }
+  });
+<span class="k">return</span> rewriter.<span class="f">transform</span>(response);</pre>
+      <div class="note"><b>Why HTMLRewriter?</b> It streams &mdash; the page starts sending to the browser immediately
+        without buffering the whole body in memory, so injection adds near-zero latency.</div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="verify" class="panel">
+      <h2>POST / form submit &rarr; verify</h2>
+      <div class="flow">
+        <div class="flow-row">
+          <div class="fbox"><div class="t">Browser</div><div class="s">POST /submit + cf-turnstile-response</div></div>
+          <div class="arrow">&rarr;</div>
+          <div class="fbox accent"><div class="t">Worker</div><div class="s">extract token</div></div>
+          <div class="arrow">&rarr;</div>
+          <div class="fbox"><div class="t">/siteverify</div><div class="s">secret + token + IP</div></div>
+        </div>
+        <div class="flow-row">
+          <div class="fbox green"><div class="t">success: true</div><div class="s">forward original request &rarr; Origin</div></div>
+          <div class="arrow">&middot;</div>
+          <div class="fbox red"><div class="t">success: false / no token</div><div class="s">return 403 &mdash; origin never hit</div></div>
+        </div>
+      </div>
+<pre class="code"><span class="c">// Clone so the original body is preserved for forwarding.</span>
+<span class="k">const</span> token = <span class="k">await</span> <span class="f">extractToken</span>(request.<span class="f">clone</span>());
+<span class="k">if</span> (!token) <span class="k">return</span> <span class="f">challengeFailed</span>(<span class="s">"Missing Turnstile token."</span>);
+
+<span class="k">const</span> form = <span class="k">new</span> <span class="f">FormData</span>();
+form.append(<span class="s">"secret"</span>, env.TURNSTILE_SECRET);
+form.append(<span class="s">"response"</span>, token);
+form.append(<span class="s">"remoteip"</span>, request.headers.get(<span class="s">"CF-Connecting-IP"</span>));
+form.append(<span class="s">"idempotency_key"</span>, <span class="k">await</span> <span class="f">sha256Hex</span>(token)); <span class="c">// stable = real single-use</span>
+
+<span class="k">const</span> outcome = <span class="k">await</span> (<span class="k">await</span> <span class="f">fetch</span>(SITEVERIFY_URL, { method: <span class="s">"POST"</span>, body: form })).<span class="f">json</span>();
+<span class="k">if</span> (!outcome.success) <span class="k">return</span> <span class="f">challengeFailed</span>(<span class="s">"Verification failed."</span>, <span class="s">403</span>, outcome[<span class="s">"error-codes"</span>]);
+
+<span class="k">return</span> <span class="f">fetchOrigin</span>(request, env); <span class="c">// verified</span></pre>
+      <div class="cap">Token extraction supports three body types</div>
+      <ul class="bullets">
+        <li><code class="inline">application/x-www-form-urlencoded</code> &mdash; classic HTML forms</li>
+        <li><code class="inline">multipart/form-data</code> &mdash; forms with file uploads</li>
+        <li><code class="inline">application/json</code> &mdash; reads <code class="inline">cf-turnstile-response</code> or <code class="inline">token</code></li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="files" class="panel">
+      <h2>Project files</h2>
+      <div class="filetree">workers/turnstile-injector/
+&#9500;&#9472;&#9472; worker.js             <span class="c"># the Worker (inject + verify + hardening)</span>
+&#9500;&#9472;&#9472; wrangler.toml         <span class="c"># config (name, main, vars, routes)</span>
+&#9500;&#9472;&#9472; .dev.vars.example     <span class="c"># template for local TURNSTILE_SECRET</span>
+&#9500;&#9472;&#9472; README.md             <span class="c"># deploy + test walkthrough</span>
+&#9492;&#9472;&#9472; test/
+    &#9500;&#9472;&#9472; origin.html       <span class="c"># mock origin page with a form (no Turnstile)</span>
+    &#9492;&#9472;&#9472; curl-tests.sh     <span class="c"># pass/fail + hardening path tests</span></div>
+      <p class="muted-small">Source in the repo under <code class="inline">workers/turnstile-injector/</code>. The
+        <code class="inline">.dev.vars</code> file (your real local secret) is git-ignored.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="config" class="panel">
+      <h2>Configuration</h2>
+      <p class="sub">Set public values in <code class="inline">[vars]</code>; keep the secret out of the repo.</p>
+      <table class="ref">
+        <thead><tr><th>Variable</th><th>Type</th><th>Default</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>TURNSTILE_SITEKEY</td><td><span class="tag2 pub">public</span></td><td><code>1x0000&hellip;AA</code></td><td class="d">Site key embedded in the injected widget HTML.</td></tr>
+          <tr><td>TURNSTILE_SECRET</td><td><span class="tag2 sec">secret</span></td><td>&mdash;</td><td class="d">Secret key for <code>/siteverify</code>. Never put in <code>wrangler.toml</code>.</td></tr>
+          <tr><td>ORIGIN_URL</td><td><span class="tag2 opt">optional</span></td><td>same host</td><td class="d">Override origin host. If unset, the Worker hits the same URL it received.</td></tr>
+          <tr><td>INJECT_SELECTOR</td><td><span class="tag2 opt">optional</span></td><td><code>form</code></td><td class="d">CSS selector where the widget is injected (e.g. <code>#login-box</code>).</td></tr>
+          <tr><td>VERIFY_METHODS</td><td><span class="tag2 opt">optional</span></td><td><code>POST</code></td><td class="d">Comma list of methods to gate (e.g. <code>POST,PUT,PATCH</code>).</td></tr>
+          <tr><td>EXPECTED_HOSTNAMES</td><td><span class="tag2 opt">optional</span></td><td>&mdash;</td><td class="d">Allowlist; token <code>hostname</code> must match. Stops harvested/replayed tokens from other sites.</td></tr>
+          <tr><td>EXPECTED_ACTION</td><td><span class="tag2 opt">optional</span></td><td>&mdash;</td><td class="d">Binds the token to a <code>data-action</code> (e.g. <code>login</code>) so it can&rsquo;t be spent elsewhere.</td></tr>
+          <tr><td>EXPECTED_CDATA</td><td><span class="tag2 opt">optional</span></td><td>&mdash;</td><td class="d">Optional <code>data-cdata</code> binding for extra per-context payload matching.</td></tr>
+          <tr><td>MAX_TOKEN_AGE_SECONDS</td><td><span class="tag2 opt">optional</span></td><td><code>300</code></td><td class="d">Freshness window: reject tokens whose <code>challenge_ts</code> is too old.</td></tr>
+          <tr><td>BLOCKED_ASNS</td><td><span class="tag2 opt">optional</span></td><td>&mdash;</td><td class="d">Comma list of hosting/solver ASNs to hard-block before verify (e.g. <code>26548,43444,214216</code>).</td></tr>
+          <tr><td>MIN_BOT_SCORE</td><td><span class="tag2 opt">optional</span></td><td>&mdash;</td><td class="d">Block requests below this Bot Management score (1&ndash;99). Requires BM entitlement.</td></tr>
+          <tr><td>EPHEMERAL_ID_MAX_USES / _WINDOW</td><td><span class="tag2 opt">optional</span></td><td>&mdash; / <code>3600</code></td><td class="d">Per-device solve cap using <code>metadata.ephemeral_id</code> (Enterprise + KV). Catches IP rotation.</td></tr>
+          <tr><td>ADD_CSP</td><td><span class="tag2 opt">optional</span></td><td><code>false</code></td><td class="d">Inject a Turnstile-scoped Content-Security-Policy on HTML responses.</td></tr>
+          <tr><td>FAIL_OPEN</td><td><span class="tag2 opt">optional</span></td><td><code>false</code></td><td class="d">If <code>true</code>, allow submissions through when siteverify itself errors (availability over strictness).</td></tr>
+          <tr><td>TOKEN_REPLAY</td><td><span class="tag2 kv">KV</span></td><td>&mdash;</td><td class="d">KV namespace for single-use token cache + ephemeral_id counters.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="implement" class="panel">
+      <h2>Implement it</h2>
+      <ol class="steps">
+        <li><h3>Get your Turnstile keys</h3>
+          <p class="muted-small">Dashboard &rarr; <b>Turnstile</b> &rarr; create a widget. Copy the <b>Site Key</b>
+            (public) and <b>Secret Key</b> (private).</p></li>
+        <li><h3>Set the site key</h3>
+<pre class="code">[vars]
+TURNSTILE_SITEKEY = <span class="s">"0x4AAAAAAA_your_real_sitekey"</span>
+INJECT_SELECTOR   = <span class="s">"form"</span>
+VERIFY_METHODS    = <span class="s">"POST"</span>
+<span class="c"># ORIGIN_URL = "https://origin.example.com"</span></pre></li>
+        <li><h3>Store the secret (never in the repo)</h3>
+<pre class="code"><span class="c"># production secret</span>
+npx wrangler secret put TURNSTILE_SECRET
+
+<span class="c"># local dev secret</span>
+cp .dev.vars.example .dev.vars   <span class="c"># then edit TURNSTILE_SECRET</span></pre></li>
+        <li><h3>Point the Worker at your zone</h3>
+<pre class="code">[[routes]]
+pattern   = <span class="s">"example.com/*"</span>
+zone_name = <span class="s">"example.com"</span></pre></li>
+        <li><h3>Deploy</h3>
+<pre class="code">npx wrangler deploy</pre>
+          <p class="muted-small">Load a page on your domain &mdash; the widget appears inside your forms and
+            submissions now pass through server-side verification.</p></li>
+        <li><h3>Cover every form endpoint</h3>
+          <p class="muted-small">Make sure every form-handling path is covered by the Worker route and included in
+            <code class="inline">VERIFY_METHODS</code>. If a form posts to a different path/subdomain, the route must
+            cover it too, or that submission bypasses verification.</p></li>
+      </ol>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="test" class="panel">
+      <h2>Test it locally</h2>
+      <p class="sub">Two terminals &mdash; a mock origin and the Worker &mdash; then run the curl script.</p>
+<pre class="code"><span class="c"># Terminal 1 &mdash; serve the mock origin</span>
+cd workers/turnstile-injector/test &amp;&amp; python3 -m http.server 8080
+
+<span class="c"># Terminal 2 &mdash; run the Worker (ORIGIN_URL=http://localhost:8080)</span>
+cd workers/turnstile-injector &amp;&amp; npx wrangler dev --port 8787
+
+<span class="c"># Terminal 3 &mdash; exercise pass + fail paths</span>
+cd workers/turnstile-injector/test &amp;&amp; ./curl-tests.sh</pre>
+      <table class="ref">
+        <thead><tr><th>#</th><th>Request</th><th>Expected</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><code>GET /</code></td><td class="d">HTML contains injected script + <code>cf-turnstile</code> widget</td></tr>
+          <tr><td>2</td><td><code>POST</code> no token</td><td class="d"><code>403</code> &mdash; origin never hit</td></tr>
+          <tr><td>3</td><td><code>POST</code> form + dummy token</td><td class="d"><code>200</code> with the PASS test secret</td></tr>
+          <tr><td>4</td><td><code>POST</code> JSON + dummy token</td><td class="d"><code>200</code> &mdash; JSON body path works</td></tr>
+        </tbody>
+      </table>
+      <div class="note"><b>Turnstile test keys.</b> Sitekey <code class="inline">1x00000000000000000000AA</code> always
+        passes. Secret <code class="inline">1x0000000000000000000000000000000AA</code> always passes;
+        <code class="inline">2x0000000000000000000000000000000AA</code> always fails &mdash; swap it into
+        <code class="inline">.dev.vars</code> to see the <code class="inline">403</code> fail path.</div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="hardening" class="panel">
+      <h2>Anti-bypass hardening</h2>
+      <p class="sub">A valid Turnstile token is <b>necessary but not sufficient</b>. Solver / &ldquo;Turnstile bypass&rdquo;
+        services farm real tokens on hosting infrastructure and replay them. The strongest defence is to check
+        <b>multiple signals</b> and validate the <b>full</b> siteverify outcome &mdash; not just
+        <code class="inline">success</code>.</p>
+      <div class="note"><b>The #1 real-world signal: tokenIP &ne; remoteIP.</b> Solvers mint tokens on hosting-provider
+        IPs that differ from the eyeball&rsquo;s IP. Always send <code class="inline">remoteip</code> (the Worker passes
+        <code class="inline">CF-Connecting-IP</code>) so Cloudflare can compare token IP vs request IP.</div>
+      <table class="ref">
+        <thead><tr><th>Signal / check</th><th>How it works</th><th>Enable with</th></tr></thead>
+        <tbody>
+          <tr><td>Full outcome</td><td class="d">After <code>success</code>, also require matching <code>hostname</code>, <code>action</code>, optional <code>cdata</code>, and a fresh <code>challenge_ts</code>. Stops harvested / replayed / cross-site tokens.</td><td class="d"><code>EXPECTED_HOSTNAMES</code>, <code>EXPECTED_ACTION</code>, <code>EXPECTED_CDATA</code>, <code>MAX_TOKEN_AGE_SECONDS</code></td></tr>
+          <tr><td>True single-use</td><td class="d">Stable <code>idempotency_key = sha256(token)</code> (not a random UUID, which silently defeats single-use). Optional KV cache rejects any token seen before.</td><td class="d"><code>TOKEN_REPLAY</code> (KV)</td></tr>
+          <tr><td>Solver ASN block</td><td class="d">Reject known solver-farm hosting ASNs at the edge before verify.</td><td class="d"><code>BLOCKED_ASNS</code></td></tr>
+          <tr><td>Bot score floor</td><td class="d">Block low bot scores. A floor only &mdash; pair with Turnstile, since a high score alone has been bypassed.</td><td class="d"><code>MIN_BOT_SCORE</code> (needs BM)</td></tr>
+          <tr><td>Ephemeral-id cap</td><td class="d">Counts solves per <code>metadata.ephemeral_id</code> &mdash; links a device across rotated IPs to catch farms.</td><td class="d"><code>EPHEMERAL_ID_MAX_USES</code> + <code>TOKEN_REPLAY</code></td></tr>
+          <tr><td>Widget lockdown</td><td class="d">Scopes <code>script-src</code>/<code>frame-src</code> to <code>challenges.cloudflare.com</code> so the widget can&rsquo;t be tampered with or proxied.</td><td class="d"><code>ADD_CSP</code></td></tr>
+        </tbody>
+      </table>
+      <div class="note"><b>Defence in depth beyond the Worker.</b> Complement code-level checks at the platform: a WAF
+        <b>Managed Challenge</b> + <b>pre-clearance</b> on sensitive endpoints (keep Challenge Passage short and
+        rate-limit on the <code class="inline">cf_clearance</code> cookie); a <b>hostname allowlist</b> in the Turnstile
+        dashboard; tiered <b>Bot Management</b>; and <b>Rate Limiting</b> on the submit path.</div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="notes" class="panel">
+      <h2>Gotchas &amp; production notes</h2>
+      <div class="warn"><b>Verification is what protects you &mdash; not the widget.</b> The injected widget is only a UI
+        element. The security comes from the server-side <code class="inline">/siteverify</code> check. Never skip it or
+        trust the client.</div>
+      <ul class="bullets">
+        <li><b>Single-use tokens:</b> Turnstile tokens are consumed on verify and expire after ~300s; the client widget
+          auto-refreshes if the user idles.</li>
+        <li><b>Body is read once:</b> the Worker uses <code class="inline">request.clone()</code> &mdash; the clone is
+          read for the token, the untouched original is forwarded to origin.</li>
+        <li><b>Anti-replay:</b> a <b>stable</b> <code class="inline">idempotency_key = sha256(token)</code> is sent (a
+          random UUID would defeat single-use), and an optional <code class="inline">TOKEN_REPLAY</code> KV cache rejects
+          any token already spent.</li>
+        <li><b>Client IP:</b> <code class="inline">CF-Connecting-IP</code> is passed as <code class="inline">remoteip</code>
+          to harden verification.</li>
+        <li><b>Non-HTML untouched:</b> only <code class="inline">text/html</code> responses are rewritten, so assets and
+          APIs are unaffected.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="resources" class="panel">
+      <h2>Resources</h2>
+      <ul class="bullets">
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/turnstile/">Turnstile docs</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/turnstile/get-started/server-side-validation/">Server-side validation (/siteverify)</a></li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/workers/runtime-apis/html-rewriter/">HTMLRewriter</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/turnstile/troubleshooting/testing/">Turnstile test keys</a></li>
+        <li>Related labs: <a style="color:var(--accent);" href="https://www.pimenta.fun/turnstile/managed/">Turnstile managed</a> &middot; <a style="color:var(--accent);" href="https://www.pimenta.fun/turnstile/invisible/">invisible</a> &middot; <a style="color:var(--accent);" href="https://www.pimenta.fun/precursor-lab/">Precursor</a></li>
+      </ul>
+    </section>
+
+    <section class="disclaimer"><div class="box">
+      <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
+      Please consult the official documentation for the most accurate and up-to-date information.
+      We are not responsible for any issues, damages, or data loss that may occur from using this information.
+      <span class="risk">USE AT YOUR OWN RISK.</span>
+    </div></section>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    <a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+</body>
+</html>
