@@ -1,0 +1,19 @@
+workers/turnstile-injector/test/curl-tests.sh
+  s_45d7e19da6ce2d::t_322352cf1ced08 75,80,85,92,95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4e9b7684d0b29cf014095c93ecc04bc75311cd4a",
+  "prompts": {},
+  "sessions": {
+    "s_45d7e19da6ce2d": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10621ba67ffeb0finUXEc7EfXx",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "tpimenta <tpimenta@cloudflare.com>"
+    }
+  }
+}
