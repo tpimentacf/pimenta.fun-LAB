@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blog &mdash; Pimenta Lab</title>
+  <meta name="description" content="A static landing page used as the destination for the Redirect Rules live test (e.g. /old-blog -> /blog/)." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+    .landed { display: inline-block; padding: 3px 12px; border-radius: 999px; font-size: 0.74rem; font-weight: 700;
+      background: rgba(54,211,153,0.14); color: #6ee7b7; border: 1px solid rgba(54,211,153,0.45); }
+    .kv { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .kv td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .kv td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #9cc0ff; white-space: nowrap; }
+    .kv td .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #d7e2f7; word-break: break-word; }
+    .kv tr:last-child td { border-bottom: none; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Rules / Blog</div>
+    <span class="tag">Redirect Rules</span>
+    <h1>The <span class="grad">blog</span></h1>
+    <p class="lead">You&rsquo;ve landed on <code class="inline">/blog/</code>. This is a static target page used by the
+      <a href="https://www.pimenta.fun/redirect-rules/" style="color:var(--accent);">Redirect Rules</a> live test.</p>
+
+    <div class="panel">
+      <h2><span class="landed">Redirect landed here &#10003;</span></h2>
+      <p class="sub">If you got here from <code class="inline">/old-blog</code>, your permanent (301) redirect is
+        working &mdash; the old URL now forwards to the current blog location.</p>
+      <table class="kv">
+        <tbody>
+          <tr><td>Final path</td><td><span class="val">/blog/</span></td></tr>
+          <tr><td>Served by</td><td><span class="val">origin (static HTML)</span></td></tr>
+          <tr><td>Example rule</td><td><span class="val">(http.request.uri.path eq "/old-blog") &rarr; https://www.pimenta.fun/blog/ &middot; 301</span></td></tr>
+        </tbody>
+      </table>
+      <p class="muted-small" style="margin-top:14px;">&larr; Back to the
+        <a href="https://www.pimenta.fun/redirect-rules/" style="color:var(--accent);">Redirect Rules test</a>.</p>
+    </div>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;<a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+</body>
+</html>
