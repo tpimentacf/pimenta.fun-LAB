@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent-Ready Web &mdash; Pimenta Lab</title>
+  <meta name="description" content="A practical roadmap to make a website agent-ready: robots.txt and AI crawl policy, llms.txt, Markdown content negotiation, structured data, MCP, OAuth for agents, Agent Skills, and agentic commerce — mapped to Cloudflare." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel h3 { font-size: 0.95rem; margin: 18px 0 6px; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+
+    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
+    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--panel2); color: var(--muted); text-decoration: none; }
+    .toc a:hover { color: var(--text); border-color: var(--accent); }
+
+    .cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 6px 0 0; }
+    .mini { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+    .mini .ic { font-size: 20px; }
+    .mini h3 { margin: 8px 0 4px; font-size: 0.92rem; }
+    .mini p { margin: 0; color: var(--muted); font-size: 0.82rem; }
+    .mini .n { font-size: 0.68rem; color: var(--accent); font-weight: 700; letter-spacing: 0.5px; }
+
+    .ref { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    .ref th, .ref td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .ref thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .ref tbody td:first-child { color: #9cc0ff; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; }
+    .ref tbody td.d { color: var(--muted); }
+    .ref tbody tr:last-child td { border-bottom: none; }
+    .ref code { font-size: 0.78rem; }
+
+    .tag2 { font-size: 0.66rem; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--panel2); color: var(--muted); white-space: nowrap; }
+    .tag2.have { color: var(--green); border-color: rgba(54,211,153,0.5); }
+    .tag2.gap  { color: var(--accent2); border-color: rgba(255,107,107,0.5); }
+    .tag2.cf   { color: var(--accent); border-color: rgba(246,130,31,0.5); }
+
+    .bullets li { margin: 6px 0; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+    .cap { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 12px 0 5px; }
+    pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+      overflow-x: auto; font-size: 0.8rem; line-height: 1.55; color: #d7e2f7; }
+    pre.code .c { color: var(--muted); }
+    pre.code .k { color: #ff9a76; }
+    pre.code .s { color: #8ef2c4; }
+    pre.code .f { color: #c9a3ff; }
+
+    ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 8px 0 0; }
+    ol.steps > li { position: relative; padding: 2px 0 16px 40px; border-left: 2px solid var(--border); margin-left: 14px; }
+    ol.steps > li:last-child { border-left: 2px solid transparent; padding-bottom: 0; }
+    ol.steps > li::before { counter-increment: step; content: counter(step); position: absolute; left: -15px; top: -2px;
+      width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #1a1205; font-weight: 700;
+      display: grid; place-items: center; font-size: 0.82rem; }
+    ol.steps h3 { margin: 0 0 6px; }
+
+    ul.check { list-style: none; padding: 0; margin: 6px 0 0; }
+    ul.check li { position: relative; padding: 7px 0 7px 30px; border-bottom: 1px solid var(--border); font-size: 0.86rem; }
+    ul.check li:last-child { border-bottom: none; }
+    ul.check li::before { content: "\2713"; position: absolute; left: 4px; top: 7px; color: var(--accent);
+      font-weight: 700; }
+    ul.check li b { color: var(--text); }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / AI &amp; MCP / Agent-Ready Web</div>
+    <span class="tag">AI &amp; Agents</span>
+    <h1>Making a site <span class="grad">Agent-Ready</span></h1>
+    <p class="lead">The web is being read and acted on by autonomous agents, not just humans in browsers. An
+      <b>agent-ready</b> site is <b>discoverable</b>, <b>machine-readable</b>, <b>actionable</b>, and <b>transactable</b>
+      by an LLM agent &mdash; from <code class="inline">robots.txt</code> and Markdown negotiation all the way to MCP,
+      OAuth, Agent Skills, and agentic commerce.</p>
+
+    <div class="note">This is a roadmap, not a single feature. Each pillar below is independently useful &mdash; start at
+      the top (cheap, static wins) and work down toward tools, auth, and payments. Everything maps to Cloudflare
+      where relevant.</div>
+
+    <nav class="toc">
+      <a href="#pillars">The 7 pillars</a>
+      <a href="#discover">1 &middot; Discoverability</a>
+      <a href="#markdown">2 &middot; Markdown</a>
+      <a href="#semantics">3 &middot; Semantics</a>
+      <a href="#mcp">4 &middot; MCP</a>
+      <a href="#oauth">5 &middot; OAuth</a>
+      <a href="#skills">6 &middot; Agent Skills</a>
+      <a href="#commerce">7 &middot; Agentic commerce</a>
+      <a href="#botauth">Verified agents</a>
+      <a href="#checklist">Checklist</a>
+      <a href="#status">Where we stand</a>
+      <a href="#resources">Resources</a>
+    </nav>
+
+    <!-- ============================================================= -->
+    <section id="pillars" class="panel">
+      <h2>Seven pillars, from static files to payments</h2>
+      <div class="cards3">
+        <div class="mini"><div class="n">01</div><div class="ic">&#128269;</div><h3>Discoverability</h3>
+          <p><code class="inline">robots.txt</code>, <code class="inline">llms.txt</code>, sitemap &mdash; tell agents what exists and what they may use.</p></div>
+        <div class="mini"><div class="n">02</div><div class="ic">&#128196;</div><h3>Markdown</h3>
+          <p>Serve clean Markdown on content negotiation so agents parse meaning, not your CSS.</p></div>
+        <div class="mini"><div class="n">03</div><div class="ic">&#129513;</div><h3>Semantics</h3>
+          <p>JSON-LD / schema.org so machines understand entities, prices, and actions.</p></div>
+        <div class="mini"><div class="n">04</div><div class="ic">&#128295;</div><h3>MCP</h3>
+          <p>Expose <b>tools</b> agents can call over the Model Context Protocol.</p></div>
+        <div class="mini"><div class="n">05</div><div class="ic">&#128273;</div><h3>OAuth</h3>
+          <p>Let agents authenticate and act on a user&rsquo;s behalf with scoped, revocable tokens.</p></div>
+        <div class="mini"><div class="n">06</div><div class="ic">&#127891;</div><h3>Agent Skills</h3>
+          <p>Ship <code class="inline">SKILL.md</code> folders that teach agents how to use you.</p></div>
+        <div class="mini"><div class="n">07</div><div class="ic">&#128179;</div><h3>Agentic commerce</h3>
+          <p>Product feeds, checkout APIs, and delegated payment mandates agents can transact.</p></div>
+        <div class="mini"><div class="n">+</div><div class="ic">&#128737;</div><h3>Verified agents</h3>
+          <p>Web Bot Auth &mdash; cryptographically identify good agents instead of blindly blocking bots.</p></div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="discover" class="panel">
+      <h2>1 &middot; Discoverability &amp; crawl policy</h2>
+      <p class="sub">Agents (and the crawlers that feed them) look for a handful of well-known files first. Ship them.</p>
+
+      <h3>robots.txt with explicit AI directives</h3>
+      <p class="muted-small">Generic <code class="inline">User-agent: *</code> rules are ignored by many AI crawlers that
+        match their own token. Name them. Allow the bots you want indexing you; block the ones you don&rsquo;t.</p>
+<pre class="code"><span class="c"># /robots.txt</span>
+User-agent: *
+Allow: /
+
+<span class="c"># AI search / assistants you WANT to be cited by</span>
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+
+<span class="c"># Training crawlers you may want to limit</span>
+User-agent: GPTBot
+Disallow: /private/
+User-agent: ClaudeBot
+Disallow: /private/
+User-agent: Google-Extended
+Disallow: /private/
+User-agent: CCBot
+Disallow: /
+
+Sitemap: https://www.pimenta.fun/sitemap.xml</pre>
+      <div class="note"><b>Cloudflare shortcut:</b> <b>AI Crawl Control</b> (dashboard) manages a hosted
+        <code class="inline">robots.txt</code> and lets you allow/block individual AI bots per zone, and
+        <b>Pay Per Crawl</b> lets you charge crawlers with HTTP <code class="inline">402</code> for access &mdash; no
+        code required.</div>
+
+      <h3>llms.txt &mdash; a README for LLMs</h3>
+      <p class="muted-small">A single Markdown file at <code class="inline">/llms.txt</code> that curates your most
+        important pages, so an agent doesn&rsquo;t have to crawl and guess. Optionally add
+        <code class="inline">/llms-full.txt</code> with the full text inlined.</p>
+<pre class="code"><span class="c"># /llms.txt</span>
+# Pimenta.fun Lab
+
+&gt; A hands-on Cloudflare security &amp; web lab: WAF, Turnstile, Bot
+&gt; Management, Workers, MCP, and agent-readiness demos.
+
+## Docs
+- [Test catalogue](https://www.pimenta.fun/docs/): every lab, indexed
+- [AI &amp; MCP Lab](https://www.pimenta.fun/ai-lab/): Workers AI, AI Gateway, MCP
+- [Agent-Ready guide](https://www.pimenta.fun/agent-ready/): this page
+
+## Tools (MCP)
+- MCP endpoint: https://&lt;your-mcp-host&gt;/mcp (notes, KV, ask_ai)
+
+## Optional
+- [Security solutions](https://www.pimenta.fun/security-solutions/e-commerce/)</pre>
+
+      <h3>sitemap.xml</h3>
+      <p class="muted-small">Still the canonical machine index of URLs. Reference it from
+        <code class="inline">robots.txt</code>. Keep <code class="inline">&lt;lastmod&gt;</code> honest so agents can
+        prioritise fresh content.</p>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="markdown" class="panel">
+      <h2>2 &middot; Markdown content negotiation</h2>
+      <p class="sub">Your HTML is built for humans &mdash; nav, CSS, scripts. Agents want the <b>content</b>. Serve a
+        clean Markdown rendition when they ask for it, and token cost drops while parsing accuracy jumps.</p>
+      <div class="cap">Three ways an agent signals "give me Markdown"</div>
+      <ul class="bullets">
+        <li><b>Accept header:</b> <code class="inline">Accept: text/markdown</code> &mdash; the cleanest, content-negotiation-native way.</li>
+        <li><b>Query flag:</b> <code class="inline">?format=md</code> &mdash; trivial to add and easy to link.</li>
+        <li><b>Suffix:</b> <code class="inline">/page.md</code> &mdash; a parallel URL that returns Markdown.</li>
+      </ul>
+      <p class="muted-small">A Worker in front of your pages can do this with zero origin changes &mdash; the same
+        edge-injection pattern as the
+        <a style="color:var(--accent)" href="https://www.pimenta.fun/turnstile/injection-worker/">Turnstile injection Worker</a>:</p>
+<pre class="code"><span class="k">export default</span> {
+  <span class="k">async</span> <span class="f">fetch</span>(request, env) {
+    <span class="k">const</span> url = <span class="k">new</span> URL(request.url);
+    <span class="k">const</span> accept = request.headers.get(<span class="s">"accept"</span>) || <span class="s">""</span>;
+    <span class="k">const</span> wantsMd = accept.includes(<span class="s">"text/markdown"</span>)
+      || url.searchParams.get(<span class="s">"format"</span>) === <span class="s">"md"</span>
+      || url.pathname.endsWith(<span class="s">".md"</span>);
+
+    <span class="k">const</span> res = <span class="k">await</span> <span class="f">fetch</span>(request);         <span class="c">// origin HTML</span>
+    <span class="k">if</span> (!wantsMd) <span class="k">return</span> res;
+
+    <span class="k">const</span> html = <span class="k">await</span> res.<span class="f">text</span>();
+    <span class="k">const</span> md = <span class="f">htmlToMarkdown</span>(html);       <span class="c">// strip chrome, keep content</span>
+    <span class="k">return</span> <span class="k">new</span> <span class="f">Response</span>(md, {
+      headers: { <span class="s">"content-type"</span>: <span class="s">"text/markdown; charset=utf-8"</span>,
+                 <span class="s">"vary"</span>: <span class="s">"accept"</span> }   <span class="c">// so caches keep both variants</span>
+    });
+  }
+};</pre>
+      <div class="note"><b>Don&rsquo;t forget <code class="inline">Vary: Accept</code></b> so Cloudflare&rsquo;s cache
+        stores the HTML and Markdown variants separately instead of serving one to everyone.</div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="semantics" class="panel">
+      <h2>3 &middot; Machine-readable semantics</h2>
+      <p class="sub">Even in HTML, structured data makes entities unambiguous: what is a product, a price, an author, an
+        action. Agents (and AI search) lean on it heavily.</p>
+      <ul class="bullets">
+        <li><b>JSON-LD (schema.org):</b> the highest-leverage add &mdash; <code class="inline">Product</code>, <code class="inline">Offer</code>, <code class="inline">Article</code>, <code class="inline">Organization</code>, <code class="inline">FAQPage</code>.</li>
+        <li><b>Open Graph / meta:</b> title, description, canonical URL, <code class="inline">lang</code>.</li>
+        <li><b>Semantic HTML:</b> real <code class="inline">&lt;article&gt;</code>, <code class="inline">&lt;nav&gt;</code>, <code class="inline">&lt;main&gt;</code>, headings in order.</li>
+      </ul>
+<pre class="code"><span class="c">&lt;!-- Inline JSON-LD an agent can read straight off the page --&gt;</span>
+&lt;script type=<span class="s">"application/ld+json"</span>&gt;
+{
+  <span class="s">"@context"</span>: <span class="s">"https://schema.org"</span>,
+  <span class="s">"@type"</span>: <span class="s">"Product"</span>,
+  <span class="s">"name"</span>: <span class="s">"Lab T-Shirt"</span>,
+  <span class="s">"offers"</span>: {
+    <span class="s">"@type"</span>: <span class="s">"Offer"</span>,
+    <span class="s">"price"</span>: <span class="s">"25.00"</span>,
+    <span class="s">"priceCurrency"</span>: <span class="s">"USD"</span>,
+    <span class="s">"availability"</span>: <span class="s">"https://schema.org/InStock"</span>
+  }
+}
+&lt;/script&gt;</pre>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="mcp" class="panel">
+      <h2>4 &middot; MCP &mdash; give agents tools, not just text</h2>
+      <p class="sub">Reading is passive. The <b>Model Context Protocol</b> (MCP) lets an agent <b>do</b> things on your
+        site by calling typed <b>tools</b> and reading <b>resources</b> &mdash; the USB-C port for AI.</p>
+      <div class="note">You already run one: <a style="color:var(--accent)" href="https://github.com/tpimentacf/pimenta.fun-LAB/tree/main/workers/ai-mcp">workers/ai-mcp</a>
+        exposes notes CRUD, KV get/put, and an <code class="inline">ask_ai</code> tool, and the
+        <a style="color:var(--accent)" href="https://www.pimenta.fun/agent/">AI Chat Agent</a> consumes it. To be
+        <i>agent-ready</i>, make it discoverable and documented.</div>
+      <ul class="bullets">
+        <li><b>Transport:</b> <b>Streamable HTTP</b> (the current standard; SSE-only is deprecated) so any remote agent can connect.</li>
+        <li><b>Typed tools:</b> clear names, JSON-Schema inputs, and human-readable descriptions &mdash; the description <i>is</i> the prompt.</li>
+        <li><b>Discovery:</b> publish the endpoint in <code class="inline">llms.txt</code> and a <code class="inline">.well-known</code> manifest; list it in registries.</li>
+        <li><b>Cloudflare:</b> build with the <code class="inline">agents</code> SDK (<code class="inline">McpAgent</code>) / <code class="inline">workers-mcp</code>; deploy remote MCP on Workers.</li>
+      </ul>
+<pre class="code"><span class="c">// Registering a typed tool (Cloudflare agents SDK)</span>
+server.<span class="f">tool</span>(
+  <span class="s">"get_order_status"</span>,
+  <span class="s">"Look up the status of an order by its ID."</span>,
+  { orderId: z.<span class="f">string</span>().<span class="f">describe</span>(<span class="s">"The order ID, e.g. ORD-1234"</span>) },
+  <span class="k">async</span> ({ orderId }) =&gt; ({
+    content: [{ type: <span class="s">"text"</span>, text: <span class="k">await</span> <span class="f">lookup</span>(orderId) }]
+  })
+);</pre>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="oauth" class="panel">
+      <h2>5 &middot; OAuth &mdash; let agents act as the user, safely</h2>
+      <p class="sub">Anonymous tools are fine for public data. The moment an agent acts <b>on a user&rsquo;s behalf</b>
+        (their orders, their notes, their money) it needs delegated, scoped, revocable auth. MCP standardises on
+        <b>OAuth 2.1</b>.</p>
+      <table class="ref">
+        <thead><tr><th>Piece</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>OAuth 2.1 + PKCE</td><td class="d">Authorization-code flow with PKCE is mandatory &mdash; the agent never holds your password, only a scoped token.</td></tr>
+          <tr><td>/.well-known/oauth-protected-resource</td><td class="d">RFC 9728 metadata telling the agent which authorization server guards this MCP resource.</td></tr>
+          <tr><td>/.well-known/oauth-authorization-server</td><td class="d">RFC 8414 metadata: authorize/token endpoints, supported scopes and methods.</td></tr>
+          <tr><td>Dynamic Client Registration</td><td class="d">RFC 7591 &mdash; lets an unknown agent register itself, so you don&rsquo;t pre-provision every client.</td></tr>
+          <tr><td>Scopes</td><td class="d">Least privilege: <code>notes:read</code>, <code>orders:write</code>&hellip; short-lived tokens, easy revocation.</td></tr>
+        </tbody>
+      </table>
+      <div class="note"><b>Cloudflare shortcut:</b> <code class="inline">@cloudflare/workers-oauth-provider</code> turns a
+        Worker into a spec-compliant OAuth 2.1 server and wraps your MCP handler, emitting the
+        <code class="inline">.well-known</code> documents for you.</div>
+<pre class="code"><span class="c"># /.well-known/oauth-protected-resource</span>
+{
+  <span class="s">"resource"</span>: <span class="s">"https://mcp.pimenta.fun"</span>,
+  <span class="s">"authorization_servers"</span>: [<span class="s">"https://mcp.pimenta.fun"</span>],
+  <span class="s">"scopes_supported"</span>: [<span class="s">"notes:read"</span>, <span class="s">"notes:write"</span>],
+  <span class="s">"bearer_methods_supported"</span>: [<span class="s">"header"</span>]
+}</pre>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="skills" class="panel">
+      <h2>6 &middot; Agent Skills &mdash; teach agents how to use you</h2>
+      <p class="sub">A <b>Skill</b> is a folder of instructions (and optional scripts) an agent loads on demand to learn a
+        workflow &mdash; &ldquo;how to place an order on pimenta.fun&rdquo;, &ldquo;how to query the lab notes MCP&rdquo;.
+        It&rsquo;s progressive disclosure: the agent reads the name/description first, then the body only when relevant.</p>
+<pre class="code"><span class="c"># skills/shop-on-pimenta/SKILL.md</span>
+---
+name: shop-on-pimenta
+description: Browse the pimenta.fun catalogue and place an order via the
+  storefront API. Use when the user wants to buy lab merch.
+---
+
+# Shopping on pimenta.fun
+
+1. Fetch the product feed: `GET /feed/products.json`
+2. Confirm item + quantity with the user.
+3. Create a checkout: `POST /api/checkout` with the line items.
+4. Return the payment link or confirmation to the user.
+
+See `reference.md` for the full API and error codes.</pre>
+      <ul class="bullets">
+        <li><b>Portable:</b> the same <code class="inline">SKILL.md</code> works across agent runtimes that support the format.</li>
+        <li><b>Composable:</b> bundle scripts/templates the agent can run, not just prose.</li>
+        <li><b>Publishable:</b> host the folder so agents (and this lab) can download and load it.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="commerce" class="panel">
+      <h2>7 &middot; Agentic commerce &mdash; let agents transact</h2>
+      <p class="sub">The end game: an agent completes a purchase for a user. That needs a machine-readable
+        <b>catalogue</b>, an <b>agent-callable checkout</b>, and a <b>delegated payment mandate</b> so the agent pays
+        without ever touching raw card data.</p>
+      <table class="ref">
+        <thead><tr><th>Protocol</th><th>Backed by</th><th>Gist</th></tr></thead>
+        <tbody>
+          <tr><td>ACP</td><td class="d">OpenAI + Stripe</td><td class="d">Agentic Commerce Protocol &mdash; product feed + checkout API + shared payment token; powers ChatGPT &ldquo;Instant Checkout&rdquo;.</td></tr>
+          <tr><td>AP2</td><td class="d">Google</td><td class="d">Agent Payments Protocol &mdash; cryptographically signed &ldquo;mandates&rdquo; that prove user intent to pay.</td></tr>
+          <tr><td>Intelligent Commerce</td><td class="d">Visa</td><td class="d">Tokenised, agent-scoped payment credentials with spend controls.</td></tr>
+          <tr><td>Agent Pay</td><td class="d">Mastercard</td><td class="d">Agent-initiated payments with tokenised card mandates.</td></tr>
+        </tbody>
+      </table>
+      <div class="cap">The three building blocks, regardless of protocol</div>
+<pre class="code"><span class="c">// 1. Machine-readable catalogue  ->  GET /feed/products.json</span>
+{ <span class="s">"products"</span>: [
+  { <span class="s">"id"</span>: <span class="s">"tshirt"</span>, <span class="s">"title"</span>: <span class="s">"Lab T-Shirt"</span>,
+    <span class="s">"price"</span>: <span class="s">"25.00"</span>, <span class="s">"currency"</span>: <span class="s">"USD"</span>, <span class="s">"in_stock"</span>: <span class="k">true</span> }
+] }
+
+<span class="c">// 2. Agent-callable checkout  ->  POST /api/checkout</span>
+{ <span class="s">"items"</span>: [{ <span class="s">"id"</span>: <span class="s">"tshirt"</span>, <span class="s">"qty"</span>: 1 }],
+  <span class="s">"buyer"</span>: { <span class="s">"email"</span>: <span class="s">"user@example.com"</span> } }
+<span class="c">// -> { "checkout_id": "...", "total": "25.00", "pay_url": "..." }</span>
+
+<span class="c">// 3. Delegated payment: agent presents a signed mandate / shared</span>
+<span class="c">//    payment token, never the user's raw card.</span></pre>
+      <div class="warn"><b>Security moves to the front.</b> Agent checkout means bots with valid-looking sessions.
+        Pair it with Turnstile/verification on sensitive actions, per-agent rate limits, spend caps in the mandate, and
+        the leaked-credential / bot controls covered in the
+        <a style="color:var(--accent)" href="https://www.pimenta.fun/security-solutions/e-commerce/">e-commerce security</a> lab.</div>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="botauth" class="panel">
+      <h2>Cross-cutting &middot; Verified agents (Web Bot Auth)</h2>
+      <p class="sub">&ldquo;Agent-ready&rdquo; doesn&rsquo;t mean &ldquo;let every bot in.&rdquo; The problem is telling a
+        legitimate agent from an abusive one. <b>Web Bot Auth</b> (a Cloudflare-driven effort) has agents
+        <b>cryptographically sign</b> their requests with HTTP Message Signatures (RFC 9421) against a published key
+        directory &mdash; so you can allow <i>verified</i> agents and challenge the rest.</p>
+      <ul class="bullets">
+        <li><b>Identify, don&rsquo;t just block:</b> signed requests prove which agent is calling.</li>
+        <li><b>Policy per agent:</b> allow verified assistants to your MCP/checkout, rate-limit or challenge unknowns.</li>
+        <li><b>Cloudflare:</b> AI Crawl Control + verified-bot signals + Turnstile give you the enforcement layer.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="checklist" class="panel">
+      <h2>Implementation checklist</h2>
+      <p class="sub">Roughly ordered from cheapest/static to richest/transactional.</p>
+      <ul class="check">
+        <li><b>robots.txt</b> with per-AI-bot rules + <code class="inline">Sitemap:</code> line</li>
+        <li><b>sitemap.xml</b> with honest <code class="inline">lastmod</code></li>
+        <li><b>llms.txt</b> (and optionally <code class="inline">llms-full.txt</code>) curating key pages</li>
+        <li><b>Markdown negotiation</b> on <code class="inline">Accept: text/markdown</code> / <code class="inline">?format=md</code>, with <code class="inline">Vary: Accept</code></li>
+        <li><b>JSON-LD</b> structured data on content and product pages</li>
+        <li><b>MCP server</b> on Streamable HTTP with typed tools + a <code class="inline">.well-known</code> manifest</li>
+        <li><b>OAuth 2.1</b> for user-scoped tools, with the two <code class="inline">.well-known</code> metadata docs</li>
+        <li><b>Agent Skill(s)</b> published as <code class="inline">SKILL.md</code> folders</li>
+        <li><b>Agentic commerce</b>: product feed + checkout API + delegated payment mandate</li>
+        <li><b>Verified agents</b>: Web Bot Auth + rate limits + Turnstile on sensitive actions</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="status" class="panel">
+      <h2>Where pimenta.fun stands today</h2>
+      <p class="sub">An honest gap analysis of this very site.</p>
+      <table class="ref">
+        <thead><tr><th>Capability</th><th>Status</th><th>Next step</th></tr></thead>
+        <tbody>
+          <tr><td>MCP server</td><td><span class="tag2 have">have</span></td><td class="d"><code>workers/ai-mcp</code> live &mdash; add discovery + docs</td></tr>
+          <tr><td>Agent (MCP client)</td><td><span class="tag2 have">have</span></td><td class="d"><code>workers/ai-agent</code> + <code>/agent/</code> chat UI</td></tr>
+          <tr><td>security.txt</td><td><span class="tag2 have">have</span></td><td class="d"><code>/.well-known/security.txt</code> present</td></tr>
+          <tr><td>robots.txt</td><td><span class="tag2 gap">missing</span></td><td class="d">add per-AI-bot rules + sitemap ref</td></tr>
+          <tr><td>llms.txt</td><td><span class="tag2 gap">missing</span></td><td class="d">curate the docs catalogue for LLMs</td></tr>
+          <tr><td>sitemap.xml</td><td><span class="tag2 gap">missing</span></td><td class="d">generate from <code>www/</code> pages</td></tr>
+          <tr><td>Markdown negotiation</td><td><span class="tag2 gap">missing</span></td><td class="d">Worker on <code>Accept: text/markdown</code></td></tr>
+          <tr><td>OAuth for MCP</td><td><span class="tag2 gap">missing</span></td><td class="d"><code>workers-oauth-provider</code> + <code>.well-known</code></td></tr>
+          <tr><td>Agent Skills</td><td><span class="tag2 gap">missing</span></td><td class="d">publish a <code>SKILL.md</code> for the MCP/shop</td></tr>
+          <tr><td>Agentic commerce</td><td><span class="tag2 gap">missing</span></td><td class="d">product feed + checkout API (ACP/AP2-style)</td></tr>
+          <tr><td>AI Crawl Control / Pay Per Crawl</td><td><span class="tag2 cf">cloudflare</span></td><td class="d">enable in dashboard, no code</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="resources" class="panel">
+      <h2>Resources</h2>
+      <ul class="bullets">
+        <li><a style="color:var(--accent);" href="https://llmstxt.org/">llms.txt spec</a> &middot; <a style="color:var(--accent);" href="https://modelcontextprotocol.io/">Model Context Protocol</a> &middot; <a style="color:var(--accent);" href="https://modelcontextprotocol.io/specification/basic/authorization">MCP authorization (OAuth 2.1)</a></li>
+        <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/agents/">Cloudflare Agents</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/agents/model-context-protocol/">Remote MCP on Workers</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/ai-crawl-control/">AI Crawl Control</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/bots/concepts/bot/verified-bots/web-bot-auth/">Web Bot Auth</a></li>
+        <li><a style="color:var(--accent);" href="https://www.anthropic.com/news/skills">Anthropic Agent Skills</a> &middot; <a style="color:var(--accent);" href="https://developers.cloudflare.com/reference-architecture/diagrams/ai/mcp-server-architecture/">MCP OAuth on Cloudflare</a></li>
+        <li>Related labs: <a style="color:var(--accent);" href="https://www.pimenta.fun/ai-lab/">AI &amp; MCP Lab</a> &middot; <a style="color:var(--accent);" href="https://www.pimenta.fun/agent/">AI Chat Agent</a> &middot; <a style="color:var(--accent);" href="https://www.pimenta.fun/turnstile/injection-worker/">Turnstile injection Worker</a></li>
+      </ul>
+    </section>
+
+    <section class="disclaimer"><div class="box">
+      <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
+      Please consult the official documentation for the most accurate and up-to-date information.
+      We are not responsible for any issues, damages, or data loss that may occur from using this information.
+      <span class="risk">USE AT YOUR OWN RISK.</span>
+    </div></section>
+  </main>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    <a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+</body>
+</html>
