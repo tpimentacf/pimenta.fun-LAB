@@ -61,6 +61,19 @@
     ul.check li::before { content: "\2713"; position: absolute; left: 4px; top: 7px; color: var(--accent);
       font-weight: 700; }
     ul.check li b { color: var(--text); }
+
+    .phase { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px 16px; margin: 14px 0;
+      background: var(--panel2); }
+    .phase .ph { font-size: 0.66rem; color: var(--accent); font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; }
+    .phase h3 { margin: 5px 0 8px; font-size: 1rem; }
+    .why { font-size: 0.83rem; color: var(--muted); margin: 0 0 10px; border-left: 2px solid var(--accent);
+      padding: 2px 0 2px 11px; }
+    .why b { color: var(--text); }
+    .phase ol.do { margin: 6px 0 0; padding-left: 20px; }
+    .phase ol.do li { margin: 5px 0; font-size: 0.85rem; }
+    .verify { font-size: 0.78rem; color: var(--muted); margin: 10px 0 0; }
+    .verify b { color: var(--green); }
+    .verify code { color: #d7e2f7; }
   </style>
 </head>
 <body>
@@ -95,6 +108,7 @@
       <a href="#skills">6 &middot; Agent Skills</a>
       <a href="#commerce">7 &middot; Agentic commerce</a>
       <a href="#botauth">Verified agents</a>
+      <a href="#implement">Implementation</a>
       <a href="#checklist">Checklist</a>
       <a href="#status">Where we stand</a>
       <a href="#resources">Resources</a>
@@ -376,6 +390,143 @@ See `reference.md` for the full API and error codes.</pre>
         <li><b>Policy per agent:</b> allow verified assistants to your MCP/checkout, rate-limit or challenge unknowns.</li>
         <li><b>Cloudflare:</b> AI Crawl Control + verified-bot signals + Turnstile give you the enforcement layer.</li>
       </ul>
+    </section>
+
+    <!-- ============================================================= -->
+    <section id="implement" class="panel">
+      <h2>Implementation &mdash; step by step</h2>
+      <p class="sub">A phased rollout ordered cheapest &rarr; richest. Each phase says <b>what to add</b>, <b>where</b>,
+        <b>why we do it</b>, and how to <b>verify</b>. On this lab, static files live in <code class="inline">www/</code>
+        (served by Apache), and Workers live in <code class="inline">workers/&lt;name&gt;/</code> bound to a
+        <code class="inline">www.pimenta.fun/&lt;path&gt;*</code> route.</p>
+
+      <div class="phase">
+        <div class="ph">Phase 0 &middot; No code</div>
+        <h3>Set crawl &amp; bot policy in the Cloudflare dashboard</h3>
+        <p class="why"><b>Why:</b> agent traffic is bot traffic. Before you invite agents in, decide who is allowed and
+          how you&rsquo;ll tell good agents from abusive ones &mdash; otherwise &ldquo;agent-ready&rdquo; just means
+          &ldquo;easier to scrape and abuse.&rdquo;</p>
+        <ol class="do">
+          <li><b>AI Crawl Control</b> &rarr; set a per-AI-bot allow/block policy and a hosted <code class="inline">robots.txt</code> baseline.</li>
+          <li><b>Bots &rarr; Verified Bots / Web Bot Auth</b> &rarr; note which agents are cryptographically verifiable; decide allow vs. challenge.</li>
+          <li><b>(Optional) Pay Per Crawl</b> &rarr; charge crawlers with HTTP <code class="inline">402</code> if you want to monetise access.</li>
+          <li>Confirm <b>AI Gateway</b> fronts Workers AI (the <code class="inline">ai-mcp</code> <code class="inline">ask_ai</code> tool already routes through it).</li>
+        </ol>
+        <p class="verify"><b>Verify:</b> policies show active in the dashboard; blocked bots receive a challenge/403.</p>
+      </div>
+
+      <div class="phase">
+        <div class="ph">Phase 1 &middot; Static files</div>
+        <h3>Ship the discoverability files agents look for first</h3>
+        <p class="why"><b>Why:</b> agents and their crawlers probe a few well-known URLs before anything else. These
+          three files are the cheapest, highest-leverage step &mdash; they let an agent find your content and know what
+          it may use, with zero runtime cost.</p>
+        <ol class="do">
+          <li>Add <code class="inline">www/robots.txt</code> &mdash; per-bot <code class="inline">User-agent</code>/<code class="inline">Allow</code>/<code class="inline">Disallow</code> blocks plus a <code class="inline">Sitemap:</code> line.</li>
+          <li>Add <code class="inline">www/sitemap.xml</code> &mdash; one entry per <code class="inline">www/**/index.html</code> with an honest <code class="inline">&lt;lastmod&gt;</code> so agents prioritise fresh pages.</li>
+          <li>Add <code class="inline">www/llms.txt</code> &mdash; a curated Markdown index (derive it from the <a style="color:var(--accent)" href="https://www.pimenta.fun/docs/">docs catalogue</a>). Optionally add <code class="inline">llms-full.txt</code> with text inlined.</li>
+        </ol>
+        <p class="verify"><b>Verify:</b> <code>curl https://www.pimenta.fun/robots.txt</code> (and <code>/sitemap.xml</code>, <code>/llms.txt</code>) return <code>200</code> with the right content-type.</p>
+      </div>
+
+      <div class="phase">
+        <div class="ph">Phase 2 &middot; Worker</div>
+        <h3>Serve Markdown on content negotiation</h3>
+        <p class="why"><b>Why:</b> your HTML is styled for humans; agents pay (in tokens) to strip the chrome. Returning
+          clean Markdown when asked cuts their cost and raises parsing accuracy &mdash; and a Worker does it with no
+          origin changes.</p>
+        <ol class="do">
+          <li>Create <code class="inline">workers/markdown-negotiation/</code> (<code class="inline">worker.js</code> + <code class="inline">wrangler.toml</code> + <code class="inline">README.md</code>).</li>
+          <li>Logic: if <code class="inline">Accept: text/markdown</code>, <code class="inline">?format=md</code>, or a <code class="inline">.md</code> suffix &rarr; fetch origin HTML, convert, return <code class="inline">text/markdown</code> with <code class="inline">Vary: Accept</code>; otherwise pass through untouched.</li>
+          <li>Route it narrowly first (e.g. <code class="inline">www.pimenta.fun/docs*</code>), then widen once verified.</li>
+        </ol>
+        <p class="verify"><b>Verify:</b> <code>curl -H "Accept: text/markdown" https://www.pimenta.fun/docs/</code> returns Markdown; a normal browser still gets HTML.</p>
+      </div>
+
+      <div class="phase">
+        <div class="ph">Phase 3 &middot; Markup</div>
+        <h3>Add structured data (JSON-LD) to key pages</h3>
+        <p class="why"><b>Why:</b> even when an agent reads HTML, JSON-LD removes ambiguity &mdash; it states outright
+          what is a product, a price, an author, an action. It&rsquo;s also what AI search engines lean on to cite you.</p>
+        <ol class="do">
+          <li>Add <code class="inline">&lt;script type="application/ld+json"&gt;</code> blocks: <code class="inline">Organization</code> on the home page.</li>
+          <li><code class="inline">Product</code>/<code class="inline">Offer</code> on the <a style="color:var(--accent)" href="https://www.pimenta.fun/security-solutions/e-commerce/">e-commerce</a> and any shop pages.</li>
+          <li><code class="inline">TechArticle</code> on the guide pages.</li>
+        </ol>
+        <p class="verify"><b>Verify:</b> a schema.org / Rich Results validator parses each page with no errors.</p>
+      </div>
+
+      <div class="phase">
+        <div class="ph">Phase 4 &middot; MCP</div>
+        <h3>Make the MCP server discoverable &amp; documented</h3>
+        <p class="why"><b>Why:</b> reading is passive &mdash; MCP is how an agent <i>acts</i>. You already run
+          <code class="inline">workers/ai-mcp</code>; being agent-ready means any remote agent can find it, understand
+          its tools, and connect over the current transport.</p>
+        <ol class="do">
+          <li>Deploy <code class="inline">ai-mcp</code> on a stable public host/route (e.g. <code class="inline">mcp.pimenta.fun</code> or <code class="inline">www.pimenta.fun/mcp*</code>).</li>
+          <li>Use <b>Streamable HTTP</b> transport; give every tool a clear name, JSON-Schema inputs, and a human-readable description (the description <i>is</i> the prompt).</li>
+          <li>Publish a <code class="inline">.well-known</code> manifest and list the endpoint in <code class="inline">llms.txt</code>.</li>
+        </ol>
+        <p class="verify"><b>Verify:</b> connect from the Cloudflare AI Playground or an MCP client; <code>tools/list</code> returns your tools and one call succeeds.</p>
+      </div>
+
+      <div class="phase">
+        <div class="ph">Phase 5 &middot; Auth</div>
+        <h3>Add OAuth 2.1 so agents can act as the user</h3>
+        <p class="why"><b>Why:</b> the moment a tool touches a user&rsquo;s private data or money, anonymous access is
+          unacceptable. OAuth lets an agent act <b>on the user&rsquo;s behalf</b> with a scoped, short-lived, revocable
+          token &mdash; never the password.</p>
+        <ol class="do">
+          <li>Wrap <code class="inline">ai-mcp</code> with <code class="inline">@cloudflare/workers-oauth-provider</code>.</li>
+          <li>Serve <code class="inline">/.well-known/oauth-protected-resource</code> (RFC 9728) and <code class="inline">/.well-known/oauth-authorization-server</code> (RFC 8414); enable PKCE and Dynamic Client Registration.</li>
+          <li>Define least-privilege scopes (<code class="inline">notes:read</code>, <code class="inline">notes:write</code>&hellip;) and keep tokens short-lived.</li>
+        </ol>
+        <p class="verify"><b>Verify:</b> an MCP client triggers the OAuth flow and then calls a protected tool with a scoped token.</p>
+      </div>
+
+      <div class="phase">
+        <div class="ph">Phase 6 &middot; Skills</div>
+        <h3>Publish Agent Skills</h3>
+        <p class="why"><b>Why:</b> tools tell an agent <i>what it can call</i>; a Skill teaches it <i>how to accomplish a
+          goal</i> on your site &mdash; the multi-step workflow, the order of calls, the error handling &mdash; loaded
+          on demand so it doesn&rsquo;t bloat every prompt.</p>
+        <ol class="do">
+          <li>Add <code class="inline">skills/query-lab-notes/SKILL.md</code> (name + description frontmatter, then the workflow) for the MCP.</li>
+          <li>Add <code class="inline">skills/shop-on-pimenta/SKILL.md</code> (+ optional <code class="inline">reference.md</code>) once the commerce API exists.</li>
+          <li>Publish the folder in the repo and link it from the guide and <code class="inline">llms.txt</code>.</li>
+        </ol>
+        <p class="verify"><b>Verify:</b> load the skill in a supporting agent runtime; it follows the documented steps end-to-end.</p>
+      </div>
+
+      <div class="phase">
+        <div class="ph">Phase 7 &middot; Commerce</div>
+        <h3>Expose an agent-callable catalogue + checkout</h3>
+        <p class="why"><b>Why:</b> the end game is an agent completing a purchase for a user. That needs a machine
+          catalogue, a checkout an agent can call, and a way to pay without ever handling raw card data.</p>
+        <ol class="do">
+          <li>Create <code class="inline">workers/agent-commerce/</code>: <code class="inline">GET /feed/products.json</code> (catalogue) and <code class="inline">POST /api/checkout</code> (line items &rarr; checkout + pay link).</li>
+          <li>Adopt a payment rail (ACP with Stripe, or AP2-style signed mandates); the agent presents a token/mandate, never a card number.</li>
+          <li>Cross-link it from the <a style="color:var(--accent)" href="https://www.pimenta.fun/security-solutions/e-commerce/">e-commerce security</a> lab.</li>
+        </ol>
+        <p class="verify"><b>Verify:</b> an agent fetches the feed, creates a checkout, and receives a <code>pay_url</code> / confirmation.</p>
+      </div>
+
+      <div class="phase">
+        <div class="ph">Phase 8 &middot; Enforcement</div>
+        <h3>Protect the agent surface</h3>
+        <p class="why"><b>Why:</b> opening tools and checkout to agents widens the attack surface &mdash; bots with
+          valid-looking sessions. You want <i>verified</i> agents through and everything else challenged or throttled.</p>
+        <ol class="do">
+          <li>Use <b>Web Bot Auth</b> / verified-bot rules: allow verified agents to <code class="inline">/mcp</code> and <code class="inline">/api/checkout</code>, challenge unknowns.</li>
+          <li>Add <b>Rate Limiting</b> per agent on the MCP and checkout paths.</li>
+          <li>Put <b>Turnstile</b> on sensitive actions (reuse the <a style="color:var(--accent)" href="https://www.pimenta.fun/turnstile/injection-worker/">injection</a> / <a style="color:var(--accent)" href="https://www.pimenta.fun/turnstile/secure-login">login</a> Workers) and set spend caps in the payment mandate.</li>
+        </ol>
+        <p class="verify"><b>Verify:</b> unknown / high-volume agents get challenged or limited; verified agents pass through.</p>
+      </div>
+
+      <div class="note"><b>Suggested execution order:</b> Phases 1&ndash;3 first (all in <code class="inline">www/</code>
+        plus one Worker, immediately verifiable), then 4&ndash;5 (MCP + auth), then 6&ndash;7 (Skills + commerce), and
+        8 (enforcement) alongside 7.</div>
     </section>
 
     <!-- ============================================================= -->
