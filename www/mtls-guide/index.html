@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>mTLS Implementation Guide &mdash; Pimenta Lab</title>
-  <link rel="stylesheet" href="/assets/lab.css" />
+  <link rel="stylesheet" href="/assets/docs.css" />
   <style>
     .flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 22px 0; }
     .node {
@@ -24,29 +24,34 @@
     }
     .step .body { flex: 1; }
     .step .body h3 { font-size: 1.05rem; margin-bottom: 4px; color: var(--text); }
-    .pill { display:inline-block; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; padding:2px 8px; border-radius:999px; margin-left:6px; }
-    .pill.dash { background: rgba(246,130,31,0.15); color: var(--accent); border:1px solid rgba(246,130,31,0.4); }
-    .pill.cli  { background: rgba(91,141,239,0.15); color: var(--blue); border:1px solid rgba(91,141,239,0.4); }
-    .toc { columns: 2; gap: 24px; }
-    .toc a { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
-    @media (max-width: 600px){ .toc { columns: 1; } }
+    .lbl { display:inline-block; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; padding:2px 8px; border-radius:999px; margin-left:6px; }
+    .lbl.dash { background: rgba(246,130,31,0.15); color: var(--accent); border:1px solid rgba(246,130,31,0.4); }
+    .lbl.cli  { background: rgba(91,141,239,0.15); color: var(--blue); border:1px solid rgba(91,141,239,0.4); }
   </style>
 </head>
 <body>
-  <header class="lab">
-    <div class="brand">pimenta<span>.fun</span> lab</div>
-    <nav>
-      <a href="https://www.pimenta.fun">Home</a>
-      <a href="https://www.pimenta.fun/#tests">Tests</a>
-      <a href="https://www.pimenta.fun/challenges/mtls/">mTLS Test</a>
+  <div class="layout">
+    <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#tests">&larr; Tests</a>
+      <a class="home" href="https://www.pimenta.fun/challenges/mtls/">&rarr; mTLS Test</a>
+      <h2>Contents</h2>
+      <a href="#prereq">0. Prerequisites</a>
+      <a href="#leg1">Part 1 &mdash; Client &rarr; Cloudflare</a>
+      <a href="#leg2">Part 2 &mdash; Cloudflare &rarr; Origin</a>
+      <a href="#mode">3. Encryption mode</a>
+      <a href="#verify">4. Verify end-to-end</a>
+      <a href="#trouble">5. Troubleshooting</a>
     </nav>
-  </header>
 
-  <main class="lab">
-    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Challenges / mTLS / Implementation guide</div>
-    <span class="tag">Guide</span>
-    <h1>Implementing <span class="grad">mTLS</span> end-to-end</h1>
-    <p class="lead">Two independent TLS legs, each with mutual authentication: the client proves itself to Cloudflare, and Cloudflare proves itself to your origin.</p>
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Challenges / mTLS / Implementation guide</div>
+        <span class="pill">Guide</span>
+        <h1>Implementing <span class="grad">mTLS</span> end-to-end</h1>
+        <p class="lead">Two independent TLS legs, each with mutual authentication: the client proves itself to Cloudflare, and Cloudflare proves itself to your origin.</p>
+      </header>
 
     <!-- Flow diagram -->
     <div class="flow">
@@ -62,18 +67,6 @@
       against a CA you control.<br>
       <strong>Leg 2 &mdash; Cloudflare &rarr; Origin (Authenticated Origin Pulls):</strong> Cloudflare presents a client
       certificate that your origin verifies, so the origin only accepts traffic from Cloudflare.
-    </div>
-
-    <div class="panel">
-      <strong>Contents</strong>
-      <div class="toc">
-        <p><a href="#prereq">0. Prerequisites</a></p>
-        <p><a href="#leg1">Part 1 &mdash; Client &rarr; Cloudflare</a></p>
-        <p><a href="#leg2">Part 2 &mdash; Cloudflare &rarr; Origin</a></p>
-        <p><a href="#mode">3. Encryption mode</a></p>
-        <p><a href="#verify">4. Verify end-to-end</a></p>
-        <p><a href="#trouble">5. Troubleshooting</a></p>
-      </div>
     </div>
 
     <!-- ================= Prereqs ================= -->
@@ -92,7 +85,7 @@
     <div class="step">
       <div class="num">1</div>
       <div class="body">
-        <h3>Create a CA &amp; client certificate <span class="pill cli">CLI</span></h3>
+        <h3>Create a CA &amp; client certificate <span class="lbl cli">CLI</span></h3>
         <p>Generate your own CA, then issue a client cert signed by it:</p>
         <pre># 1a. Root CA
 openssl genrsa -out ca.key 4096
@@ -116,7 +109,7 @@ openssl pkcs12 -export -inkey client.key -in client.crt \
     <div class="step">
       <div class="num">2</div>
       <div class="body">
-        <h3>Register the CA with Cloudflare <span class="pill dash">Dashboard</span> <span class="pill cli">API</span></h3>
+        <h3>Register the CA with Cloudflare <span class="lbl dash">Dashboard</span> <span class="lbl cli">API</span></h3>
         <p>Dashboard: <em>SSL/TLS &rarr; Client Certificates</em> (or <em>Security &rarr; API Shield &rarr; mTLS</em>) &rarr;
         <strong>Add mTLS certificate</strong> &rarr; paste the contents of <code class="inline">ca.pem</code>.</p>
         <p>Or via API (upload the CA to the mTLS certificate store):</p>
@@ -130,7 +123,7 @@ openssl pkcs12 -export -inkey client.key -in client.crt \
     <div class="step">
       <div class="num">3</div>
       <div class="body">
-        <h3>Associate the hostname &amp; require mTLS <span class="pill dash">Dashboard</span></h3>
+        <h3>Associate the hostname &amp; require mTLS <span class="lbl dash">Dashboard</span></h3>
         <p>Enable mTLS for the hostname (e.g. <code class="inline">mtls.pimenta.fun</code>), then enforce it with a
         WAF custom rule so unverified clients are blocked:</p>
         <pre># Expression (Security -> WAF -> Custom rules)
@@ -147,7 +140,7 @@ openssl pkcs12 -export -inkey client.key -in client.crt \
     <div class="step">
       <div class="num">4</div>
       <div class="body">
-        <h3>Test the client leg <span class="pill cli">CLI</span></h3>
+        <h3>Test the client leg <span class="lbl cli">CLI</span></h3>
         <pre># Without a cert -> blocked (403)
 curl -i https://mtls.pimenta.fun/
 
@@ -165,7 +158,7 @@ curl -i --cert client.crt --key client.key https://mtls.pimenta.fun/</pre>
     <div class="step">
       <div class="num">1</div>
       <div class="body">
-        <h3>Choose a mode &amp; enable AOP <span class="pill dash">Dashboard</span></h3>
+        <h3>Choose a mode &amp; enable AOP <span class="lbl dash">Dashboard</span></h3>
         <ul class="bullets">
           <li><strong>Zone-level</strong>: <em>SSL/TLS &rarr; Origin Server &rarr; Authenticated Origin Pulls &rarr; On</em>.
             Cloudflare presents its <em>shared</em> origin-pull certificate; your origin trusts Cloudflare's origin-pull CA.</li>
@@ -177,7 +170,7 @@ curl -i --cert client.crt --key client.key https://mtls.pimenta.fun/</pre>
     <div class="step">
       <div class="num">2</div>
       <div class="body">
-        <h3>Get the CA the origin should trust <span class="pill cli">CLI</span></h3>
+        <h3>Get the CA the origin should trust <span class="lbl cli">CLI</span></h3>
         <p>For <strong>zone-level</strong> AOP, download Cloudflare's origin-pull CA and place it on the origin:</p>
         <pre>sudo mkdir -p /etc/apache2/cloudflare
 sudo curl -fsSL \
@@ -210,8 +203,8 @@ sudo curl -fsSL \
     <div class="step">
       <div class="num">4</div>
       <div class="body">
-        <h3>Reload &amp; lock down <span class="pill cli">CLI</span></h3>
-        <pre>sudo apache2ctl configtest && sudo systemctl reload apache2</pre>
+        <h3>Reload &amp; lock down <span class="lbl cli">CLI</span></h3>
+        <pre>sudo apache2ctl configtest &amp;&amp; sudo systemctl reload apache2</pre>
         <p>Optionally restrict the origin firewall to Cloudflare IP ranges so direct (non-CF) traffic can't reach it.</p>
       </div>
     </div>
@@ -243,14 +236,15 @@ curl -i --resolve mtls.pimenta.fun:443:&lt;ORIGIN_IP&gt; https://mtls.pimenta.fu
     </ul>
 
     <p style="margin-top:24px"><a class="btn" href="https://www.pimenta.fun/challenges/mtls/">Go to the mTLS test page &rarr;</a></p>
-  </main>
-
-      <section class="disclaimer"><div class="box">
+    <section class="disclaimer"><div class="box">
       <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
       Please consult the official documentation for the most accurate and up-to-date information.
       We are not responsible for any issues, damages, or data loss that may occur from using this information.
       <span class="risk">USE AT YOUR OWN RISK.</span>
     </div></section>
+  </main>
+  </div>
+
   <footer class="lab">
     Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
   </footer>

@@ -5,12 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cloudflare Images &amp; Transformations &mdash; Pimenta Lab</title>
   <meta name="description" content="Guide and interactive playground for Cloudflare image optimization: URL transformations via /cdn-cgi/image, the cf.image Worker API, quality, format=auto (AVIF/WebP), fit, gravity, blur, sharpen, and the Cloudflare Images product." />
-  <link rel="stylesheet" href="/assets/lab.css" />
+  <link rel="stylesheet" href="/assets/docs.css" />
   <style>
-    /* page-specific styling layered on /assets/lab.css */
-    .panel h2 { margin-top: 0; font-size: 1.1rem; }
-    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
-
+    /* page-specific components layered on /assets/docs.css */
     /* status banner */
     .status { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px;
       border: 1px solid var(--border); background: var(--panel2); font-size: 0.9rem; margin: 0 0 18px; }
@@ -18,12 +15,6 @@
     .status.on .dot { background: var(--green); box-shadow: 0 0 0 4px rgba(54,211,153,0.15); }
     .status.off .dot { background: var(--accent2); box-shadow: 0 0 0 4px rgba(255,107,107,0.15); }
     .status .txt b { color: var(--text); }
-
-    /* table of contents */
-    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
-    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
-      background: var(--panel2); color: var(--muted); text-decoration: none; }
-    .toc a:hover { color: var(--text); border-color: var(--accent); }
 
     /* url anatomy */
     .anat { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; line-height: 1.9;
@@ -92,29 +83,12 @@
   </style>
 </head>
 <body>
-  <header class="lab">
-    <div class="brand">pimenta<span>.fun</span> lab</div>
-    <nav>
-      <a href="https://www.pimenta.fun">Home</a>
-      <a href="https://www.pimenta.fun/#tests">Tests</a>
-    </nav>
-  </header>
-
-  <main class="lab">
-    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Images &amp; Media / Cloudflare Images</div>
-    <span class="tag">Images Lab</span>
-    <h1>Cloudflare <span class="grad">Images &amp; Transformations</span></h1>
-    <p class="lead">Cloudflare resizes, recompresses, and reformats images at the edge &mdash; no build pipeline, no
-      origin work. This lab explains the two ways to do it (<b>URL transformations</b> and the <b>Images</b> product),
-      then lets you build <code class="inline">/cdn-cgi/image/&hellip;</code> URLs live against a real sample and see
-      the bytes shrink.</p>
-
-    <div id="status" class="status">
-      <span class="dot"></span>
-      <span class="txt">Checking whether image transformations are enabled on this zone&hellip;</span>
-    </div>
-
+  <div class="layout">
     <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#tests">&larr; Tests</a>
+      <h2>Contents</h2>
       <a href="#products">Two products</a>
       <a href="#anatomy">URL anatomy</a>
       <a href="#playground">Playground</a>
@@ -125,6 +99,22 @@
       <a href="#enable">Enable &amp; verify</a>
       <a href="#resources">Resources</a>
     </nav>
+
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Images &amp; Media / Cloudflare Images</div>
+        <span class="pill">Images Lab</span>
+        <h1>Cloudflare <span class="grad">Images &amp; Transformations</span></h1>
+        <p class="lead">Cloudflare resizes, recompresses, and reformats images at the edge &mdash; no build pipeline, no
+          origin work. This lab explains the two ways to do it (<b>URL transformations</b> and the <b>Images</b> product),
+          then lets you build <code class="inline">/cdn-cgi/image/&hellip;</code> URLs live against a real sample and see
+          the bytes shrink.</p>
+      </header>
+
+    <div id="status" class="status">
+      <span class="dot"></span>
+      <span class="txt">Checking whether image transformations are enabled on this zone&hellip;</span>
+    </div>
 
     <!-- ============================================================= -->
     <section id="products" class="panel">
@@ -471,14 +461,15 @@ curl -sI "https://www.pimenta.fun/cdn-cgi/image/width=64/images-lab/sample.png" 
         <li><a style="color:var(--accent);" href="https://developers.cloudflare.com/images/manage-images/enable-transformations/">Enable transformations</a> &mdash; per-zone setup.</li>
       </ul>
     </section>
-  </main>
-
-      <section class="disclaimer"><div class="box">
+    <section class="disclaimer"><div class="box">
       <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
       Please consult the official documentation for the most accurate and up-to-date information.
       We are not responsible for any issues, damages, or data loss that may occur from using this information.
       <span class="risk">USE AT YOUR OWN RISK.</span>
     </div></section>
+  </main>
+  </div>
+
   <footer class="lab">
     <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
     <a href="https://www.pimenta.fun/#tests">Back to tests</a>

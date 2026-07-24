@@ -5,23 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cloudflare Aegis &mdash; Dedicated CDN Egress IPs &mdash; Pimenta Lab</title>
   <meta name="description" content="Guide to Cloudflare Aegis (Dedicated CDN Egress IPs): what it is, architecture diagrams, how a request flows through Cloudflare ingress and egress, connection forwarding for IPv4, how to implement it via the aegis zone setting, and an origin firewall allowlist rule generator." />
-  <link rel="stylesheet" href="/assets/lab.css" />
+  <link rel="stylesheet" href="/assets/docs.css" />
   <style>
-    /* page-specific styling layered on /assets/lab.css */
-    .panel h2 { margin-top: 0; font-size: 1.1rem; }
-    .panel h3 { font-size: 0.95rem; margin: 22px 0 6px; }
-    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
-
+    /* page-specific components layered on /assets/docs.css */
     .status { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px;
       border: 1px solid var(--border); background: var(--panel2); font-size: 0.9rem; margin: 0 0 18px; }
     .status .dot { width: 10px; height: 10px; border-radius: 999px; background: var(--accent); flex: none;
       box-shadow: 0 0 0 4px rgba(246,130,31,0.15); }
     .status .txt b { color: var(--text); }
-
-    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
-    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
-      background: var(--panel2); color: var(--muted); text-decoration: none; }
-    .toc a:hover { color: var(--text); border-color: var(--accent); }
 
     figure.diagram { margin: 6px 0 0; background: var(--panel2); border: 1px solid var(--border);
       border-radius: 12px; padding: 14px; }
@@ -49,9 +40,9 @@
     pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
       overflow-x: auto; font-size: 0.82rem; line-height: 1.55; color: #d7e2f7; }
     pre.code .c { color: var(--muted); }
-    .pill { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 999px;
+    .lbl { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 999px;
       border: 1px solid var(--border); background: var(--panel2); color: var(--muted); }
-    .pill.ent { color: var(--accent); border-color: rgba(246,130,31,0.5); }
+    .lbl.ent { color: var(--accent); border-color: rgba(246,130,31,0.5); }
 
     /* allowlist generator */
     .gen { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 6px 0 0; }
@@ -71,31 +62,12 @@
   </style>
 </head>
 <body>
-  <header class="lab">
-    <div class="brand">pimenta<span>.fun</span> lab</div>
-    <nav>
-      <a href="https://www.pimenta.fun">Home</a>
-      <a href="https://www.pimenta.fun/#tests">Tests</a>
-    </nav>
-  </header>
-
-  <main class="lab">
-    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Network &amp; Edge / Aegis</div>
-    <span class="tag">Network Lab</span>
-    <h1>Cloudflare <span class="grad">Aegis</span> &mdash; Dedicated CDN Egress IPs</h1>
-    <p class="lead">By default, Cloudflare reaches your origin from a huge pool of egress IPs <b>shared by every
-      customer</b>, so your origin firewall has to trust all of them. <b>Aegis</b> &mdash; now called
-      <b>Dedicated CDN Egress IPs</b> &mdash; gives your account a small set of <b>reserved</b> egress IPs, so you can
-      lock the origin down to accept traffic from <i>only those addresses</i>.</p>
-
-    <div class="status">
-      <span class="dot"></span>
-      <span class="txt"><b>Enterprise feature.</b> Configured through the <code class="inline">aegis</code> zone setting
-        (contact your account team for an egress pool ID). This page is a build/architecture guide &mdash; it does not
-        enable anything on this zone.</span>
-    </div>
-
+  <div class="layout">
     <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#tests">&larr; Tests</a>
+      <h2>Contents</h2>
       <a href="#what">What it is</a>
       <a href="#ingress-egress">Ingress vs egress</a>
       <a href="#value">The core idea</a>
@@ -110,9 +82,27 @@
       <a href="#resources">Resources</a>
     </nav>
 
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Network &amp; Edge / Aegis</div>
+        <span class="pill">Network Lab</span>
+        <h1>Cloudflare <span class="grad">Aegis</span> &mdash; Dedicated CDN Egress IPs</h1>
+        <p class="lead">By default, Cloudflare reaches your origin from a huge pool of egress IPs <b>shared by every
+          customer</b>, so your origin firewall has to trust all of them. <b>Aegis</b> &mdash; now called
+          <b>Dedicated CDN Egress IPs</b> &mdash; gives your account a small set of <b>reserved</b> egress IPs, so you can
+          lock the origin down to accept traffic from <i>only those addresses</i>.</p>
+      </header>
+
+    <div class="status">
+      <span class="dot"></span>
+      <span class="txt"><b>Enterprise feature.</b> Configured through the <code class="inline">aegis</code> zone setting
+        (contact your account team for an egress pool ID). This page is a build/architecture guide &mdash; it does not
+        enable anything on this zone.</span>
+    </div>
+
     <!-- ============================================================= -->
     <section id="what" class="panel">
-      <h2>What Aegis is <span class="pill ent">Enterprise</span></h2>
+      <h2>What Aegis is <span class="lbl ent">Enterprise</span></h2>
       <p class="sub">Reserved egress IP addresses for origin allowlisting and increased security.</p>
       <p>When Cloudflare acts as a <b>reverse proxy</b>, its global network sits between clients and your origin. The
         connection Cloudflare opens <i>to your origin</i> normally comes from a very large, publicly documented pool of
@@ -666,14 +656,15 @@ curl "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/settings/aegis" \
         <li><a style="color:var(--accent);" href="https://blog.cloudflare.com/cloudflare-aegis/">Cloudflare Aegis</a> &mdash; the original announcement blog.</li>
       </ul>
     </section>
-  </main>
-
-      <section class="disclaimer"><div class="box">
+    <section class="disclaimer"><div class="box">
       <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
       Please consult the official documentation for the most accurate and up-to-date information.
       We are not responsible for any issues, damages, or data loss that may occur from using this information.
       <span class="risk">USE AT YOUR OWN RISK.</span>
     </div></section>
+  </main>
+  </div>
+
   <footer class="lab">
     <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
     <a href="https://www.pimenta.fun/#tests">Back to tests</a>

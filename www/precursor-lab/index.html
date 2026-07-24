@@ -5,13 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cloudflare Precursor &mdash; Pimenta Lab</title>
   <meta name="description" content="Guide and interactive session inspector for Cloudflare Precursor: client-side, session-based bot verification tied to the cf_clearance cookie. How the continuous verification loop works, how to enable it (Minimize Friction vs Maximize Security), Precursor rules, its relationship to JavaScript Detections and Challenge Pages, and hands-on labs to test it." />
-  <link rel="stylesheet" href="/assets/lab.css" />
+  <link rel="stylesheet" href="/assets/docs.css" />
   <style>
-    /* page-specific styling layered on /assets/lab.css */
-    .panel h2 { margin-top: 0; font-size: 1.1rem; }
-    .panel h3 { font-size: 0.95rem; margin: 22px 0 6px; }
-    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
-
+    /* page-specific components layered on /assets/docs.css */
     /* status banner */
     .status { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px;
       border: 1px solid var(--border); background: var(--panel2); font-size: 0.9rem; margin: 0 0 18px; }
@@ -20,12 +16,6 @@
     .status.warn .dot { background: var(--accent); box-shadow: 0 0 0 4px rgba(246,130,31,0.15); }
     .status.off .dot { background: var(--accent2); box-shadow: 0 0 0 4px rgba(255,107,107,0.15); }
     .status .txt b { color: var(--text); }
-
-    /* table of contents */
-    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
-    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
-      background: var(--panel2); color: var(--muted); text-decoration: none; }
-    .toc a:hover { color: var(--text); border-color: var(--accent); }
 
     /* diagram */
     figure.diagram { margin: 6px 0 0; background: var(--panel2); border: 1px solid var(--border);
@@ -89,36 +79,19 @@
     pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
       overflow-x: auto; font-size: 0.82rem; line-height: 1.55; color: #d7e2f7; }
     pre.code .c { color: var(--muted); }
-    .pill { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 999px;
+    .lbl { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 999px;
       border: 1px solid var(--border); background: var(--panel2); color: var(--muted); }
-    .pill.f { color: var(--blue); border-color: rgba(91,141,239,0.5); }
-    .pill.s { color: var(--green); border-color: rgba(54,211,153,0.5); }
+    .lbl.f { color: var(--blue); border-color: rgba(91,141,239,0.5); }
+    .lbl.s { color: var(--green); border-color: rgba(54,211,153,0.5); }
   </style>
 </head>
 <body>
-  <header class="lab">
-    <div class="brand">pimenta<span>.fun</span> lab</div>
-    <nav>
-      <a href="https://www.pimenta.fun">Home</a>
-      <a href="https://www.pimenta.fun/#tests">Tests</a>
-    </nav>
-  </header>
-
-  <main class="lab">
-    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Challenges / Precursor</div>
-    <span class="tag">Security Lab</span>
-    <h1>Cloudflare <span class="grad">Precursor</span></h1>
-    <p class="lead">Most bot defenses judge a <i>single</i> request. <b>Precursor</b> judges the whole <i>session</i>:
-      a client-side script runs continuously in the browser, streams behavioral and environmental signals to
-      Cloudflare, and updates the visitor&rsquo;s trust state in the <code class="inline">cf_clearance</code> cookie
-      over time &mdash; catching automation that looks fine request-by-request but is non-human across a session.</p>
-
-    <div id="status" class="status">
-      <span class="dot"></span>
-      <span class="txt">Inspecting this session for challenge / clearance signals&hellip;</span>
-    </div>
-
+  <div class="layout">
     <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#tests">&larr; Tests</a>
+      <h2>Contents</h2>
       <a href="#how">How it works</a>
       <a href="#lifecycle">Session lifecycle</a>
       <a href="#inspector">Session inspector</a>
@@ -129,6 +102,22 @@
       <a href="#labs">Labs</a>
       <a href="#resources">Resources</a>
     </nav>
+
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Challenges / Precursor</div>
+        <span class="pill">Security Lab</span>
+        <h1>Cloudflare <span class="grad">Precursor</span></h1>
+        <p class="lead">Most bot defenses judge a <i>single</i> request. <b>Precursor</b> judges the whole <i>session</i>:
+          a client-side script runs continuously in the browser, streams behavioral and environmental signals to
+          Cloudflare, and updates the visitor&rsquo;s trust state in the <code class="inline">cf_clearance</code> cookie
+          over time &mdash; catching automation that looks fine request-by-request but is non-human across a session.</p>
+      </header>
+
+    <div id="status" class="status">
+      <span class="dot"></span>
+      <span class="txt">Inspecting this session for challenge / clearance signals&hellip;</span>
+    </div>
 
     <!-- ============================================================= -->
     <section id="how" class="panel">
@@ -198,7 +187,7 @@
 
     <!-- ============================================================= -->
     <section id="inspector" class="panel">
-      <h2>Session inspector <span class="pill">client-side, illustrative</span></h2>
+      <h2>Session inspector <span class="lbl">client-side, illustrative</span></h2>
       <p class="sub">This panel reads only what your own browser exposes to page JavaScript &mdash; it approximates the
         <i>kinds</i> of signals a behavioral system looks at. It is <b>not</b> Cloudflare&rsquo;s actual bot score, which
         is computed at the edge from signals JS can never see.</p>
@@ -254,8 +243,8 @@
         <li>In the Cloudflare dashboard, select your <b>zone</b>.</li>
         <li>Go to <b>Security</b> &rarr; <b>Settings</b>.</li>
         <li>Locate <b>Precursor</b> and turn it <b>on</b>.</li>
-        <li><b>Choose a mode</b> &mdash; <span class="pill f">Minimize Friction</span> (default) or
-          <span class="pill s">Maximize Security</span> (recommended). For most customers this is the only required
+        <li><b>Choose a mode</b> &mdash; <span class="lbl f">Minimize Friction</span> (default) or
+          <span class="lbl s">Maximize Security</span> (recommended). For most customers this is the only required
           configuration.</li>
         <li><b>Disable JavaScript Detections (JSD)</b> &mdash; Precursor supersedes it (see
           <a style="color:var(--accent);" href="#relationships">How it fits</a>).</li>
@@ -274,12 +263,12 @@
         <thead><tr><th>Mode</th><th>Interstitial?</th><th>Trade-off</th></tr></thead>
         <tbody>
           <tr>
-            <td>Minimize Friction<br /><span class="pill f">default</span></td>
+            <td>Minimize Friction<br /><span class="lbl f">default</span></td>
             <td class="d">No. Establishes session state <b>in the background</b>.</td>
             <td class="d">Smoothest UX, but cannot guarantee every session is fully verified.</td>
           </tr>
           <tr>
-            <td>Maximize Security<br /><span class="pill s">recommended</span></td>
+            <td>Maximize Security<br /><span class="lbl s">recommended</span></td>
             <td class="d">Yes &mdash; a <b>lightweight challenge</b> if no valid session exists yet.</td>
             <td class="d">Every session is verified before proceeding; may add a little friction.</td>
           </tr>
@@ -293,10 +282,10 @@
       <p class="sub">Precursor runs everywhere by default. Rules do <b>not</b> turn it on or off &mdash; they choose
         <i>which mode</i> applies per request. Common patterns:</p>
       <ul class="bullets">
-        <li>Run <span class="pill f">Minimize Friction</span> across the site, but enforce
-          <span class="pill s">Maximize Security</span> on <code class="inline">/checkout</code> and
+        <li>Run <span class="lbl f">Minimize Friction</span> across the site, but enforce
+          <span class="lbl s">Maximize Security</span> on <code class="inline">/checkout</code> and
           <code class="inline">/login</code>.</li>
-        <li>Run <span class="pill s">Maximize Security</span> everywhere <i>except</i> the homepage.</li>
+        <li>Run <span class="lbl s">Maximize Security</span> everywhere <i>except</i> the homepage.</li>
       </ul>
       <pre class="code"><span class="c"># Security &rarr; Settings &rarr; Precursor &rarr; Rules (conceptual)</span>
 <span class="c"># Sensitive flows: strict verification</span>
@@ -358,7 +347,7 @@ THEN  mode = Minimize Friction</pre>
           <tr><td>2</td><td>Stay on the page and interact for a minute, watching the cookie value.</td>
             <td class="d">Clearance is <b>re-evaluated</b> over the session &mdash; the value can change as new signals
               are scored (behavior-bound clearance).</td></tr>
-          <tr><td>3</td><td>Set a Precursor rule: <span class="pill s">Maximize Security</span> on
+          <tr><td>3</td><td>Set a Precursor rule: <span class="lbl s">Maximize Security</span> on
               <code class="inline">/checkout</code>.</td>
             <td class="d">Hitting that path with no valid session shows a lightweight interstitial; other paths
               (Minimize Friction) do not.</td></tr>
@@ -402,14 +391,15 @@ curl -sI https://www.pimenta.fun/precursor-lab/ | grep -Ei "cf-ray|cf-mitigated|
         <li><a style="color:var(--accent);" href="https://www.pimenta.fun/turnstile/pre-clearance/">Turnstile pre-clearance</a> &mdash; establish clearance from a Turnstile widget.</li>
       </ul>
     </section>
-  </main>
-
-      <section class="disclaimer"><div class="box">
+    <section class="disclaimer"><div class="box">
       <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
       Please consult the official documentation for the most accurate and up-to-date information.
       We are not responsible for any issues, damages, or data loss that may occur from using this information.
       <span class="risk">USE AT YOUR OWN RISK.</span>
     </div></section>
+  </main>
+  </div>
+
   <footer class="lab">
     <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
     <a href="https://www.pimenta.fun/#tests">Back to tests</a>

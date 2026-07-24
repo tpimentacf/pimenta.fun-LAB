@@ -5,46 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Security Features for E-Commerce &mdash; Pimenta Lab</title>
   <meta name="description" content="A complete reference of Cloudflare products that protect online stores: WAF, Bot Management, Leaked Credentials, DDoS, Page Shield (Magecart), Turnstile, API Shield, Malicious Uploads, and SSL/TLS — with ready-to-use rule expressions, a threat-to-feature map, a where-to-start priority guide, and PCI DSS notes." />
-  <link rel="stylesheet" href="/assets/lab.css" />
+  <link rel="stylesheet" href="/assets/docs.css" />
   <style>
-    /* page-specific styling layered on /assets/lab.css */
-    .panel h2 { margin-top: 0; font-size: 1.1rem; }
-    .panel h3 { font-size: 0.95rem; margin: 18px 0 6px; }
-    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
-    .panel .docy { font-size: 0.8rem; }
-    .panel .docy a { color: var(--accent); }
-
-    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
-    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
-      background: var(--panel2); color: var(--muted); text-decoration: none; }
-    .toc a:hover { color: var(--text); border-color: var(--accent); }
-
-    .sec-head { display: flex; align-items: center; gap: 12px; margin: 0 0 4px; }
+    /* page-specific components layered on /assets/docs.css */
+    .sec-head { display: flex; align-items: center; gap: 12px; margin: 48px 0 4px; padding-top: 10px; border-top: 1px solid var(--border); }
     .sec-head .ic { font-size: 20px; }
-    .sec-head h2 { margin: 0; }
+    .sec-head h2 { margin: 0; border-top: none; padding-top: 0; }
 
-    .ref { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
-    .ref th, .ref td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
-    .ref thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
-    .ref tbody td:first-child { color: #9cc0ff; white-space: nowrap; font-weight: 600; }
-    .ref tbody td.plan { white-space: nowrap; color: var(--muted); font-size: 0.78rem; }
-    .ref tbody tr:last-child td { border-bottom: none; }
-    .ref code { font-size: 0.78rem; }
+    .docy { font-size: 0.8rem; }
+    .docy a { color: var(--accent); }
 
-    .pill { display: inline-block; font-size: 0.66rem; padding: 2px 8px; border-radius: 999px;
-      border: 1px solid var(--border); background: var(--panel2); color: var(--muted); }
-    .pill.all { color: var(--green); border-color: rgba(54,211,153,0.5); }
-    .pill.biz { color: var(--blue); border-color: rgba(91,141,239,0.5); }
-    .pill.ent { color: var(--accent); border-color: rgba(246,130,31,0.5); }
-
-    .bullets li { margin: 6px 0; }
-    .muted-small { color: var(--muted); font-size: 0.8rem; }
-    .cap { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 12px 0 5px; }
-    pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
-      overflow-x: auto; font-size: 0.8rem; line-height: 1.55; color: #d7e2f7; }
-    pre.code .c { color: var(--muted); }
+    table.ref tbody td:first-child { font-family: var(--sans); font-weight: 600; }
+    table.ref tbody td.plan { white-space: nowrap; color: var(--muted); font-size: 0.78rem; }
     pre.code .op { color: #ff9a76; }
-    pre.code .s { color: #8ef2c4; }
 
     /* tiers */
     .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 6px 0 0; }
@@ -64,26 +37,12 @@
   </style>
 </head>
 <body>
-  <header class="lab">
-    <div class="brand">pimenta<span>.fun</span> lab</div>
-    <nav>
-      <a href="https://www.pimenta.fun">Home</a>
-      <a href="https://www.pimenta.fun/#tests">Tests</a>
-    </nav>
-  </header>
-
-  <main class="lab">
-    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Security Solutions / E-Commerce</div>
-    <span class="tag">Security Lab</span>
-    <h1>Security Features for <span class="grad">E-Commerce</span></h1>
-    <p class="lead">A reference of the Cloudflare products that protect online stores &mdash; from application-layer
-      attacks and bot abuse to Magecart skimming, credential stuffing, and API abuse &mdash; with ready-to-use rule
-      expressions, a threat-to-feature map, and a where-to-start priority guide.</p>
-
-    <div class="note">Plans shown are indicative and change over time; confirm exact availability with your account
-      team.</div>
-
+  <div class="layout">
     <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#tests">&larr; Tests</a>
+      <h2>Contents</h2>
       <a href="#start">Where to start</a>
       <a href="#waf">1 &middot; WAF</a>
       <a href="#bots">2 &middot; Bots</a>
@@ -97,6 +56,19 @@
       <a href="#map">Threat map</a>
       <a href="#resources">Resources</a>
     </nav>
+
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Security Solutions / E-Commerce</div>
+        <span class="pill">Security Lab</span>
+        <h1>Security Features for <span class="grad">E-Commerce</span></h1>
+        <p class="lead">A reference of the Cloudflare products that protect online stores &mdash; from application-layer
+          attacks and bot abuse to Magecart skimming, credential stuffing, and API abuse &mdash; with ready-to-use rule
+          expressions, a threat-to-feature map, and a where-to-start priority guide.</p>
+      </header>
+
+    <div class="note">Plans shown are indicative and change over time; confirm exact availability with your account
+      team.</div>
 
     <!-- ============================================================= -->
     <section id="start" class="panel">
@@ -344,14 +316,15 @@ cf.waf.content_scan.has_malicious_obj</pre>
         <li>Related labs: <a style="color:var(--accent);" href="https://www.pimenta.fun/security-solutions/password-spraying/">Password spraying</a> &middot; <a style="color:var(--accent);" href="https://www.pimenta.fun/page-shield/">Page Shield</a> &middot; <a style="color:var(--accent);" href="https://www.pimenta.fun/api-shield/">API Shield</a></li>
       </ul>
     </section>
-  </main>
-
-      <section class="disclaimer"><div class="box">
+    <section class="disclaimer"><div class="box">
       <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
       Please consult the official documentation for the most accurate and up-to-date information.
       We are not responsible for any issues, damages, or data loss that may occur from using this information.
       <span class="risk">USE AT YOUR OWN RISK.</span>
     </div></section>
+  </main>
+  </div>
+
   <footer class="lab">
     <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
     <a href="https://www.pimenta.fun/#tests">Back to tests</a>
