@@ -204,7 +204,7 @@ sudo curl -fsSL \
       <div class="num">4</div>
       <div class="body">
         <h3>Reload &amp; lock down <span class="lbl cli">CLI</span></h3>
-        <pre>sudo apache2ctl configtest && sudo systemctl reload apache2</pre>
+        <pre>sudo apache2ctl configtest &amp;&amp; sudo systemctl reload apache2</pre>
         <p>Optionally restrict the origin firewall to Cloudflare IP ranges so direct (non-CF) traffic can't reach it.</p>
       </div>
     </div>
