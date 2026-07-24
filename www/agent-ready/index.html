@@ -5,100 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agent-Ready Web &mdash; Pimenta Lab</title>
   <meta name="description" content="A practical roadmap to make a website agent-ready: robots.txt and AI crawl policy, llms.txt, Markdown content negotiation, structured data, MCP, OAuth for agents, Agent Skills, and agentic commerce — mapped to Cloudflare." />
-  <link rel="stylesheet" href="/assets/lab.css" />
-  <style>
-    .panel h2 { margin-top: 0; font-size: 1.1rem; }
-    .panel h3 { font-size: 0.95rem; margin: 18px 0 6px; }
-    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
-
-    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
-    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
-      background: var(--panel2); color: var(--muted); text-decoration: none; }
-    .toc a:hover { color: var(--text); border-color: var(--accent); }
-
-    .cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 6px 0 0; }
-    .mini { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
-    .mini .ic { font-size: 20px; }
-    .mini h3 { margin: 8px 0 4px; font-size: 0.92rem; }
-    .mini p { margin: 0; color: var(--muted); font-size: 0.82rem; }
-    .mini .n { font-size: 0.68rem; color: var(--accent); font-weight: 700; letter-spacing: 0.5px; }
-
-    .ref { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
-    .ref th, .ref td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
-    .ref thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
-    .ref tbody td:first-child { color: #9cc0ff; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; }
-    .ref tbody td.d { color: var(--muted); }
-    .ref tbody tr:last-child td { border-bottom: none; }
-    .ref code { font-size: 0.78rem; }
-
-    .tag2 { font-size: 0.66rem; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border);
-      background: var(--panel2); color: var(--muted); white-space: nowrap; }
-    .tag2.have { color: var(--green); border-color: rgba(54,211,153,0.5); }
-    .tag2.gap  { color: var(--accent2); border-color: rgba(255,107,107,0.5); }
-    .tag2.cf   { color: var(--accent); border-color: rgba(246,130,31,0.5); }
-
-    .bullets li { margin: 6px 0; }
-    .muted-small { color: var(--muted); font-size: 0.8rem; }
-    .cap { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 12px 0 5px; }
-    pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
-      overflow-x: auto; font-size: 0.8rem; line-height: 1.55; color: #d7e2f7; }
-    pre.code .c { color: var(--muted); }
-    pre.code .k { color: #ff9a76; }
-    pre.code .s { color: #8ef2c4; }
-    pre.code .f { color: #c9a3ff; }
-
-    ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 8px 0 0; }
-    ol.steps > li { position: relative; padding: 2px 0 16px 40px; border-left: 2px solid var(--border); margin-left: 14px; }
-    ol.steps > li:last-child { border-left: 2px solid transparent; padding-bottom: 0; }
-    ol.steps > li::before { counter-increment: step; content: counter(step); position: absolute; left: -15px; top: -2px;
-      width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #1a1205; font-weight: 700;
-      display: grid; place-items: center; font-size: 0.82rem; }
-    ol.steps h3 { margin: 0 0 6px; }
-
-    ul.check { list-style: none; padding: 0; margin: 6px 0 0; }
-    ul.check li { position: relative; padding: 7px 0 7px 30px; border-bottom: 1px solid var(--border); font-size: 0.86rem; }
-    ul.check li:last-child { border-bottom: none; }
-    ul.check li::before { content: "\2713"; position: absolute; left: 4px; top: 7px; color: var(--accent);
-      font-weight: 700; }
-    ul.check li b { color: var(--text); }
-
-    .phase { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px 16px; margin: 14px 0;
-      background: var(--panel2); }
-    .phase .ph { font-size: 0.66rem; color: var(--accent); font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; }
-    .phase h3 { margin: 5px 0 8px; font-size: 1rem; }
-    .why { font-size: 0.83rem; color: var(--muted); margin: 0 0 10px; border-left: 2px solid var(--accent);
-      padding: 2px 0 2px 11px; }
-    .why b { color: var(--text); }
-    .phase ol.do { margin: 6px 0 0; padding-left: 20px; }
-    .phase ol.do li { margin: 5px 0; font-size: 0.85rem; }
-    .verify { font-size: 0.78rem; color: var(--muted); margin: 10px 0 0; }
-    .verify b { color: var(--green); }
-    .verify code { color: #d7e2f7; }
-  </style>
+  <link rel="stylesheet" href="/assets/docs.css" />
 </head>
 <body>
-  <header class="lab">
-    <div class="brand">pimenta<span>.fun</span> lab</div>
-    <nav>
-      <a href="https://www.pimenta.fun">Home</a>
-      <a href="https://www.pimenta.fun/#tests">Tests</a>
-    </nav>
-  </header>
-
-  <main class="lab">
-    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / AI &amp; MCP / Agent-Ready Web</div>
-    <span class="tag">AI &amp; Agents</span>
-    <h1>Making a site <span class="grad">Agent-Ready</span></h1>
-    <p class="lead">The web is being read and acted on by autonomous agents, not just humans in browsers. An
-      <b>agent-ready</b> site is <b>discoverable</b>, <b>machine-readable</b>, <b>actionable</b>, and <b>transactable</b>
-      by an LLM agent &mdash; from <code class="inline">robots.txt</code> and Markdown negotiation all the way to MCP,
-      OAuth, Agent Skills, and agentic commerce.</p>
-
-    <div class="note">This is a roadmap, not a single feature. Each pillar below is independently useful &mdash; start at
-      the top (cheap, static wins) and work down toward tools, auth, and payments. Everything maps to Cloudflare
-      where relevant.</div>
-
+  <div class="layout">
     <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#tests">&larr; Tests</a>
+      <h2>Contents</h2>
       <a href="#pillars">The 7 pillars</a>
       <a href="#discover">1 &middot; Discoverability</a>
       <a href="#markdown">2 &middot; Markdown</a>
@@ -113,6 +28,21 @@
       <a href="#status">Where we stand</a>
       <a href="#resources">Resources</a>
     </nav>
+
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / AI &amp; MCP / Agent-Ready Web</div>
+        <span class="pill">AI &amp; Agents</span>
+        <h1>Making a site <span class="grad">Agent-Ready</span></h1>
+        <p class="lead">The web is being read and acted on by autonomous agents, not just humans in browsers. An
+          <b>agent-ready</b> site is <b>discoverable</b>, <b>machine-readable</b>, <b>actionable</b>, and <b>transactable</b>
+          by an LLM agent &mdash; from <code class="inline">robots.txt</code> and Markdown negotiation all the way to MCP,
+          OAuth, Agent Skills, and agentic commerce.</p>
+      </header>
+
+    <div class="note">This is a roadmap, not a single feature. Each pillar below is independently useful &mdash; start at
+      the top (cheap, static wins) and work down toward tools, auth, and payments. Everything maps to Cloudflare
+      where relevant.</div>
 
     <!-- ============================================================= -->
     <section id="pillars" class="panel">
@@ -587,6 +517,7 @@ See `reference.md` for the full API and error codes.</pre>
       <span class="risk">USE AT YOUR OWN RISK.</span>
     </div></section>
   </main>
+  </div>
 
   <footer class="lab">
     <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
