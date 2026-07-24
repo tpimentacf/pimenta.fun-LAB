@@ -5,13 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI &amp; MCP Lab &mdash; Pimenta Lab</title>
   <meta name="description" content="Hands-on Cloudflare AI lab: Workers AI, AI Gateway, Guardrails, Authenticated Gateway, a remote MCP server on D1 + KV, a tool-calling Agent, and Firewall for AI. Step-by-step build with verify checks and a customer demo runbook." />
-  <link rel="stylesheet" href="/assets/lab.css" />
+  <link rel="stylesheet" href="/assets/docs.css" />
   <style>
-    .panel h2 { margin-top: 0; font-size: 1.12rem; }
-    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
-    main.lab { max-width: 900px; }
-    main.lab code { background:#1b2547; padding:2px 6px; border-radius:5px; font-size:0.85rem; color:#d7e2f7; }
-    main.lab pre code { background:none; padding:0; color:inherit; }
     .filename { color: var(--accent); font-size: 0.78rem; font-family: ui-monospace,SFMono-Regular,Menlo,monospace; margin: 14px 0 4px; }
 
     .quicklinks { display:flex; gap:10px; flex-wrap:wrap; margin: 4px 0 8px; }
@@ -59,31 +54,42 @@
             border:1px solid var(--border); color:var(--muted); margin-left:6px; vertical-align:middle; }
     .tag2.ent { background:rgba(255,107,107,0.14); color:#ffb0b0; border-color:rgba(255,107,107,0.45); }
     .tag2.live { background:rgba(54,211,153,0.14); color:#8ff0c8; border-color:rgba(54,211,153,0.45); }
-    .toc { columns:2; gap:24px; font-size:0.9rem; }
-    @media (max-width:640px){ .toc { columns:1; } }
-    .toc a { color:var(--text); text-decoration:none; }
-    .toc a:hover { color:var(--accent); }
     .runbook li { margin:8px 0; }
   </style>
 </head>
 <body>
-  <header class="lab">
-    <div class="brand">pimenta<span>.fun</span> lab</div>
-    <nav>
-      <a href="https://www.pimenta.fun">Home</a>
-      <a href="https://www.pimenta.fun/#tests">Tests</a>
-      <a href="https://www.pimenta.fun/#docs">Docs</a>
+  <div class="layout">
+    <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#tests">&larr; Tests</a>
+      <a class="home" href="https://www.pimenta.fun/#docs">&larr; Docs</a>
+      <h2>Contents</h2>
+      <a href="#products">1. The products, explained</a>
+      <a href="#architecture">2. Architecture &amp; data flow</a>
+      <a href="#prereqs">3. Prerequisites</a>
+      <a href="#p1">4. Part 1 &mdash; Workers AI</a>
+      <a href="#p2">5. Part 2 &mdash; AI Gateway</a>
+      <a href="#p3">6. Part 3 &mdash; Guardrails</a>
+      <a href="#p4">7. Part 4 &mdash; Authenticated Gateway</a>
+      <a href="#p5">8. Part 5 &mdash; MCP server (D1 + KV)</a>
+      <a href="#p6">9. Part 6 &mdash; The Agent (tool loop)</a>
+      <a href="#p7">10. Part 7 &mdash; Firewall for AI</a>
+      <a href="#config">11. Configuration reference</a>
+      <a href="#demo">12. Customer demo runbook</a>
+      <a href="#resources">13. Resources</a>
     </nav>
-  </header>
 
-  <main class="lab">
-    <div class="crumb"><a href="https://www.pimenta.fun/#docs">Docs</a> / AI &amp; Agents / AI &amp; MCP Lab</div>
-    <span class="tag">AI &amp; MCP</span>
-    <h1>Cloudflare <span class="grad">AI &amp; MCP</span> Lab</h1>
-    <p class="lead">A complete, customer-ready lab covering <strong>Workers AI</strong>, <strong>AI Gateway</strong>
-      (with <strong>Guardrails</strong> and <strong>Authenticated Gateway</strong>), a <strong>remote MCP server</strong>
-      backed by <strong>D1 + KV</strong>, a tool-calling <strong>Agent</strong>, and <strong>Firewall for AI</strong>.
-      Build it end-to-end &mdash; every step has a <em>Verify</em> check &mdash; then run the demo script.</p>
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#docs">Docs</a> / AI &amp; Agents / AI &amp; MCP Lab</div>
+        <span class="pill">AI &amp; MCP</span>
+        <h1>Cloudflare <span class="grad">AI &amp; MCP</span> Lab</h1>
+        <p class="lead">A complete, customer-ready lab covering <strong>Workers AI</strong>, <strong>AI Gateway</strong>
+          (with <strong>Guardrails</strong> and <strong>Authenticated Gateway</strong>), a <strong>remote MCP server</strong>
+          backed by <strong>D1 + KV</strong>, a tool-calling <strong>Agent</strong>, and <strong>Firewall for AI</strong>.
+          Build it end-to-end &mdash; every step has a <em>Verify</em> check &mdash; then run the demo script.</p>
+      </header>
 
     <div class="quicklinks">
       <a class="btn" href="/agent/">Open the live Agent chat &rarr;</a>
@@ -100,25 +106,6 @@
 
     <div class="warn"><strong>Heads up:</strong> Workers AI, D1, KV and
       AI Gateway usage may incur charges; Firewall for AI requires an Enterprise plan.</div>
-
-    <div class="panel">
-      <h2>Contents</h2>
-      <div class="toc">
-        <a href="#products">1. The products, explained</a><br />
-        <a href="#architecture">2. Architecture &amp; data flow</a><br />
-        <a href="#prereqs">3. Prerequisites</a><br />
-        <a href="#p1">4. Part 1 &mdash; Workers AI</a><br />
-        <a href="#p2">5. Part 2 &mdash; AI Gateway</a><br />
-        <a href="#p3">6. Part 3 &mdash; Guardrails</a><br />
-        <a href="#p4">7. Part 4 &mdash; Authenticated Gateway</a><br />
-        <a href="#p5">8. Part 5 &mdash; MCP server (D1 + KV)</a><br />
-        <a href="#p6">9. Part 6 &mdash; The Agent (tool loop)</a><br />
-        <a href="#p7">10. Part 7 &mdash; Firewall for AI</a><br />
-        <a href="#config">11. Configuration reference</a><br />
-        <a href="#demo">12. Customer demo runbook</a><br />
-        <a href="#resources">13. Resources</a>
-      </div>
-    </div>
 
     <!-- ── PRODUCTS ── -->
     <h2 id="products">1. The products, explained</h2>
@@ -853,14 +840,15 @@ npx wrangler deploy</pre>
         <li><code>createMcpHandler</code>: <a href="https://developers.cloudflare.com/agents/model-context-protocol/apis/handler-api/">developers.cloudflare.com/agents/&hellip;/handler-api</a></li>
       </ul>
     </div>
-  </main>
-
-      <section class="disclaimer"><div class="box">
+    <section class="disclaimer"><div class="box">
       <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
       Please consult the official documentation for the most accurate and up-to-date information.
       We are not responsible for any issues, damages, or data loss that may occur from using this information.
       <span class="risk">USE AT YOUR OWN RISK.</span>
     </div></section>
+  </main>
+  </div>
+
   <footer class="lab">
     <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
     &nbsp;&middot;&nbsp;<a href="https://www.pimenta.fun/#tests">Back to tests</a>
