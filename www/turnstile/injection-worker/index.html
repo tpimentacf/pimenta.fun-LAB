@@ -5,105 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Turnstile Injection &amp; Verification Worker &mdash; Pimenta Lab</title>
   <meta name="description" content="A Cloudflare Worker that sits in front of your origin, injects the Turnstile widget into your HTML with HTMLRewriter (no origin code changes), and verifies the token server-side at /siteverify before any form POST reaches origin — plus multi-signal anti-bypass hardening (full outcome validation, single-use tokens, ASN and bot-score floors, ephemeral-id caps, CSP)." />
-  <link rel="stylesheet" href="/assets/lab.css" />
-  <style>
-    .panel h2 { margin-top: 0; font-size: 1.1rem; }
-    .panel h3 { font-size: 0.95rem; margin: 18px 0 6px; }
-    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
-    .panel .docy { font-size: 0.8rem; }
-    .panel .docy a { color: var(--accent); }
-
-    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 22px; }
-    .toc a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
-      background: var(--panel2); color: var(--muted); text-decoration: none; }
-    .toc a:hover { color: var(--text); border-color: var(--accent); }
-
-    .cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin: 6px 0 0; }
-    .mini { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
-    .mini .ic { font-size: 20px; }
-    .mini h3 { margin: 8px 0 4px; font-size: 0.92rem; }
-    .mini p { margin: 0; color: var(--muted); font-size: 0.82rem; }
-
-    .ref { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
-    .ref th, .ref td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
-    .ref thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
-    .ref tbody td:first-child { color: #9cc0ff; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; }
-    .ref tbody td.d { color: var(--muted); }
-    .ref tbody tr:last-child td { border-bottom: none; }
-    .ref code { font-size: 0.78rem; }
-
-    .tag2 { font-size: 0.66rem; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border);
-      background: var(--panel2); color: var(--muted); white-space: nowrap; }
-    .tag2.pub { color: var(--green); border-color: rgba(54,211,153,0.5); }
-    .tag2.sec { color: var(--accent2); border-color: rgba(255,107,107,0.5); }
-    .tag2.opt { color: var(--muted); }
-    .tag2.kv  { color: var(--blue); border-color: rgba(91,141,239,0.5); }
-
-    .bullets li { margin: 6px 0; }
-    .muted-small { color: var(--muted); font-size: 0.8rem; }
-    .cap { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 12px 0 5px; }
-    pre.code { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
-      overflow-x: auto; font-size: 0.8rem; line-height: 1.55; color: #d7e2f7; }
-    pre.code .c { color: var(--muted); }
-    pre.code .k { color: #ff9a76; }
-    pre.code .s { color: #8ef2c4; }
-    pre.code .f { color: #c9a3ff; }
-
-    .filetree { font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; white-space: pre; color: #d7e2f7;
-      background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; overflow-x: auto; }
-    .filetree .c { color: var(--muted); }
-
-    /* step list */
-    ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 8px 0 0; }
-    ol.steps > li { position: relative; padding: 2px 0 16px 40px; border-left: 2px solid var(--border); margin-left: 14px; }
-    ol.steps > li:last-child { border-left: 2px solid transparent; padding-bottom: 0; }
-    ol.steps > li::before { counter-increment: step; content: counter(step); position: absolute; left: -15px; top: -2px;
-      width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #1a1205; font-weight: 700;
-      display: grid; place-items: center; font-size: 0.82rem; }
-    ol.steps h3 { margin: 0 0 6px; }
-
-    /* flow diagram */
-    .flow { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 4px; }
-    .flow-row { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
-    .fbox { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
-      font-size: 0.8rem; flex: 1; min-width: 130px; }
-    .fbox .t { font-weight: 700; font-size: 0.82rem; color: var(--text); }
-    .fbox .s { color: var(--muted); font-size: 0.76rem; }
-    .fbox.accent { border-color: var(--accent); }
-    .fbox.green { border-color: var(--green); }
-    .fbox.red { border-color: var(--accent2); }
-    .arrow { align-self: center; color: var(--muted); font-size: 18px; }
-  </style>
+  <link rel="stylesheet" href="/assets/docs.css" />
 </head>
 <body>
-  <header class="lab">
-    <div class="brand">pimenta<span>.fun</span> lab</div>
-    <nav>
-      <a href="https://www.pimenta.fun">Home</a>
-      <a href="https://www.pimenta.fun/#tests">Tests</a>
-    </nav>
-  </header>
-
-  <main class="lab">
-    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Turnstile / Injection Worker</div>
-    <span class="tag">Turnstile</span>
-    <h1>Turnstile <span class="grad">Injection &amp; Verification</span> Worker</h1>
-    <p class="lead">A Cloudflare Worker that sits in front of your origin, <b>injects the Turnstile widget into your
-      HTML on the fly</b> (no origin code changes), and <b>verifies the token server-side</b> before any form
-      submission is allowed to reach the origin.</p>
-
-    <div class="note">The big idea: your origin never has to know about Turnstile. The Worker adds the challenge to
-      outgoing pages and enforces it on incoming submissions &mdash; ideal for legacy apps, third-party platforms, or
-      anywhere you can&rsquo;t easily edit the backend.</div>
-
-    <div class="note"><b>&#9654; Try the live demo:</b> the
-      <a style="color:var(--accent)" href="https://www.pimenta.fun/turnstile/secure-login">Turnstile Secure Login</a>
-      is a Worker that serves a login page whose HTML has <b>no widget in it</b> &mdash; it injects the script + widget
-      with <code class="inline">HTMLRewriter</code> exactly as described here, then runs the full verification pipeline
-      on submit and, on success, dumps every Turnstile field and request signal it saw. View source: no
-      <code class="inline">cf-turnstile</code> markup &mdash; it&rsquo;s all added at the edge.</div>
-
+  <div class="layout">
     <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#tests">&larr; Tests</a>
+      <h2>Contents</h2>
       <a href="#idea">The idea</a>
       <a href="#how">How it works</a>
       <a href="#inject">GET: inject</a>
@@ -116,6 +26,27 @@
       <a href="#notes">Gotchas</a>
       <a href="#resources">Resources</a>
     </nav>
+
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Turnstile / Injection Worker</div>
+        <span class="pill">Turnstile</span>
+        <h1>Turnstile <span class="grad">Injection &amp; Verification</span> Worker</h1>
+        <p class="lead">A Cloudflare Worker that sits in front of your origin, <b>injects the Turnstile widget into your
+          HTML on the fly</b> (no origin code changes), and <b>verifies the token server-side</b> before any form
+          submission is allowed to reach the origin.</p>
+      </header>
+
+    <div class="note">The big idea: your origin never has to know about Turnstile. The Worker adds the challenge to
+      outgoing pages and enforces it on incoming submissions &mdash; ideal for legacy apps, third-party platforms, or
+      anywhere you can&rsquo;t easily edit the backend.</div>
+
+    <div class="note"><b>&#9654; Try the live demo:</b> the
+      <a style="color:var(--accent)" href="https://www.pimenta.fun/turnstile/secure-login">Turnstile Secure Login</a>
+      is a Worker that serves a login page whose HTML has <b>no widget in it</b> &mdash; it injects the script + widget
+      with <code class="inline">HTMLRewriter</code> exactly as described here, then runs the full verification pipeline
+      on submit and, on success, dumps every Turnstile field and request signal it saw. View source: no
+      <code class="inline">cf-turnstile</code> markup &mdash; it&rsquo;s all added at the edge.</div>
 
     <!-- ============================================================= -->
     <section id="idea" class="panel">
@@ -390,6 +321,7 @@ cd workers/turnstile-injector/test &amp;&amp; ./curl-tests.sh</pre>
       <span class="risk">USE AT YOUR OWN RISK.</span>
     </div></section>
   </main>
+  </div>
 
   <footer class="lab">
     <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
