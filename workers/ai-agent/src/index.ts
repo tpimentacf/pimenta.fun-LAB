@@ -48,7 +48,6 @@ const MODELS: { id: string; label: string }[] = [
   { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", label: "Llama 3.3 70B — Meta (default)" },
   { id: "@cf/meta/llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout 17B — Meta" },
   { id: "@cf/openai/gpt-oss-120b", label: "gpt-oss 120B — OpenAI (open weights)" },
-  { id: "@cf/openai/gpt-oss-20b", label: "gpt-oss 20B — OpenAI (open weights)" },
   { id: "@cf/mistralai/mistral-small-3.1-24b-instruct", label: "Mistral Small 3.1 24B" },
   { id: "@cf/qwen/qwen3-30b-a3b-fp8", label: "Qwen3 30B A3B — Alibaba" },
   { id: "@cf/google/gemma-4-26b-a4b-it", label: "Gemma 4 26B — Google" },
@@ -557,6 +556,26 @@ export default {
           blocked: gr.blocked,
           detail,
         });
+      }
+
+      // Graceful model fallback: a model that fails at runtime (unavailable,
+      // capacity, or an incompatible tools format) must NOT surface as a 500.
+      // If a non-default model was in play, retry once with the default and
+      // return a normal answer noting the substitution.
+      const fallbackModel = env.AGENT_MODEL || DEFAULT_MODEL;
+      const attempted = resolveModel(env, requestedModel);
+      if (attempted !== fallbackModel) {
+        try {
+          const out = await runAgent(env, messages, fallbackModel);
+          return json({
+            ...out,
+            requestedModel: attempted,
+            modelFallback: true,
+            note: `The selected model (${attempted}) couldn't run, so ${fallbackModel} answered instead.`,
+          });
+        } catch {
+          /* fall through to the error below */
+        }
       }
       return json({ error: "Agent failed", detail }, 500);
     }
