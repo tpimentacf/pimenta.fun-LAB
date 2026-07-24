@@ -53,6 +53,29 @@
     .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#6b7fb3; margin-right:6px; vertical-align:middle; }
     .dot.ok { background:#57d38c; } .dot.bad { background:#ff6b6b; }
 
+    /* formatted (markdown) bot messages */
+    .msg.md { white-space:normal; }
+    .msg.md > *:first-child { margin-top:0; }
+    .msg.md > *:last-child { margin-bottom:0; }
+    .msg.md p { margin:0 0 8px; }
+    .msg.md h1, .msg.md h2, .msg.md h3, .msg.md h4 { margin:12px 0 6px; line-height:1.25; color:#fff; }
+    .msg.md h1 { font-size:1.15rem; } .msg.md h2 { font-size:1.05rem; }
+    .msg.md h3 { font-size:0.98rem; } .msg.md h4 { font-size:0.92rem; }
+    .msg.md ul, .msg.md ol { margin:6px 0 8px; padding-left:22px; }
+    .msg.md li { margin:3px 0; }
+    .msg.md li > ul, .msg.md li > ol { margin:3px 0; }
+    .msg.md strong { color:#fff; }
+    .msg.md a { color:#8fb4ff; text-decoration:underline; }
+    .msg.md code { background:#0f1836; padding:1px 5px; border-radius:5px; font-size:0.85em; color:#d7e2f7; }
+    .msg.md pre { background:#0f1836; border:1px solid var(--border); border-radius:8px; padding:10px 12px;
+                  overflow-x:auto; margin:8px 0; }
+    .msg.md pre code { background:none; padding:0; font-size:0.82rem; display:block; white-space:pre; }
+    .msg.md blockquote { border-left:3px solid var(--accent); margin:8px 0; padding:2px 0 2px 12px; color:#c3d0ea; }
+    .msg.md hr { border:none; border-top:1px solid var(--border); margin:10px 0; }
+    .msg.md table.md-table { border-collapse:collapse; width:100%; margin:8px 0; font-size:0.85rem; }
+    .msg.md table.md-table th, .msg.md table.md-table td { border:1px solid var(--border); padding:6px 9px; text-align:left; }
+    .msg.md table.md-table th { background:#0f1836; color:#cdd9f2; }
+
     pre.arch { color:#cbd6ef; line-height:1.4; }
     table.tbl { width:100%; border-collapse:collapse; font-size:0.86rem; margin:6px 0 2px; }
     table.tbl th, table.tbl td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
@@ -346,13 +369,114 @@ npx wrangler deploy</pre>
 
       function scroll() { logEl.scrollTop = logEl.scrollHeight; }
 
-      function addMsg(role, text) {
+      function addMsg(role, text, asHtml) {
         var d = document.createElement("div");
-        d.className = "msg " + role;
-        d.textContent = text;
+        d.className = "msg " + role + (asHtml ? " md" : "");
+        if (asHtml) d.innerHTML = renderMarkdown(text);
+        else d.textContent = text;
         logEl.appendChild(d);
         scroll();
         return d;
+      }
+
+      // Minimal, XSS-safe Markdown -> HTML. All text is escaped; we only emit
+      // our own tags, and links are restricted to http(s) URLs.
+      function renderMarkdown(src) {
+        src = String(src == null ? "" : src).replace(/\r\n?/g, "\n");
+
+        // Protect fenced code blocks first.
+        var blocks = [];
+        src = src.replace(/```[ \t]*([^\n`]*)\n([\s\S]*?)```/g, function (_, lang, code) {
+          blocks.push(code.replace(/\n$/, ""));
+          return "\u0000CB" + (blocks.length - 1) + "\u0000";
+        });
+
+        function inline(text) {
+          var codes = [];
+          // Protect inline code so its contents aren't re-formatted.
+          text = text.replace(/`([^`]+)`/g, function (_, c) {
+            codes.push("<code>" + escapeHtml(c) + "</code>");
+            return "\u0000IC" + (codes.length - 1) + "\u0000";
+          });
+          text = escapeHtml(text);
+          // links [label](http(s)://url)
+          text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+            '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+          // bold, italic, strikethrough
+          text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+          text = text.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+          text = text.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+          text = text.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+          // restore inline code
+          text = text.replace(/\u0000IC(\d+)\u0000/g, function (_, n) { return codes[+n]; });
+          return text;
+        }
+
+        function isTableSep(s) { return /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(s); }
+        function cells(row) {
+          return row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|")
+            .map(function (c) { return c.trim(); });
+        }
+
+        var lines = src.split("\n");
+        var out = [];
+        var i = 0;
+        while (i < lines.length) {
+          var line = lines[i];
+
+          var cb = line.match(/^\u0000CB(\d+)\u0000\s*$/);
+          if (cb) { out.push("<pre><code>" + escapeHtml(blocks[+cb[1]]) + "</code></pre>"); i++; continue; }
+
+          if (/^\s*$/.test(line)) { i++; continue; }
+
+          var h = line.match(/^(#{1,6})\s+(.*)$/);
+          if (h) { var l = h[1].length; out.push("<h" + l + ">" + inline(h[2]) + "</h" + l + ">"); i++; continue; }
+
+          if (/^\s*([-*_])\1\1+\s*$/.test(line)) { out.push("<hr>"); i++; continue; }
+
+          if (/^\s*>/.test(line)) {
+            var q = [];
+            while (i < lines.length && /^\s*>/.test(lines[i])) { q.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
+            out.push("<blockquote>" + inline(q.join(" ")) + "</blockquote>");
+            continue;
+          }
+
+          if (line.indexOf("|") !== -1 && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+            var head = cells(line); i += 2;
+            var rows = [];
+            while (i < lines.length && lines[i].indexOf("|") !== -1 && !/^\s*$/.test(lines[i])) { rows.push(cells(lines[i])); i++; }
+            var th = "<thead><tr>" + head.map(function (c) { return "<th>" + inline(c) + "</th>"; }).join("") + "</tr></thead>";
+            var tb = "<tbody>" + rows.map(function (r) {
+              return "<tr>" + r.map(function (c) { return "<td>" + inline(c) + "</td>"; }).join("") + "</tr>";
+            }).join("") + "</tbody>";
+            out.push('<table class="md-table">' + th + tb + "</table>");
+            continue;
+          }
+
+          if (/^\s*[-*+]\s+/.test(line)) {
+            var ul = [];
+            while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) { ul.push("<li>" + inline(lines[i].replace(/^\s*[-*+]\s+/, "")) + "</li>"); i++; }
+            out.push("<ul>" + ul.join("") + "</ul>");
+            continue;
+          }
+
+          if (/^\s*\d+\.\s+/.test(line)) {
+            var ol = [];
+            while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) { ol.push("<li>" + inline(lines[i].replace(/^\s*\d+\.\s+/, "")) + "</li>"); i++; }
+            out.push("<ol>" + ol.join("") + "</ol>");
+            continue;
+          }
+
+          var para = [];
+          while (i < lines.length && !/^\s*$/.test(lines[i])
+            && !/^(#{1,6})\s+/.test(lines[i]) && !/^\s*[-*+]\s+/.test(lines[i])
+            && !/^\s*\d+\.\s+/.test(lines[i]) && !/^\s*>/.test(lines[i])
+            && !/^\u0000CB\d+\u0000\s*$/.test(lines[i])) {
+            para.push(lines[i]); i++;
+          }
+          out.push("<p>" + inline(para.join("\n")).replace(/\n/g, "<br>") + "</p>");
+        }
+        return out.join("");
       }
 
       function addSteps(steps) {
@@ -398,7 +522,7 @@ npx wrangler deploy</pre>
           typing.remove();
           addSteps(data.steps);
           var reply = (data.reply || "(no answer)").toString();
-          addMsg("bot", reply);
+          addMsg("bot", reply, true);
           history.push({ role: "assistant", content: reply });
           // Show which model actually answered; flag a server-side fallback.
           setStatus("via " + shortLabel(data.model || modelEl.value), "ok");
