@@ -1,0 +1,14 @@
+name = "error-204"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# Route the Worker so it fronts the 204 lab page and answers with a bodyless
+# `204 No Content` for every request under this path.
+# Adjust the zone_name to your zone. Comment this out to deploy to
+# error-204.<your-subdomain>.workers.dev instead.
+routes = [
+  { pattern = "www.pimenta.fun/error/error204*", zone_name = "pimenta.fun" }
+]
+
+# Optional: enable a workers.dev preview URL while testing.
+workers_dev = true
