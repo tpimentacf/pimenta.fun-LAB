@@ -25,6 +25,16 @@
 
     <p><a class="btn" href="https://www.pimenta.fun/mtls-guide/">&#128214; Read the full mTLS implementation guide</a></p>
 
+    <h2>Test Leg&nbsp;1 live (client &rarr; Cloudflare)</h2>
+    <p>Open the live mTLS inspector on the enforced hostname. Cloudflare requests a client certificate during the TLS
+    handshake and only lets you through if it verifies against the lab CA.</p>
+    <p><a class="btn" href="https://mtls.pimenta.fun/">&#128272; Open mtls.pimenta.fun &rarr;</a></p>
+    <div class="note">
+      <strong>Without a valid client certificate you get a <code class="inline">403</code></strong> &mdash; Cloudflare blocks the
+      unverified handshake at the edge. With your <code class="inline">client.p12</code> imported into the browser, the page renders
+      your <strong>verified certificate</strong>, the TLS session details and everything the edge reports. Add
+      <code class="inline">?format=json</code> for a machine-readable dump.
+    </div>
 
     <h2>Live client-certificate check</h2>
     <p>This calls a protected endpoint and shows what the edge reports about your client certificate.</p>

@@ -36,6 +36,7 @@
       <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
       <a class="home" href="https://www.pimenta.fun/#tests">&larr; Tests</a>
       <a class="home" href="https://www.pimenta.fun/challenges/mtls/">&rarr; mTLS Test</a>
+      <a class="home" href="https://mtls.pimenta.fun/">&rarr; Live mTLS inspector</a>
       <h2>Contents</h2>
       <a href="#prereq">0. Prerequisites</a>
       <a href="#leg1">Part 1 &mdash; Client &rarr; Cloudflare</a>
@@ -81,6 +82,7 @@
     <!-- ================= LEG 1 ================= -->
     <h2 id="leg1">Part 1 &mdash; Client &rarr; Cloudflare (client certificate auth)</h2>
     <p>Cloudflare challenges the client for a certificate during the TLS handshake and verifies it against a CA you register (API Shield &rarr; mTLS).</p>
+    <p><a class="btn ghost" href="https://mtls.pimenta.fun/">&#128272; Live mTLS test / cert inspector &rarr;</a></p>
 
     <div class="step">
       <div class="num">1</div>
@@ -116,7 +118,7 @@ openssl pkcs12 -export -inkey client.key -in client.crt \
         <pre>curl -X POST \
   "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/certificate_authorities/hostname_associations" \
   -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
-  --data '{"certificates":["<paste ca.pem PEM here>"]}'</pre>
+  --data '{"certificates":["&lt;paste ca.pem PEM here&gt;"]}'</pre>
       </div>
     </div>
 
@@ -147,6 +149,10 @@ curl -i https://mtls.pimenta.fun/
 # With the client cert -> allowed
 curl -i --cert client.crt --key client.key https://mtls.pimenta.fun/</pre>
         <p>Browsers: import <code class="inline">client.p12</code> into the OS/keychain; the browser prompts to send it.</p>
+        <div class="note">Or just open the live <a href="https://mtls.pimenta.fun/">mTLS inspector at
+          <code class="inline">mtls.pimenta.fun</code></a>: with your cert imported it renders your <strong>verified
+          certificate</strong>, TLS session and edge details (append <code class="inline">?format=json</code> for JSON);
+          without a cert Cloudflare returns <code class="inline">403</code>.</div>
       </div>
     </div>
 
