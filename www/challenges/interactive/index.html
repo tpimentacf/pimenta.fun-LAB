@@ -4,7 +4,52 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Interactive Challenge &mdash; Pimenta Lab</title>
+  <meta name="description" content="Demonstrates Cloudflare's Interactive Challenge: how the challenge flow works and the live clearance, CF-Ray, /cdn-cgi/trace, response-header and cookie data available after you pass." />
   <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    /* page-specific styling layered on /assets/lab.css */
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .panel .sub { color: var(--muted); font-size: 0.88rem; margin: -4px 0 14px; }
+    .row-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 4px 0 0; }
+
+    /* summary metric grid */
+    .geo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 6px 0 0; }
+    .geo-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .geo-card .l { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .geo-card .n { font-size: 1.05rem; font-weight: 700; color: var(--accent); margin-top: 4px; word-break: break-word; }
+    .geo-card .n.ok { color: #6ee7b7; }
+
+    /* key/value tables */
+    .kv { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .kv th, .kv td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .kv thead th { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kv tbody td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #9cc0ff; white-space: nowrap; }
+    .kv tbody td.desc { color: var(--muted); }
+    .kv tbody td .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #d7e2f7; word-break: break-word; }
+    .kv tbody tr:last-child td { border-bottom: none; }
+
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+    .pill.on  { background: rgba(54,211,153,0.14); color: #6ee7b7; border: 1px solid rgba(54,211,153,0.45); }
+    .pill.off { background: rgba(154,166,192,0.12); color: var(--muted); border: 1px solid var(--border); }
+    .pill.warn{ background: rgba(246,130,31,0.14); color: #f6a85f; border: 1px solid rgba(246,130,31,0.45); }
+    .pill.bad { background: rgba(255,107,107,0.14); color: #ffb0b0; border: 1px solid rgba(255,107,107,0.45); }
+
+    /* flow steps */
+    ol.flow { counter-reset: step; list-style: none; margin: 8px 0 0; padding: 0; }
+    ol.flow li { position: relative; padding: 0 0 14px 42px; margin: 0; }
+    ol.flow li::before {
+      counter-increment: step; content: counter(step);
+      position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent); color: #1a1205; font-weight: 700; font-size: 0.85rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    ol.flow li b { color: var(--text); }
+    ol.flow li small { color: var(--muted); display: block; margin-top: 2px; }
+
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+    .copied { color: var(--green); font-size: 0.8rem; opacity: 0; transition: opacity 0.2s; }
+    .copied.show { opacity: 1; }
+  </style>
 </head>
 <body>
   <header class="lab">
@@ -19,13 +64,296 @@
     <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Challenges / Interactive Challenge</div>
     <span class="tag">Challenge</span>
     <h1><span class="grad">Interactive</span> Challenge</h1>
-    <div class="ok">&#10003; If you can read this, you passed the <strong>Interactive Challenge</strong>.</div>
-    <p>The visitor must interact (e.g. click) to proceed.</p>
-    <div class="note">Configure this in the Cloudflare dashboard: <em>Security &rarr; WAF &rarr; Custom rules</em> (action: <code class="inline">Managed/JS/Interactive Challenge</code>) scoped to this path.</div>
+    <p class="lead">A Cloudflare challenge that requires a visitor to interact (e.g. click a checkbox) before the
+      request is allowed through. If you can read this page, you already passed it &mdash; below is a live read of the
+      clearance and edge data that proves it.</p>
+
+    <div class="ok">&#10003; You passed the <strong>Interactive Challenge</strong> for this path. Cloudflare issued a
+      clearance token and let your request reach the origin.</div>
+
+    <!-- ── CHALLENGE STATUS CARDS ── -->
+    <div class="panel">
+      <h2>Challenge clearance</h2>
+      <p class="sub">The key facts about the challenge you just cleared, read live from your own connection.</p>
+      <div class="geo-grid">
+        <div class="geo-card"><div class="l">Status</div><div class="n ok">Passed &check;</div></div>
+        <div class="geo-card"><div class="l">CF-Ray</div><div class="n" id="c-ray">&hellip;</div></div>
+        <div class="geo-card"><div class="l">Data center</div><div class="n" id="c-colo">&hellip;</div></div>
+        <div class="geo-card"><div class="l">Clearance cookie</div><div class="n" id="c-clear">&hellip;</div></div>
+        <div class="geo-card"><div class="l">Your IP</div><div class="n" id="c-ip">&hellip;</div></div>
+        <div class="geo-card"><div class="l">Cleared at</div><div class="n" id="c-time">&hellip;</div></div>
+      </div>
+      <div class="row-actions" style="margin-top:16px;">
+        <button class="btn" id="btn-refresh">Re-read data</button>
+        <button class="btn ghost" id="btn-test">Test clearance (fetch)</button>
+        <span class="copied" id="test-msg"></span>
+      </div>
+    </div>
+
+    <!-- ── HOW IT WORKS ── -->
+    <div class="panel">
+      <h2>How the Interactive Challenge works</h2>
+      <p class="sub">The full request lifecycle when a challenge is applied to this path.</p>
+      <ol class="flow">
+        <li><b>Request hits Cloudflare.</b><small>You request a protected path with no valid clearance token yet.</small></li>
+        <li><b>Cloudflare returns a challenge page.</b><small>Instead of your content, the edge responds with an
+          interstitial and the header <code class="inline">cf-mitigated: challenge</code>.</small></li>
+        <li><b>You interact.</b><small>The Interactive Challenge asks for a human action (a click / checkbox); the widget
+          runs its checks in the background.</small></li>
+        <li><b>Cloudflare verifies &amp; issues clearance.</b><small>On success the edge sets a
+          <code class="inline">cf_clearance</code> cookie (HttpOnly, Secure) scoped to the zone.</small></li>
+        <li><b>Your request is replayed to the origin.</b><small>This page is served, and every later request carries
+          <code class="inline">cf_clearance</code> so you are not challenged again until it expires.</small></li>
+      </ol>
+      <div class="note"><strong>Interactive vs Managed:</strong> Cloudflare now recommends the
+        <code class="inline">Managed Challenge</code> action, which <em>automatically</em> picks the lightest challenge
+        (often no interaction). The <code class="inline">Interactive Challenge</code> action always shows an
+        interaction. Both set the same <code class="inline">cf_clearance</code> clearance cookie on success.</div>
+    </div>
+
+    <!-- ── /cdn-cgi/trace ── -->
+    <div class="panel">
+      <h2><code class="inline">/cdn-cgi/trace</code> &mdash; parsed</h2>
+      <p class="sub">Edge metadata for your (now cleared) connection, served automatically on every Cloudflare zone.</p>
+      <table class="kv">
+        <thead><tr><th style="width:120px;">Field</th><th>Value</th><th style="width:42%;">Meaning</th></tr></thead>
+        <tbody id="trace-body">
+          <tr><td colspan="3" class="muted-small">Loading trace&hellip;</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── RESPONSE HEADERS ── -->
+    <div class="panel">
+      <h2>Response headers <span class="muted-small">(same-origin fetch)</span></h2>
+      <p class="sub">Headers the browser can read from this page's own response. After you pass,
+        <code class="inline">cf-mitigated</code> is absent; while being challenged it would read
+        <code class="inline">challenge</code>.</p>
+      <table class="kv">
+        <thead><tr><th style="width:200px;">Header</th><th>Value</th></tr></thead>
+        <tbody id="hdr-body">
+          <tr><td colspan="2" class="muted-small">Reading headers&hellip;</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── COOKIES ── -->
+    <div class="panel">
+      <h2>Cookies visible to JavaScript</h2>
+      <p class="sub">Parsed from <code class="inline">document.cookie</code>.</p>
+      <table class="kv">
+        <thead><tr><th style="width:200px;">Cookie</th><th>Value</th></tr></thead>
+        <tbody id="cookie-body">
+          <tr><td colspan="2" class="muted-small">Reading cookies&hellip;</td></tr>
+        </tbody>
+      </table>
+      <div class="note" style="margin-top:14px;"><strong>Why <code class="inline">cf_clearance</code> is not listed:</strong>
+        the clearance cookie is set <code class="inline">HttpOnly</code> and <code class="inline">Secure</code>, so it is
+        deliberately <em>not</em> readable from JavaScript. Its presence is proven by the fact this page loaded without a
+        challenge &mdash; you can see it in your browser dev-tools under
+        <em>Application &rarr; Cookies</em>.</div>
+    </div>
+
+    <!-- ── CONFIGURE ── -->
+    <div class="panel">
+      <h2>How to apply it to this path</h2>
+      <p class="sub">Cloudflare dashboard: <em>Security &rarr; WAF &rarr; Custom rules</em> &rarr; <strong>Create rule</strong>.</p>
+      <p>Match this path and set the action to <code class="inline">Interactive Challenge</code> (or
+        <code class="inline">Managed Challenge</code>):</p>
+      <pre># Expression
+(http.host eq "www.pimenta.fun" and starts_with(http.request.uri.path, "/challenges/interactive/"))
+
+# Action: Interactive Challenge      (or: Managed Challenge)</pre>
+      <ul class="bullets">
+        <li>Tune how long a pass lasts under <em>Security &rarr; Settings &rarr; Challenge Passage</em> (default 30 min).</li>
+        <li>Verified bots and requests with valid clearance skip the challenge automatically.</li>
+        <li>Reload after clearing the <code class="inline">cf_clearance</code> cookie to see the challenge again.</li>
+      </ul>
+    </div>
+
+    <p><a class="btn ghost" href="https://www.pimenta.fun/#tests">&larr; Back to tests</a></p>
   </main>
 
+  <section class="disclaimer"><div class="box">
+    <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
+    Please consult the official documentation for the most accurate and up-to-date information.
+    We are not responsible for any issues, damages, or data loss that may occur from using this information.
+    <span class="risk">USE AT YOUR OWN RISK.</span>
+  </div></section>
+
   <footer class="lab">
-    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;
+    <a href="https://www.pimenta.fun/#tests">Back to tests</a>
   </footer>
+
+  <script>
+    // ------------------------------------------------------------------
+    // /cdn-cgi/trace field descriptions
+    // ------------------------------------------------------------------
+    const TRACE_META = {
+      fl:   "Cloudflare edge metal/server that handled the request.",
+      h:    "Host the request was made to.",
+      ip:   "Your public IP address as seen by the edge.",
+      ts:   "Request timestamp (Unix epoch, seconds).",
+      visit_scheme: "Scheme the client used to reach Cloudflare (http/https).",
+      uag:  "User-Agent string sent by your browser.",
+      colo: "IATA code of the Cloudflare data center that served you.",
+      sliver: "Internal deployment sliver (usually 'none').",
+      http: "HTTP protocol version negotiated (e.g. http/3).",
+      loc:  "ISO-3166 country code resolved from your IP.",
+      tls:  "TLS protocol version negotiated.",
+      sni:  "SNI handling mode (e.g. plaintext / encrypted).",
+      warp: "WARP / Cloudflare client status (on, off, plus, etc.).",
+      gateway: "Cloudflare Gateway (Zero Trust) status for the connection.",
+      rbi:  "Remote Browser Isolation status.",
+      kex:  "Key-exchange algorithm used for the TLS handshake."
+    };
+
+    const COLO = {
+      LIS:"Lisbon, PT", OPO:"Porto, PT", MAD:"Madrid, ES", BCN:"Barcelona, ES",
+      CDG:"Paris, FR", MRS:"Marseille, FR", LHR:"London, GB", MAN:"Manchester, GB",
+      AMS:"Amsterdam, NL", FRA:"Frankfurt, DE", DUS:"Dusseldorf, DE", MUC:"Munich, DE",
+      MXP:"Milan, IT", FCO:"Rome, IT", VIE:"Vienna, AT", ZRH:"Zurich, CH",
+      BRU:"Brussels, BE", DUB:"Dublin, IE", CPH:"Copenhagen, DK", ARN:"Stockholm, SE",
+      OSL:"Oslo, NO", HEL:"Helsinki, FI", WAW:"Warsaw, PL", PRG:"Prague, CZ",
+      OTP:"Bucharest, RO", SOF:"Sofia, BG", ATH:"Athens, GR", IST:"Istanbul, TR",
+      EWR:"Newark, US", IAD:"Ashburn, US", ATL:"Atlanta, US", ORD:"Chicago, US",
+      DFW:"Dallas, US", DEN:"Denver, US", LAX:"Los Angeles, US", MIA:"Miami, US",
+      SEA:"Seattle, US", SJC:"San Jose, US", PHX:"Phoenix, US", BOS:"Boston, US",
+      YYZ:"Toronto, CA", YUL:"Montreal, CA", YVR:"Vancouver, CA",
+      GRU:"Sao Paulo, BR", GIG:"Rio de Janeiro, BR", EZE:"Buenos Aires, AR",
+      SCL:"Santiago, CL", BOG:"Bogota, CO", LIM:"Lima, PE", MEX:"Mexico City, MX",
+      NRT:"Tokyo, JP", KIX:"Osaka, JP", ICN:"Seoul, KR", HKG:"Hong Kong",
+      SIN:"Singapore", KUL:"Kuala Lumpur, MY", BKK:"Bangkok, TH", CGK:"Jakarta, ID",
+      BOM:"Mumbai, IN", DEL:"New Delhi, IN", MAA:"Chennai, IN", BLR:"Bangalore, IN",
+      SYD:"Sydney, AU", MEL:"Melbourne, AU", PER:"Perth, AU", AKL:"Auckland, NZ",
+      DXB:"Dubai, AE", TLV:"Tel Aviv, IL", JNB:"Johannesburg, ZA", CPT:"Cape Town, ZA",
+      LOS:"Lagos, NG", NBO:"Nairobi, KE", CAI:"Cairo, EG"
+    };
+
+    function flag(cc) {
+      if (!cc || cc.length !== 2 || cc === "XX") return "";
+      const A = 0x1F1E6;
+      return String.fromCodePoint(A + cc.charCodeAt(0) - 65, A + cc.charCodeAt(1) - 65);
+    }
+    function esc(s) {
+      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+    function setHTML(id, html) { const el = document.getElementById(id); if (el) el.innerHTML = html; }
+
+    function parseTrace(text) {
+      const o = {};
+      text.trim().split("\n").forEach(line => {
+        const i = line.indexOf("=");
+        if (i > -1) o[line.slice(0, i)] = line.slice(i + 1);
+      });
+      return o;
+    }
+
+    function renderSummaryFromTrace(t) {
+      const colo = (t.colo || "").toUpperCase();
+      setHTML("c-colo", colo ? colo + (COLO[colo] ? ' <span class="muted-small">&middot; ' + esc(COLO[colo]) + '</span>' : "") : "&mdash;");
+      setHTML("c-ip", t.ip ? esc(t.ip) : "&mdash;");
+      const ts = t.ts && /^\d/.test(t.ts) ? new Date(parseFloat(t.ts) * 1000) : new Date();
+      setHTML("c-time", esc(ts.toLocaleTimeString()));
+    }
+
+    function renderTraceTable(t) {
+      const order = ["h","ip","loc","colo","http","tls","kex","sni","warp","gateway","rbi","visit_scheme","ts","fl","sliver","uag"];
+      const keys = order.filter(k => k in t).concat(Object.keys(t).filter(k => !order.includes(k)));
+      const rows = keys.map(k => {
+        let v = t[k];
+        if (k === "loc") v = (flag(v.toUpperCase()) + " " + v).trim();
+        if (k === "colo" && COLO[v.toUpperCase()]) v = v.toUpperCase() + "  (" + COLO[v.toUpperCase()] + ")";
+        if (k === "ts" && /^\d+/.test(v)) v = v + "  (" + new Date(parseFloat(v) * 1000).toISOString() + ")";
+        const meaning = TRACE_META[k] || "";
+        return "<tr><td>" + esc(k) + '</td><td><span class="val">' + esc(v) + "</span></td><td class=\"desc\">" + esc(meaning) + "</td></tr>";
+      }).join("");
+      setHTML("trace-body", rows || '<tr><td colspan="3" class="muted-small">No trace fields returned.</td></tr>');
+    }
+
+    async function loadTrace() {
+      try {
+        const res = await fetch("/cdn-cgi/trace", { cache: "no-store" });
+        const t = parseTrace(await res.text());
+        renderSummaryFromTrace(t);
+        renderTraceTable(t);
+      } catch (e) {
+        setHTML("trace-body", '<tr><td colspan="3" class="muted-small">Could not load /cdn-cgi/trace &mdash; ' +
+          esc(e.message) + '. This page must be served through a Cloudflare-proxied zone.</td></tr>');
+      }
+    }
+
+    async function loadHeaders() {
+      const WANT = ["cf-ray","cf-mitigated","cf-cache-status","server","content-type","cache-control","report-to","nel"];
+      try {
+        const res = await fetch(location.href, { method: "GET", cache: "no-store" });
+        const ray = res.headers.get("cf-ray");
+        setHTML("c-ray", ray ? esc(ray) : "&mdash;");
+        const rows = [];
+        WANT.forEach(h => {
+          const v = res.headers.get(h);
+          if (v == null) {
+            if (h === "cf-mitigated") rows.push('<tr><td>cf-mitigated</td><td><span class="pill on">not challenged</span></td></tr>');
+            return;
+          }
+          let cell = '<span class="val">' + esc(v) + "</span>";
+          if (h === "cf-mitigated") cell = '<span class="pill warn">' + esc(v) + "</span>";
+          rows.push("<tr><td>" + esc(h) + "</td><td>" + cell + "</td></tr>");
+        });
+        setHTML("hdr-body", rows.length ? rows.join("") :
+          '<tr><td colspan="2" class="muted-small">No Cloudflare response headers exposed for this request.</td></tr>');
+      } catch (e) {
+        setHTML("hdr-body", '<tr><td colspan="2" class="muted-small">Could not read response headers &mdash; ' +
+          esc(e.message) + "</td></tr>");
+      }
+    }
+
+    function loadCookies() {
+      const raw = document.cookie || "";
+      const pairs = raw.split(";").map(s => s.trim()).filter(Boolean);
+      const hasClearance = /(^|;\s*)cf_clearance=/.test(raw);
+      setHTML("c-clear", hasClearance
+        ? '<span class="pill on">present</span>'
+        : '<span class="pill warn">HttpOnly</span>');
+      if (!pairs.length) {
+        setHTML("cookie-body", '<tr><td colspan="2" class="muted-small">No JavaScript-readable cookies on this document.</td></tr>');
+        return;
+      }
+      const rows = pairs.map(p => {
+        const i = p.indexOf("=");
+        const k = i > -1 ? p.slice(0, i) : p;
+        const v = i > -1 ? p.slice(i + 1) : "";
+        return "<tr><td>" + esc(k) + '</td><td><span class="val">' + esc(v || "(empty)") + "</span></td></tr>";
+      });
+      setHTML("cookie-body", rows.join(""));
+    }
+
+    async function testClearance() {
+      const msg = document.getElementById("test-msg");
+      msg.textContent = "Testing\u2026"; msg.classList.add("show");
+      try {
+        const res = await fetch(location.href, { method: "GET", cache: "no-store" });
+        const mit = res.headers.get("cf-mitigated");
+        if (res.status === 200 && !mit) {
+          msg.textContent = "\u2713 Cleared \u2014 request served (200, no challenge).";
+        } else if (mit) {
+          msg.textContent = "\u26a0 cf-mitigated: " + mit + " \u2014 you would be re-challenged.";
+        } else {
+          msg.textContent = "HTTP " + res.status + " " + res.statusText;
+        }
+      } catch (e) {
+        msg.textContent = "Error: " + e.message;
+      }
+      setTimeout(() => msg.classList.remove("show"), 6000);
+    }
+
+    function run() { loadTrace(); loadHeaders(); loadCookies(); }
+
+    document.getElementById("btn-refresh").addEventListener("click", run);
+    document.getElementById("btn-test").addEventListener("click", testClearance);
+    run();
+  </script>
 </body>
 </html>
