@@ -1,0 +1,17 @@
+name = "mtls-inspector"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# Serve the inspector under the mTLS-enabled hostname. The Worker renders the
+# page for whatever path the route sends it, so you can place it wherever you
+# like. Default: mtls.pimenta.fun/cert-info (leaves the host root untouched).
+routes = [
+  { pattern = "mtls.pimenta.fun/cert-info*", zone_name = "pimenta.fun" }
+
+  # Alternatively make the whole hostname the inspector:
+  # { pattern = "mtls.pimenta.fun/*", zone_name = "pimenta.fun" }
+]
+
+# Optional workers.dev preview URL while testing (note: client-cert fields are
+# only populated on the mTLS-associated custom hostname, not on *.workers.dev).
+workers_dev = true
