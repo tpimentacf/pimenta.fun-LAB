@@ -6,7 +6,7 @@ compatibility_date = "2025-06-01"
 # page for whatever path the route sends it, so you can place it wherever you
 # like. Default: mtls.pimenta.fun/cert-info (leaves the host root untouched).
 routes = [
-  { pattern = "mtls.pimenta.fun/cert-info*", zone_name = "pimenta.fun" }
+  { pattern = "mtls.pimenta.fun/*", zone_name = "pimenta.fun" }
 
   # Alternatively make the whole hostname the inspector:
   # { pattern = "mtls.pimenta.fun/*", zone_name = "pimenta.fun" }
