@@ -82,15 +82,7 @@
     <!-- ================= LEG 1 ================= -->
     <h2 id="leg1">Part 1 &mdash; Client &rarr; Cloudflare (client certificate auth)</h2>
     <p>Cloudflare challenges the client for a certificate during the TLS handshake and verifies it against a CA you register (API Shield &rarr; mTLS).</p>
-    <p><a class="btn ghost" href="https://mtls.pimenta.fun/">&#128272; Live mTLS test / cert inspector &rarr;</a></p>
-
-    <div class="warn">
-      <strong>&#9888; Turn off WARP / Cloudflare One (Zero Trust) before testing Leg&nbsp;1.</strong>
-      The WARP client TLS-terminates your traffic at a Zero Trust gateway, so your client certificate never reaches
-      Cloudflare's public edge &mdash; the handshake is intercepted and mTLS verification fails (you get blocked
-      <em>even with a valid cert</em>). Disconnect WARP (or test from a device/network without it) so
-      <code class="inline">curl</code> and the browser handshake directly with the real edge.
-    </div>
+    <p><a class="btn ghost" href="https://mtls.pimenta.fun/">&#9889; Live mTLS test page &rarr;</a></p>
 
     <div class="step">
       <div class="num">1</div>
@@ -162,6 +154,14 @@ curl -i --cert client.crt --key client.key https://mtls.pimenta.fun/</pre>
           certificate</strong>, TLS session and edge details (append <code class="inline">?format=json</code> for JSON);
           without a cert Cloudflare returns <code class="inline">403</code>.</div>
       </div>
+    </div>
+
+    <div class="warn">
+      <strong>&#9888; Remember: turn off WARP / Cloudflare One (Zero Trust) before testing Leg&nbsp;1.</strong>
+      The WARP client TLS-terminates your traffic at a Zero Trust gateway, so your client certificate never reaches
+      Cloudflare's public edge &mdash; the handshake is intercepted and mTLS verification fails (you get blocked
+      <em>even with a valid cert</em>). Disconnect WARP (or test from a device/network without it) so
+      <code class="inline">curl</code> and the browser handshake directly with the real edge.
     </div>
 
     <!-- ================= LEG 2 ================= -->
