@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Backend API Service Guide &mdash; Pimenta Lab</title>
+  <meta name="description" content="How the api.pimenta.fun backend works (Cloudflare -> Apache reverse proxy -> Node/Express -> SQLite) and a step-by-step guide to deploy it as an always-on systemd service." />
+  <link rel="stylesheet" href="/assets/docs.css" />
+  <style>
+    /* diagram-only styling (self-contained; no shell overrides) */
+    figure.diagram { margin: 18px 0; }
+    figure.diagram svg { width: 100%; height: auto; display: block;
+      background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+    figure.diagram figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; text-align: center; }
+    .svg-box { fill: var(--panel-2); stroke: var(--border); }
+    .svg-box.accent { stroke: var(--accent); }
+    .svg-box.green  { stroke: var(--green); }
+    .svg-box.blue   { stroke: var(--blue); }
+    .svg-t  { fill: var(--text); font: 700 14px var(--sans); }
+    .svg-s  { fill: var(--muted); font: 12px var(--mono); }
+    .svg-l  { fill: var(--muted); font: 12px var(--sans); }
+    .svg-la { fill: var(--accent); font: 600 12px var(--mono); }
+    .svg-line { stroke: var(--border); stroke-width: 1.5; }
+    .svg-flow { stroke: #9aa4b2; stroke-width: 1.6; fill: none; }
+    .svg-ret  { stroke: var(--green); stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#docs">&larr; Docs</a>
+      <a class="home" href="https://api.pimenta.fun">&rarr; API console</a>
+      <h2>Contents</h2>
+      <a href="#architecture">1. Architecture</a>
+      <a href="#routing">2. Request routing</a>
+      <a href="#auth">3. JWT auth flow</a>
+      <a href="#endpoints">4. Endpoints</a>
+      <a href="#files">5. Repo layout</a>
+      <a href="#install">6. Deploy step-by-step</a>
+      <a href="#apache">7. Apache reverse proxy</a>
+      <a href="#autorestart">8. Always-on (systemd)</a>
+      <a href="#cors">9. CORS &amp; port note</a>
+      <a href="#ops">10. Operations</a>
+      <a href="#troubleshoot">11. Troubleshooting</a>
+    </nav>
+
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#docs">Docs</a> / Backend API service</div>
+        <span class="pill">Guide</span>
+        <h1>The <span class="grad">api.pimenta.fun</span> backend service</h1>
+        <p class="lead">A long-running REST API (Express + SQLite) that powers the shop and the API console. This guide
+          explains how the request path works end-to-end and walks through deploying it as an always-on, auto-restarting
+          systemd service behind Apache.</p>
+      </header>
+
+      <!-- ============================================================= -->
+      <h2 id="architecture">1. Architecture</h2>
+      <p>The public hostname <code class="inline">api.pimenta.fun</code> is fronted by Cloudflare and served by Apache on
+        the origin. Apache does two jobs: it serves the <strong>static API console</strong> at <code class="inline">/</code>,
+        and it <strong>reverse-proxies</strong> the API paths to a Node/Express service bound to
+        <code class="inline">127.0.0.1:3000</code>, which reads and writes a file-based SQLite database.</p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 820 250" role="img" aria-label="Request path from browser through Cloudflare and Apache to the Node backend and SQLite">
+          <defs>
+            <marker id="ah" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"></path>
+            </marker>
+          </defs>
+          <!-- boxes -->
+          <g>
+            <rect class="svg-box accent" x="10"  y="70" width="150" height="72" rx="10"></rect>
+            <text class="svg-t" x="85"  y="100" text-anchor="middle">Client</text>
+            <text class="svg-s" x="85"  y="120" text-anchor="middle">browser / console</text>
+
+            <rect class="svg-box" x="180" y="70" width="150" height="72" rx="10"></rect>
+            <text class="svg-t" x="255" y="100" text-anchor="middle">Cloudflare</text>
+            <text class="svg-s" x="255" y="120" text-anchor="middle">TLS &middot; WAF &middot; cache</text>
+
+            <rect class="svg-box blue" x="350" y="70" width="150" height="72" rx="10"></rect>
+            <text class="svg-t" x="425" y="96"  text-anchor="middle">Apache :443</text>
+            <text class="svg-s" x="425" y="114" text-anchor="middle">static + proxy</text>
+            <text class="svg-s" x="425" y="130" text-anchor="middle">api.pimenta.fun</text>
+
+            <rect class="svg-box green" x="520" y="70" width="150" height="72" rx="10"></rect>
+            <text class="svg-t" x="595" y="100" text-anchor="middle">Node / Express</text>
+            <text class="svg-s" x="595" y="120" text-anchor="middle">127.0.0.1:3000</text>
+
+            <rect class="svg-box" x="690" y="70" width="120" height="72" rx="10"></rect>
+            <text class="svg-t" x="750" y="100" text-anchor="middle">SQLite</text>
+            <text class="svg-s" x="750" y="120" text-anchor="middle">pimenta.db</text>
+          </g>
+          <!-- arrows -->
+          <line class="svg-flow" x1="160" y1="106" x2="178" y2="106" marker-end="url(#ah)"></line>
+          <line class="svg-flow" x1="330" y1="106" x2="348" y2="106" marker-end="url(#ah)"></line>
+          <line class="svg-flow" x1="500" y1="106" x2="518" y2="106" marker-end="url(#ah)"></line>
+          <line class="svg-flow" x1="670" y1="106" x2="688" y2="106" marker-end="url(#ah)"></line>
+          <!-- annotations -->
+          <text class="svg-la" x="255" y="60"  text-anchor="middle">HTTPS</text>
+          <text class="svg-la" x="595" y="60"  text-anchor="middle">HTTP (loopback)</text>
+          <text class="svg-la" x="750" y="60"  text-anchor="middle">file I/O</text>
+          <text class="svg-l"  x="425" y="180" text-anchor="middle">DocumentRoot serves the console at "/"; ProxyPass forwards /rest, /api, /health</text>
+        </svg>
+        <figcaption>End-to-end request path for <code class="inline">api.pimenta.fun</code>.</figcaption>
+      </figure>
+
+      <div class="cards">
+        <div class="card"><div class="n">EDGE</div><h3>Cloudflare</h3><p>Terminates TLS, applies WAF/bot rules and caching, then forwards to the origin.</p></div>
+        <div class="card"><div class="n">ORIGIN</div><h3>Apache</h3><p>Serves the static console and reverse-proxies API paths to the local Node service.</p></div>
+        <div class="card"><div class="n">APP</div><h3>Node / Express</h3><p>Implements the REST routes, JWT auth and business logic. Never exposed directly.</p></div>
+        <div class="card"><div class="n">DATA</div><h3>SQLite (WAL)</h3><p>File-based DB at <code class="inline">/var/lib/pimenta-api/pimenta.db</code>; persists across reboots.</p></div>
+      </div>
+
+      <!-- ============================================================= -->
+      <h2 id="routing">2. Request routing</h2>
+      <p>Apache decides <em>per path</em> whether to answer from disk or hand off to the backend. This split is the whole
+        trick &mdash; and the usual failure point (see <a href="#troubleshoot">Troubleshooting</a>).</p>
+
+      <div class="flow">
+        <div class="flow-row">
+          <div class="box accent"><div class="t">GET /</div><div class="s">&rarr; DocumentRoot <code class="inline">/var/www/pimenta/api</code> &mdash; static console (index.html)</div></div>
+        </div>
+        <div class="flow-row">
+          <div class="box green"><div class="t">/rest/* &nbsp; /api/* &nbsp; /health</div><div class="s">&rarr; ProxyPass to <code class="inline">http://127.0.0.1:3000</code> &mdash; the Node backend</div></div>
+        </div>
+      </div>
+
+      <div class="note"><b>Why this matters</b>
+        If the <code class="inline">ProxyPass</code> rules are not active, Apache tries to serve <code class="inline">/rest/&hellip;</code>
+        from disk, finds no file, and returns its own <code class="inline">404</code> (an ISO-8859-1 HTML page that says
+        <em>Apache/2.4 &hellip; Server at api.pimenta.fun</em>). That is the signature of a broken proxy &mdash; not a backend crash.</div>
+
+      <!-- ============================================================= -->
+      <h2 id="auth">3. JWT auth flow</h2>
+      <p>Passwords are bcrypt-hashed; a successful login returns a signed JWT shaped like OWASP Juice Shop's response, so
+        the console auto-captures the token and replays it as <code class="inline">Authorization: Bearer &lt;token&gt;</code>
+        on protected routes.</p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 720 250" role="img" aria-label="JWT authentication sequence between client and API">
+          <defs>
+            <marker id="ah2" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"></path>
+            </marker>
+            <marker id="ah2g" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L7,3 L0,6 Z" fill="#3fb950"></path>
+            </marker>
+          </defs>
+          <!-- actors -->
+          <rect class="svg-box accent" x="40"  y="20" width="150" height="44" rx="10"></rect>
+          <text class="svg-t" x="115" y="47" text-anchor="middle">Client</text>
+          <rect class="svg-box green"  x="530" y="20" width="150" height="44" rx="10"></rect>
+          <text class="svg-t" x="605" y="47" text-anchor="middle">API (Express)</text>
+          <!-- lifelines -->
+          <line class="svg-line" x1="115" y1="64" x2="115" y2="240" stroke-dasharray="4 4"></line>
+          <line class="svg-line" x1="605" y1="64" x2="605" y2="240" stroke-dasharray="4 4"></line>
+          <!-- exchanges -->
+          <text class="svg-s" x="120" y="98"  text-anchor="start">POST /rest/user/login  { email, password }</text>
+          <line class="svg-flow" x1="115" y1="106" x2="603" y2="106" marker-end="url(#ah2)"></line>
+
+          <text class="svg-s" x="600" y="138" text-anchor="end">200  { authentication: { token } }</text>
+          <line class="svg-ret" x1="605" y1="146" x2="117" y2="146" marker-end="url(#ah2g)"></line>
+
+          <text class="svg-s" x="120" y="186" text-anchor="start">GET /rest/user/whoami   Authorization: Bearer &lt;token&gt;</text>
+          <line class="svg-flow" x1="115" y1="194" x2="603" y2="194" marker-end="url(#ah2)"></line>
+
+          <text class="svg-s" x="600" y="226" text-anchor="end">200  { user: { id, email } }  (verified JWT)</text>
+          <line class="svg-ret" x1="605" y1="234" x2="117" y2="234" marker-end="url(#ah2g)"></line>
+        </svg>
+        <figcaption>Login issues a JWT; the token authorises subsequent protected requests.</figcaption>
+      </figure>
+
+      <pre><span class="cmt"># 1) Login and capture the token</span>
+TOKEN=$(curl -s https://api.pimenta.fun/rest/user/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@juice-sh.op","password":"admin123"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["authentication"]["token"])')
+
+<span class="cmt"># 2) Call a protected route with it</span>
+curl -s https://api.pimenta.fun/rest/user/whoami -H "Authorization: Bearer $TOKEN"</pre>
+
+      <!-- ============================================================= -->
+      <h2 id="endpoints">4. Endpoints</h2>
+      <p>All routes are served under <code class="inline">https://api.pimenta.fun</code>. Auth column: <span class="tag2 have">JWT</span> requires a bearer token, <span class="tag2 opt">public</span> does not.</p>
+      <table class="ref">
+        <thead><tr><th style="width:70px;">Method</th><th>Endpoint</th><th style="width:70px;">Auth</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>GET</td><td>/health</td><td><span class="tag2 opt">public</span></td><td class="d">Status, uptime, row counts (used by monitoring).</td></tr>
+          <tr><td>POST</td><td>/api/Users</td><td><span class="tag2 opt">public</span></td><td class="d">Register a new user.</td></tr>
+          <tr><td>POST</td><td>/rest/user/login</td><td><span class="tag2 opt">public</span></td><td class="d">Authenticate &rarr; <code class="inline">{ authentication: { token } }</code>.</td></tr>
+          <tr><td>GET</td><td>/rest/user/whoami</td><td><span class="tag2 have">JWT</span></td><td class="d">Current session identity.</td></tr>
+          <tr><td>GET</td><td>/api/Users/:id</td><td><span class="tag2 have">JWT</span></td><td class="d">User details (IDOR demo).</td></tr>
+          <tr><td>GET</td><td>/api/Products</td><td><span class="tag2 opt">public</span></td><td class="d">List all products.</td></tr>
+          <tr><td>GET</td><td>/api/Products/:id</td><td><span class="tag2 opt">public</span></td><td class="d">Single product.</td></tr>
+          <tr><td>PUT</td><td>/api/Products/:id</td><td><span class="tag2 have">JWT</span></td><td class="d">Update a product.</td></tr>
+          <tr><td>GET</td><td>/rest/products/search?q=</td><td><span class="tag2 opt">public</span></td><td class="d">Search products.</td></tr>
+          <tr><td>POST</td><td>/api/BasketItems</td><td><span class="tag2 have">JWT</span></td><td class="d">Add an item to the cart.</td></tr>
+          <tr><td>GET</td><td>/rest/basket/:id</td><td><span class="tag2 have">JWT</span></td><td class="d">View cart + computed total.</td></tr>
+          <tr><td>POST</td><td>/rest/basket/:id/checkout</td><td><span class="tag2 have">JWT</span></td><td class="d">Place order, clear cart.</td></tr>
+          <tr><td>GET</td><td>/api/Orders</td><td><span class="tag2 have">JWT</span></td><td class="d">Current user's order history.</td></tr>
+          <tr><td>GET</td><td>/api/Feedbacks</td><td><span class="tag2 opt">public</span></td><td class="d">List feedback.</td></tr>
+          <tr><td>POST</td><td>/api/Feedbacks</td><td><span class="tag2 opt">optional</span></td><td class="d">Submit feedback.</td></tr>
+          <tr><td>GET</td><td>/rest/admin/application-version</td><td><span class="tag2 opt">public</span></td><td class="d">App version string.</td></tr>
+        </tbody>
+      </table>
+
+      <!-- ============================================================= -->
+      <h2 id="files">5. Repo layout</h2>
+      <p>Everything the service needs lives in <code class="inline">backend/</code>:</p>
+      <div class="filetree">backend/
+├── server.js                 <span class="c"># Express app + all routes</span>
+├── db.js                     <span class="c"># SQLite schema + seed (products, admin user)</span>
+├── package.json
+├── pimenta-api.service       <span class="c"># systemd unit (Restart=always, start on boot)</span>
+└── pimenta-api.env.example   <span class="c"># config template (port, JWT secret, DB path)</span></div>
+
+      <!-- ============================================================= -->
+      <h2 id="install">6. Deploy step-by-step</h2>
+      <p>Run these on the origin server, from the repo's <code class="inline">backend/</code> directory. This is the exact
+        sequence that turns a fresh box into a running API.</p>
+
+      <ol class="steps">
+        <li>
+          <h3>Install Node.js 20 + build tools</h3>
+          <p><code class="inline">better-sqlite3</code> compiles a native module, so build tools are required.</p>
+          <pre>curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs build-essential python3</pre>
+        </li>
+        <li>
+          <h3>Create the service user &amp; app directory</h3>
+          <pre>sudo useradd --system --home /opt/pimenta-api --shell /usr/sbin/nologin pimenta || true
+sudo mkdir -p /opt/pimenta-api
+sudo cp -r server.js db.js package.json /opt/pimenta-api/
+sudo npm --prefix /opt/pimenta-api install --omit=dev
+sudo chown -R pimenta:pimenta /opt/pimenta-api</pre>
+        </li>
+        <li>
+          <h3>Create the persistent database directory</h3>
+          <pre>sudo mkdir -p /var/lib/pimenta-api
+sudo chown pimenta:pimenta /var/lib/pimenta-api</pre>
+        </li>
+        <li>
+          <h3>Write the config (env file)</h3>
+          <p>Generate a strong JWT secret and set the admin password before going public.</p>
+          <pre>sudo mkdir -p /etc/pimenta-api
+sudo cp pimenta-api.env.example /etc/pimenta-api/pimenta-api.env
+sudo sed -i "s|replace-with-openssl-rand-hex-32|$(openssl rand -hex 32)|" /etc/pimenta-api/pimenta-api.env
+sudo nano /etc/pimenta-api/pimenta-api.env      <span class="cmt"># set ADMIN_PASSWORD, CORS_ORIGINS</span>
+sudo chmod 600 /etc/pimenta-api/pimenta-api.env</pre>
+        </li>
+        <li>
+          <h3>Install &amp; start the systemd unit</h3>
+          <p>This is the step whose absence produces <code class="inline">Unit pimenta-api.service could not be found</code>.</p>
+          <pre>sudo cp pimenta-api.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now pimenta-api          <span class="cmt"># enable = start on boot</span>
+sudo systemctl status pimenta-api                <span class="cmt"># -&gt; active (running)</span></pre>
+        </li>
+        <li>
+          <h3>Verify it's alive</h3>
+          <pre>curl -s http://127.0.0.1:3000/health            <span class="cmt"># -&gt; {"status":"ok",...}</span>
+curl -s https://api.pimenta.fun/health          <span class="cmt"># same JSON = proxy + backend OK</span>
+tools/smoke-test.sh https://api.pimenta.fun     <span class="cmt"># asserts every route (exit 0 = all pass)</span></pre>
+        </li>
+      </ol>
+
+      <div class="tip"><b>Config reference</b>
+        <code class="inline">HOST=127.0.0.1</code>, <code class="inline">PORT=3000</code>,
+        <code class="inline">JWT_SECRET</code>, <code class="inline">JWT_TTL=2h</code>,
+        <code class="inline">DB_PATH=/var/lib/pimenta-api/pimenta.db</code>,
+        <code class="inline">ADMIN_EMAIL</code>/<code class="inline">ADMIN_PASSWORD</code> (seed admin, created only if the users table is empty),
+        <code class="inline">CORS_ORIGINS</code>.</div>
+
+      <!-- ============================================================= -->
+      <h2 id="apache">7. Apache reverse proxy</h2>
+      <p>The <code class="inline">api.pimenta.fun</code> vhost keeps the console at <code class="inline">/</code> and forwards the
+        API paths to the backend. Enable the proxy modules and load the vhost:</p>
+      <pre>sudo a2enmod ssl headers rewrite proxy proxy_http socache_shmcb
+sudo cp apache/api.pimenta.fun.conf /etc/apache2/sites-available/
+sudo a2ensite api.pimenta.fun.conf
+sudo apache2ctl configtest &amp;&amp; sudo systemctl reload apache2</pre>
+      <p>The relevant directives inside the <code class="inline">:443</code> vhost:</p>
+      <pre>DocumentRoot /var/www/pimenta/api          <span class="cmt"># static console at "/"</span>
+
+ProxyPreserveHost On
+ProxyRequests Off
+ProxyPass        /rest/   http://127.0.0.1:3000/rest/
+ProxyPassReverse /rest/   http://127.0.0.1:3000/rest/
+ProxyPass        /api/    http://127.0.0.1:3000/api/
+ProxyPassReverse /api/    http://127.0.0.1:3000/api/
+ProxyPass        /health  http://127.0.0.1:3000/health
+ProxyPassReverse /health  http://127.0.0.1:3000/health</pre>
+      <div class="note"><b>One command for everything</b>
+        <code class="inline">apache/enable-sites.sh</code> enables the modules, installs all four vhosts, runs
+        <code class="inline">configtest</code> and reloads &mdash; use it instead of the manual steps above.</div>
+
+      <!-- ============================================================= -->
+      <h2 id="autorestart">8. Always-on (systemd)</h2>
+      <p>The unit guarantees the API keeps running across crashes and reboots.</p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 760 150" role="img" aria-label="systemd supervision loop">
+          <defs>
+            <marker id="ah3" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"></path>
+            </marker>
+          </defs>
+          <rect class="svg-box green"  x="20"  y="45" width="180" height="60" rx="10"></rect>
+          <text class="svg-t" x="110" y="72" text-anchor="middle">node server.js</text>
+          <text class="svg-s" x="110" y="92" text-anchor="middle">active (running)</text>
+
+          <rect class="svg-box"       x="290" y="45" width="180" height="60" rx="10" stroke="#f85149"></rect>
+          <text class="svg-t" x="380" y="72" text-anchor="middle">exit / crash</text>
+          <text class="svg-s" x="380" y="92" text-anchor="middle">OOM &middot; error &middot; reboot</text>
+
+          <rect class="svg-box accent" x="560" y="45" width="180" height="60" rx="10"></rect>
+          <text class="svg-t" x="650" y="72" text-anchor="middle">systemd</text>
+          <text class="svg-s" x="650" y="92" text-anchor="middle">Restart=always, 3s</text>
+
+          <line class="svg-flow" x1="200" y1="75" x2="288" y2="75" marker-end="url(#ah3)"></line>
+          <line class="svg-flow" x1="470" y1="75" x2="558" y2="75" marker-end="url(#ah3)"></line>
+          <path class="svg-flow" d="M650,105 L650,130 L110,130 L110,107" marker-end="url(#ah3)"></path>
+          <text class="svg-la" x="380" y="126" text-anchor="middle">relaunch</text>
+        </svg>
+        <figcaption>Crash &rarr; systemd relaunches after 3s; enabled unit also starts on every boot.</figcaption>
+      </figure>
+
+      <ul class="check">
+        <li><b>Restart=always + RestartSec=3</b> &mdash; if node exits for any reason, systemd relaunches it after 3 seconds.</li>
+        <li><b>StartLimitIntervalSec=0</b> &mdash; systemd never gives up restarting.</li>
+        <li><b>WantedBy=multi-user.target + enable</b> &mdash; starts automatically on every boot/reboot.</li>
+        <li><b>StateDirectory=pimenta-api</b> &mdash; <code class="inline">/var/lib/pimenta-api</code> persists, so the DB survives restarts.</li>
+      </ul>
+      <pre><span class="cmt"># Prove it: kill it and watch systemd bring it back</span>
+sudo systemctl kill -s SIGKILL pimenta-api
+sleep 4 &amp;&amp; systemctl status pimenta-api          <span class="cmt"># active (running) again</span></pre>
+
+      <!-- ============================================================= -->
+      <h2 id="cors">9. CORS &amp; port note</h2>
+      <div class="warn"><b>Port 3000 conflict</b>
+        This API and OWASP Juice Shop both default to <code class="inline">3000</code> &mdash; run only one on that port.
+        To run both, set <code class="inline">PORT=3001</code> in the env file and point a separate vhost at it.</div>
+      <p>The shop/www pages call this API cross-origin, so their domains must be allowed via
+        <code class="inline">CORS_ORIGINS</code> (default
+        <code class="inline">https://www.pimenta.fun,https://shop.pimenta.fun,https://api.pimenta.fun</code>). Requests with
+        no <code class="inline">Origin</code> header (curl, server-to-server) are always allowed. Add
+        <code class="inline">http://localhost:8080</code> when testing a frontend locally.</p>
+
+      <!-- ============================================================= -->
+      <h2 id="ops">10. Operations</h2>
+      <pre>sudo systemctl restart pimenta-api      <span class="cmt"># manual restart</span>
+sudo systemctl stop pimenta-api         <span class="cmt"># stop</span>
+sudo systemctl disable pimenta-api      <span class="cmt"># don't start on boot</span>
+journalctl -u pimenta-api -f            <span class="cmt"># live logs</span>
+
+<span class="cmt"># Re-seed / inspect the database</span>
+sudo -u pimenta DB_PATH=/var/lib/pimenta-api/pimenta.db node /opt/pimenta-api/db.js --seed
+sudo -u pimenta sqlite3 /var/lib/pimenta-api/pimenta.db ".tables"
+
+<span class="cmt"># Backup</span>
+sudo cp /var/lib/pimenta-api/pimenta.db ~/pimenta-backup-$(date +%F).db</pre>
+
+      <!-- ============================================================= -->
+      <h2 id="troubleshoot">11. Troubleshooting</h2>
+      <table class="ref">
+        <thead><tr><th style="width:34%;">Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>API paths return an <b>Apache HTML 404</b> (<code class="inline">charset=iso-8859-1</code>, "Server at api.pimenta.fun")</td>
+            <td class="d">Reverse proxy not active &mdash; Apache is serving <code class="inline">/rest</code> from disk.</td>
+            <td class="d">Enable <code class="inline">proxy</code>/<code class="inline">proxy_http</code>, (re)deploy the vhost, reload Apache. See <a href="#apache">&sect;7</a>.</td>
+          </tr>
+          <tr>
+            <td><code class="inline">Unit pimenta-api.service could not be found</code></td>
+            <td class="d">The backend was never installed as a service.</td>
+            <td class="d">Run the <a href="#install">deploy steps</a> &mdash; specifically step&nbsp;5.</td>
+          </tr>
+          <tr>
+            <td><b>502 / 503</b> Bad Gateway from the API paths</td>
+            <td class="d">Proxy is active but the backend is down or not listening on 3000.</td>
+            <td class="d"><code class="inline">systemctl status pimenta-api</code>; <code class="inline">curl 127.0.0.1:3000/health</code>; check <code class="inline">journalctl -u pimenta-api -e</code>.</td>
+          </tr>
+          <tr>
+            <td>Service <b>crash-loops</b> right after start</td>
+            <td class="d">Bad env file path/permissions, unwritable DB dir, or the native <code class="inline">better-sqlite3</code> build failed.</td>
+            <td class="d">Confirm <code class="inline">/etc/pimenta-api/pimenta-api.env</code> (chmod 600), owner of <code class="inline">/var/lib/pimenta-api</code>, and that <code class="inline">build-essential python3</code> are installed.</td>
+          </tr>
+          <tr>
+            <td>Browser calls blocked by <b>CORS</b></td>
+            <td class="d">The calling origin isn't in <code class="inline">CORS_ORIGINS</code>.</td>
+            <td class="d">Add the origin to the env file and restart the service.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p style="margin-top:24px"><a class="btn" href="https://api.pimenta.fun">Open the API console &rarr;</a></p>
+
+      <section class="disclaimer"><div class="box">
+        <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
+        Please consult the official documentation for the most accurate and up-to-date information.
+        We are not responsible for any issues, damages, or data loss that may occur from using this information.
+        <span class="risk">USE AT YOUR OWN RISK.</span>
+      </div></section>
+    </main>
+  </div>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;
+    <a href="https://www.pimenta.fun/#docs">Back to docs</a>
+  </footer>
+</body>
+</html>
