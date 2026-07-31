@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Edge cache &mdash; 24 hours &mdash; Pimenta Lab</title>
+  <meta name="description" content="Cache lab: this path is cached at the Cloudflare edge for 24 hours (86400s). Read the live cache headers." />
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .panel h2 { margin-top: 0; font-size: 1.1rem; }
+    .statebox { display:flex; align-items:center; gap:14px; background: var(--panel2); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+    .badge { font-weight:700; padding:4px 12px; border-radius:999px; font-size:0.9rem; }
+    .badge.hit  { background:rgba(54,211,153,0.16); color:#6ee7b7; border:1px solid rgba(54,211,153,0.45); }
+    .badge.miss { background:rgba(246,130,31,0.16); color:#f6a85f; border:1px solid rgba(246,130,31,0.45); }
+    .badge.dyn  { background:rgba(255,107,107,0.16); color:#ffb0b0; border:1px solid rgba(255,107,107,0.45); }
+    .statebox .d { color:var(--muted); font-size:0.85rem; }
+    .muted-small { color: var(--muted); font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Cache / Edge cache &mdash; 24 hours</div>
+    <span class="tag">Cache</span>
+    <h1>Edge cache &mdash; <span class="grad">24 hours</span></h1>
+    <p class="lead">This path is configured to be cached at the Cloudflare <strong>edge for 86&#8239;400&nbsp;seconds</strong>
+      (24&nbsp;hours). Within that window every visitor is served the cached copy without hitting the origin.</p>
+
+    <!-- ── LIVE STATUS ── -->
+    <div class="panel">
+      <h2>Live cache status</h2>
+      <div class="statebox">
+        <span class="badge dyn" id="badge">&hellip;</span>
+        <div>
+          <div class="t" id="state-title">Checking&hellip;</div>
+          <div class="d" id="state-desc"></div>
+        </div>
+      </div>
+      <button class="btn" id="go" style="margin-top:14px;">&#8635; Check cache headers</button>
+      <h2 style="margin-top:22px;">Cache headers</h2>
+      <pre id="hdr">&hellip;</pre>
+      <div class="note">Reload a few times: the first request is <code class="inline">MISS</code>, then
+        <code class="inline">HIT</code> with <code class="inline">age</code> climbing (in seconds) toward 86&#8239;400.
+        After ~24&nbsp;h the edge revalidates and <code class="inline">age</code> resets.</div>
+    </div>
+
+    <!-- ── HOW IT WORKS ── -->
+    <div class="panel">
+      <h2>How the 24-hour TTL is set</h2>
+      <p>The origin (Apache) sends a Cloudflare-specific edge-TTL header on this path, and a Cache Rule makes the HTML
+        eligible for caching:</p>
+      <pre># Apache (apache/pimenta-cache-headers.conf)
+&lt;Location "/cache/edge-24h/"&gt;
+    Header set Cloudflare-CDN-Cache-Control "max-age=86400"  # edge TTL = 24 h
+    Header set Cache-Control "public, max-age=0, must-revalidate"  # browser always revalidates
+&lt;/Location&gt;</pre>
+      <pre># Cloudflare dashboard: Caching -> Cache Rules
+When incoming requests match:  URI Path starts with  /cache/edge-24h/
+Then:  Eligible for cache = Cache eligible (Cache everything)
+       Edge TTL = Use cache-control header if present</pre>
+      <ul class="bullets">
+        <li><code class="inline">Cloudflare-CDN-Cache-Control</code> sets the <strong>edge</strong> TTL only &mdash; the browser TTL comes from <code class="inline">Cache-Control</code>.</li>
+        <li>HTML is not cached by default; the Cache Rule ("Cache everything") makes this page cacheable.</li>
+        <li>Compare with the <a href="https://www.pimenta.fun/cache/edge-5min/" style="color:var(--accent);">5-minute</a> page.</li>
+      </ul>
+    </div>
+  </main>
+
+  <section class="disclaimer"><div class="box">
+    <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
+    Please consult the official documentation for the most accurate and up-to-date information.
+    We are not responsible for any issues, damages, or data loss that may occur from using this information.
+    <span class="risk">USE AT YOUR OWN RISK.</span>
+  </div></section>
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;<a href="https://www.pimenta.fun/#tests">Back to tests</a>
+  </footer>
+
+  <script>
+    var TTL = 86400;
+    function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    function fmt(sec){
+      if (isNaN(sec)) return '';
+      var h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+      return (h?h+'h ':'') + (m?m+'m ':'') + s + 's';
+    }
+    async function check(){
+      var out = document.getElementById('hdr'); out.textContent = 'Fetching\u2026';
+      var badge = document.getElementById('badge');
+      var title = document.getElementById('state-title');
+      var desc  = document.getElementById('state-desc');
+      try {
+        var res = await fetch(location.href, { cache: 'no-store' });
+        var keys = ['cf-cache-status','age','cache-control','cloudflare-cdn-cache-control','cdn-cache-control','last-modified','etag','cf-ray','date'];
+        var lines = [];
+        keys.forEach(function(k){ var v = res.headers.get(k); if (v) lines.push(k + ': ' + v); });
+        out.textContent = lines.length ? lines.join('\n') : '(no cache headers readable)';
+
+        var status = (res.headers.get('cf-cache-status') || '').toUpperCase();
+        var age = parseInt(res.headers.get('age') || '', 10);
+        badge.textContent = status || 'UNKNOWN';
+        if (status === 'HIT' || status === 'UPDATING' || status === 'STALE') {
+          badge.className = 'badge hit';
+          title.textContent = 'Served from the Cloudflare edge cache';
+          desc.innerHTML = 'Edge TTL is 24\u00a0h (86400s).' + (isNaN(age) ? '' : ' This copy is <strong>' + fmt(age) + '</strong> old (\u2248 ' + fmt(Math.max(0, TTL - age)) + ' until revalidation).');
+        } else if (status === 'MISS' || status === 'EXPIRED' || status === 'REVALIDATED') {
+          badge.className = 'badge miss';
+          title.textContent = 'Fetched from origin, now cached';
+          desc.innerHTML = 'This request went to the origin and populated the edge cache. Re-check to see a <code class="inline">HIT</code>.';
+        } else {
+          badge.className = 'badge dyn';
+          title.textContent = 'Not cached (' + (status || 'DYNAMIC') + ')';
+          desc.innerHTML = 'The edge is not caching this path yet \u2014 add the Cache Rule ("Cache everything") described below.';
+        }
+      } catch (e) {
+        out.textContent = 'Error: ' + esc(e.message);
+        badge.className = 'badge dyn'; badge.textContent = 'ERROR';
+        title.textContent = 'Could not read headers'; desc.textContent = e.message;
+      }
+    }
+    document.getElementById('go').addEventListener('click', check);
+    check();
+  </script>
+</body>
+</html>
