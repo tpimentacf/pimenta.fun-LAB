@@ -23,7 +23,15 @@
     .dot.queued   { background:var(--accent); box-shadow:0 0 12px rgba(246,130,31,0.6); }
     .dot.none     { background:var(--muted); }
     .statebox .t { font-weight:700; } .statebox .d { color:var(--muted); font-size:0.85rem; }
+    .dot.enabled  { background:var(--blue); box-shadow:0 0 12px rgba(91,141,239,0.6); }
     .muted-small { color: var(--muted); font-size: 0.8rem; }
+    #wr-url { width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text);
+              border-radius:8px; padding:9px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:0.82rem; }
+    #wr-url:focus { outline:none; border-color:var(--accent); }
+    .wr-controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:14px; }
+    .wr-controls label { display:flex; align-items:center; gap:6px; margin:0; font-size:0.85rem; color:var(--muted); }
+    .wr-controls input[type=checkbox] { width:auto; accent-color:var(--accent); }
+    .kv td .lbl { color: var(--muted); }
   </style>
 </head>
 <body>
@@ -49,16 +57,32 @@
     <!-- ── STATUS ── -->
     <div class="panel">
       <h2>Your waiting-room status</h2>
-      <p class="sub">Detected from the <code class="inline">__cf_waitingroom</code> cookie (a signed JWT the edge issues
-        after admission). Client JS can see the cookie's presence, not decode it.</p>
-      <div class="statebox" id="statebox">
+      <p class="sub">Reads the <code class="inline">__cfwaitingroom_pimentafun</code> cookie (a signed JWT the edge issues
+        after admission) <em>and</em> actively probes the path &mdash; if the room's <strong>JSON response</strong> is
+        enabled, the live queue state is shown too. Client JS sees the cookie's presence, not its contents.</p>
+
+      <label for="wr-url">Path / URL to check</label>
+      <input id="wr-url" spellcheck="false" autocapitalize="off" />
+
+      <div class="statebox" id="statebox" style="margin-top:12px;">
         <span class="dot none" id="dot"></span>
         <div>
           <div class="t" id="state-title">Checking&hellip;</div>
           <div class="d" id="state-desc"></div>
         </div>
       </div>
-      <button class="btn" id="btn-recheck" style="margin-top:14px;">Re-check</button>
+
+      <table class="kv" id="wr-table" style="margin-top:14px; display:none;">
+        <thead><tr><th style="width:230px;">Waiting-room field</th><th>Value</th></tr></thead>
+        <tbody id="wr-fields"></tbody>
+      </table>
+
+      <div class="wr-controls">
+        <button class="btn" id="btn-recheck">Re-check now</button>
+        <button class="btn ghost" id="btn-trigger">Trigger queue (open path) &#8599;</button>
+        <label><input type="checkbox" id="auto" /> Auto re-check while queued</label>
+        <span class="muted-small" id="wr-meta"></span>
+      </div>
     </div>
 
     <!-- ── MECHANICS ── -->
@@ -115,25 +139,129 @@
   </footer>
 
   <script>
-    function hasCookie(name){
-      return document.cookie.split(";").some(c=>c.trim().startsWith(name+"="));
+    // The Cloudflare Waiting Room cookie for this zone. We also match any
+    // "__cfwaitingroom*" variant as a fallback.
+    const WR_COOKIE = "__cfwaitingroom_pimentafun";
+    const urlEl = document.getElementById("wr-url");
+    const metaEl = document.getElementById("wr-meta");
+    let timer = null;
+
+    urlEl.value = location.href;
+
+    function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+    // Returns the name of the waiting-room cookie if present (JS can only see
+    // presence — the value is an opaque, signed JWT), else null.
+    function waitingRoomCookie(){
+      const cs = document.cookie.split(";").map(c=>c.trim());
+      if (cs.some(c=>c.startsWith(WR_COOKIE+"="))) return WR_COOKIE;
+      const any = cs.find(c=>c.startsWith("__cfwaitingroom"));
+      return any ? any.split("=")[0] : null;
     }
-    function render(){
-      const dot=document.getElementById("dot");
-      const admitted = hasCookie("__cf_waitingroom");
-      if(admitted){
-        dot.className="dot admitted";
-        document.getElementById("state-title").textContent="Admitted";
-        document.getElementById("state-desc").innerHTML="A <code class=\"inline\">__cf_waitingroom</code> cookie is present \u2014 you've passed the queue and hold an active session.";
-      } else {
-        // We can't be on the waiting page itself (the edge serves that before our HTML),
-        // so absence means either no room is bound or you were let straight through.
-        dot.className="dot none";
-        document.getElementById("state-title").textContent="No active queue session";
-        document.getElementById("state-desc").innerHTML="No <code class=\"inline\">__cf_waitingroom</code> cookie. Either no waiting room is bound to this path, or you were admitted without queueing.";
+
+    function setState(cls, title, descHtml){
+      document.getElementById("dot").className = "dot " + cls;
+      document.getElementById("state-title").textContent = title;
+      document.getElementById("state-desc").innerHTML = descHtml;
+    }
+
+    // Probe the path with Accept: application/json. If the room is enabled AND
+    // JSON response mode is on, Cloudflare returns { cfWaitingRoom: {...} }.
+    async function probe(url){
+      try {
+        const res = await fetch(url, {
+          headers: { "Accept": "application/json" },
+          credentials: "include",
+          cache: "no-store",
+        });
+        let text = ""; try { text = await res.text(); } catch(_) {}
+        let wr = null;
+        try { const o = JSON.parse(text); if (o && o.cfWaitingRoom) wr = o.cfWaitingRoom; } catch(_) {}
+        return { ok:true, status:res.status, ray:res.headers.get("cf-ray") || "", wr };
+      } catch (e) {
+        return { ok:false, error:e.message };
       }
     }
+
+    const FIELDS = [
+      ["inWaitingRoom","currently queued"],
+      ["queueAll","queue-all forced on"],
+      ["queueIsFull","room at capacity"],
+      ["waitTimeKnown","estimate available"],
+      ["waitTime","estimated wait (min)"],
+      ["waitTimeFormatted","estimated wait"],
+      ["refreshIntervalSeconds","auto-refresh cadence (s)"],
+      ["queueingMethod","queueing method"],
+      ["lastUpdated","estimate timestamp"],
+    ];
+
+    function renderFields(wr){
+      const table = document.getElementById("wr-table");
+      const body  = document.getElementById("wr-fields");
+      if (!wr){ table.style.display = "none"; body.innerHTML = ""; return; }
+      const rows = FIELDS.filter(([k]) => k in wr).map(([k,label]) => {
+        let v = wr[k];
+        if (typeof v === "boolean") v = v ? "yes" : "no";
+        return "<tr><td>" + esc(k) + "</td><td><span class=\"val\">" + esc(v) +
+               "</span> <span class=\"lbl\">&mdash; " + esc(label) + "</span></td></tr>";
+      });
+      body.innerHTML = rows.join("");
+      table.style.display = rows.length ? "table" : "none";
+    }
+
+    async function render(){
+      if (timer){ clearTimeout(timer); timer = null; }
+      setState("none", "Checking\u2026", "Probing the path and reading cookies\u2026");
+      const url = urlEl.value.trim() || location.href;
+      const ck  = waitingRoomCookie();
+      const r   = await probe(url);
+      metaEl.textContent = r.ok
+        ? ("HTTP " + r.status + (r.ray ? "  \u00b7  cf-ray " + r.ray : ""))
+        : ("probe failed: " + r.error + " (cross-origin probes may be blocked by CORS)");
+      const wr = r.wr;
+      renderFields(wr);
+
+      let path = url;
+      try { path = new URL(url).pathname; } catch(_) {}
+
+      if (wr && wr.inWaitingRoom === true){
+        const wt = wr.waitTimeKnown
+          ? (" Estimated wait: " + esc(wr.waitTimeFormatted || (wr.waitTime + " min")) + ".")
+          : "";
+        setState("queued", "In the waiting room (queued)",
+          "The edge is holding you in the queue for <code class=\"inline\">" + esc(path) + "</code>." + wt +
+          (wr.queueAll ? " <strong>Queue-all</strong> is on." : "") +
+          (wr.queueIsFull ? " The room is at capacity." : ""));
+        if (document.getElementById("auto").checked){
+          const secs = Math.max(5, parseInt(wr.refreshIntervalSeconds, 10) || 20);
+          metaEl.textContent += "  \u00b7  auto re-check in " + secs + "s";
+          timer = setTimeout(render, secs * 1000);
+        }
+      } else if (wr){
+        setState("enabled", "Waiting room enabled \u2014 not queued",
+          "A waiting room is bound to <code class=\"inline\">" + esc(path) + "</code> and JSON mode is on, but you are " +
+          "<strong>not</strong> queued right now (admitted, or traffic is under the limits).");
+      } else if (ck){
+        setState("admitted", "Admitted",
+          "A <code class=\"inline\">" + esc(ck) + "</code> cookie is present \u2014 you've passed the queue and hold " +
+          "an active session.");
+      } else {
+        setState("none", "No active queue session",
+          "No <code class=\"inline\">__cfwaitingroom_pimentafun</code> cookie and no JSON queue state. Either no waiting " +
+          "room is bound to this path, JSON response is off, or you were admitted without queueing. Enable " +
+          "<strong>Queue-all</strong> (or lower the limits) and press <em>Trigger queue</em> to see it.");
+      }
+    }
+
     document.getElementById("btn-recheck").addEventListener("click", render);
+    document.getElementById("auto").addEventListener("change", render);
+    document.getElementById("btn-trigger").addEventListener("click", () => {
+      const u = urlEl.value.trim() || location.href;
+      // A real top-level navigation is what actually triggers the visible queue
+      // page (a background fetch cannot render it).
+      window.open(u, "_blank", "noopener");
+    });
+
     render();
   </script>
 </body>
