@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Load Balancer Guide &mdash; Pimenta Lab</title>
+  <meta name="description" content="How Cloudflare Load Balancing works: load balancers, pools, origins and monitors; steering methods (off/random/dynamic/geo/proximity), session affinity, health checks and failover, with diagrams and configuration steps." />
+  <link rel="stylesheet" href="/assets/docs.css" />
+  <style>
+    /* diagram-only styling (self-contained; no shell overrides) */
+    figure.diagram { margin: 18px 0; }
+    figure.diagram svg { width: 100%; height: auto; display: block;
+      background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+    figure.diagram figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; text-align: center; }
+    .svg-box   { fill: var(--panel-2); stroke: var(--border); }
+    .svg-box.eu   { stroke: var(--blue); }
+    .svg-box.us   { stroke: var(--green); }
+    .svg-box.lb   { stroke: var(--accent); }
+    .svg-box.down { stroke: var(--red); opacity: .55; }
+    .svg-t  { fill: var(--text); font: 700 14px var(--sans); }
+    .svg-s  { fill: var(--muted); font: 12px var(--mono); }
+    .svg-l  { fill: var(--muted); font: 12px var(--sans); }
+    .svg-la { fill: var(--accent); font: 600 12px var(--mono); }
+    .svg-flow { stroke: #9aa4b2; stroke-width: 1.6; fill: none; }
+    .svg-flow.eu { stroke: var(--blue); }
+    .svg-flow.us { stroke: var(--green); }
+    .svg-flow.down { stroke: var(--red); stroke-dasharray: 5 4; }
+    .svg-ok { fill: var(--green); font: 700 12px var(--sans); }
+    .svg-bad{ fill: var(--red);   font: 700 12px var(--sans); }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#docs">&larr; Docs</a>
+      <a class="home" href="https://www.pimenta.fun/load-balancer/geo-origin/">&rarr; EU/US live demo</a>
+      <h2>Contents</h2>
+      <a href="#anatomy">1. Anatomy</a>
+      <a href="#steering">2. Steering methods</a>
+      <a href="#affinity">3. Session affinity</a>
+      <a href="#health">4. Health &amp; failover</a>
+      <a href="#rules">5. Custom rules (header/geo)</a>
+      <a href="#configure">6. Configure it</a>
+      <a href="#demo">7. Live EU/US demo</a>
+      <a href="#notes">8. Notes &amp; gotchas</a>
+    </nav>
+
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#docs">Docs</a> / Load Balancer</div>
+        <span class="pill">Guide</span>
+        <h1>Cloudflare <span class="grad">Load Balancing</span></h1>
+        <p class="lead">Distribute traffic across multiple origins for higher availability and lower latency. Cloudflare
+          health-checks your servers, steers each visitor to the best pool, and fails over automatically when an origin
+          goes down &mdash; all at the edge, before traffic reaches your infrastructure.</p>
+      </header>
+
+      <!-- ============================================================= -->
+      <h2 id="anatomy">1. Anatomy</h2>
+      <p>A load balancer is built from four objects. Understanding how they nest is the key to configuring everything else.</p>
+
+      <div class="cards">
+        <div class="card"><div class="n">HOSTNAME</div><h3>Load Balancer</h3><p>A proxied hostname (e.g. <code class="inline">app.example.com</code>) that owns the steering policy, session affinity and the list of pools.</p></div>
+        <div class="card"><div class="n">GROUP</div><h3>Pool</h3><p>A group of origins in one region/provider, with a health monitor and per-origin weights. Marked healthy/unhealthy as a unit.</p></div>
+        <div class="card"><div class="n">SERVER</div><h3>Origin</h3><p>A single backend (IP or hostname) with an optional weight and its own health state.</p></div>
+        <div class="card"><div class="n">PROBE</div><h3>Monitor</h3><p>The recurring health check (HTTP/TCP/&hellip;) that decides whether each origin &mdash; and therefore the pool &mdash; is up.</p></div>
+      </div>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 820 320" role="img" aria-label="Load balancer routing to two pools, each with origins and a health monitor">
+          <defs>
+            <marker id="ah" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9aa4b2"></path></marker>
+          </defs>
+          <rect class="svg-box lb" x="330" y="20" width="160" height="60" rx="10"></rect>
+          <text class="svg-t" x="410" y="46" text-anchor="middle">Load Balancer</text>
+          <text class="svg-s" x="410" y="66" text-anchor="middle">app.example.com</text>
+
+          <!-- EU pool -->
+          <rect class="svg-box eu" x="70" y="140" width="280" height="150" rx="12"></rect>
+          <text class="svg-t" x="90"  y="166" text-anchor="start">EU-West pool</text>
+          <text class="svg-s" x="300" y="166" text-anchor="end">monitor: HTTP 200 /health</text>
+          <rect class="svg-box" x="92"  y="185" width="110" height="46" rx="8"></rect>
+          <text class="svg-s" x="147" y="205" text-anchor="middle">origin A</text>
+          <text class="svg-l" x="147" y="221" text-anchor="middle">weight 1</text>
+          <rect class="svg-box" x="218" y="185" width="110" height="46" rx="8"></rect>
+          <text class="svg-s" x="273" y="205" text-anchor="middle">origin B</text>
+          <text class="svg-l" x="273" y="221" text-anchor="middle">weight 1</text>
+          <text class="svg-ok" x="90" y="270" text-anchor="start">&#9679; healthy</text>
+
+          <!-- US pool -->
+          <rect class="svg-box us" x="470" y="140" width="280" height="150" rx="12"></rect>
+          <text class="svg-t" x="490" y="166" text-anchor="start">US-East pool</text>
+          <text class="svg-s" x="730" y="166" text-anchor="end">monitor: HTTP 200 /health</text>
+          <rect class="svg-box" x="492" y="185" width="110" height="46" rx="8"></rect>
+          <text class="svg-s" x="547" y="205" text-anchor="middle">origin C</text>
+          <text class="svg-l" x="547" y="221" text-anchor="middle">weight 1</text>
+          <rect class="svg-box" x="618" y="185" width="110" height="46" rx="8"></rect>
+          <text class="svg-s" x="673" y="205" text-anchor="middle">origin D</text>
+          <text class="svg-l" x="673" y="221" text-anchor="middle">weight 1</text>
+          <text class="svg-ok" x="490" y="270" text-anchor="start">&#9679; healthy</text>
+
+          <line class="svg-flow eu" x1="380" y1="80" x2="210" y2="138" marker-end="url(#ah)"></line>
+          <line class="svg-flow us" x1="440" y1="80" x2="610" y2="138" marker-end="url(#ah)"></line>
+        </svg>
+        <figcaption>One load balancer &rarr; many pools &rarr; many origins; a monitor gates each pool's health.</figcaption>
+      </figure>
+
+      <!-- ============================================================= -->
+      <h2 id="steering">2. Steering methods</h2>
+      <p>The steering policy decides <em>which pool</em> serves a request. Within the chosen pool, origins are then picked
+        by their weights / load metric.</p>
+      <table class="ref">
+        <thead><tr><th style="width:180px;">Method</th><th>How a pool is chosen</th><th>Use it for</th></tr></thead>
+        <tbody>
+          <tr><td>Off (failover)</td><td class="d">Pools are used strictly in the order you list them; move to the next only when the current one is unhealthy.</td><td class="d">Simple active/passive DR.</td></tr>
+          <tr><td>Random</td><td class="d">A healthy pool is chosen at random (weighted if you set pool weights).</td><td class="d">Even spread, no geo needs.</td></tr>
+          <tr><td>Dynamic</td><td class="d">Routes to the pool with the lowest round-trip time measured by monitors from each region.</td><td class="d">Latency-optimised, hands-off.</td></tr>
+          <tr><td>Proximity</td><td class="d">Routes to the geographically closest origin using its configured latitude/longitude.</td><td class="d">Physical-distance routing.</td></tr>
+          <tr><td>Geo</td><td class="d">You map regions/countries to specific pools; visitors in a region get that pool.</td><td class="d">Data residency, per-region backends (this lab's EU/US demo).</td></tr>
+          <tr><td>Least Outstanding Requests</td><td class="d">Weights adjust to favour pools/origins with the fewest in-flight requests.</td><td class="d">Uneven request cost.</td></tr>
+          <tr><td>Least Connections</td><td class="d">Routes to the pool/origin with the fewest open connections.</td><td class="d">Long-lived connections.</td></tr>
+        </tbody>
+      </table>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 820 260" role="img" aria-label="Geo steering: EU visitors go to the EU pool, US visitors to the US pool">
+          <defs>
+            <marker id="ah2" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#5b8def"></path></marker>
+            <marker id="ah3" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#36d399"></path></marker>
+          </defs>
+          <rect class="svg-box eu" x="20"  y="40"  width="150" height="50" rx="10"></rect>
+          <text class="svg-t" x="95" y="63" text-anchor="middle">EU visitor</text>
+          <text class="svg-s" x="95" y="80" text-anchor="middle">continent = EU</text>
+
+          <rect class="svg-box us" x="20"  y="170" width="150" height="50" rx="10"></rect>
+          <text class="svg-t" x="95" y="193" text-anchor="middle">US visitor</text>
+          <text class="svg-s" x="95" y="210" text-anchor="middle">continent = NA</text>
+
+          <rect class="svg-box lb" x="330" y="100" width="160" height="60" rx="10"></rect>
+          <text class="svg-t" x="410" y="126" text-anchor="middle">Load Balancer</text>
+          <text class="svg-s" x="410" y="146" text-anchor="middle">steering = geo</text>
+
+          <rect class="svg-box eu" x="650" y="40"  width="150" height="50" rx="10"></rect>
+          <text class="svg-t" x="725" y="63" text-anchor="middle">EU-West pool</text>
+          <text class="svg-s" x="725" y="80" text-anchor="middle">Frankfurt / AMS</text>
+
+          <rect class="svg-box us" x="650" y="170" width="150" height="50" rx="10"></rect>
+          <text class="svg-t" x="725" y="193" text-anchor="middle">US-East pool</text>
+          <text class="svg-s" x="725" y="210" text-anchor="middle">Ashburn</text>
+
+          <line class="svg-flow eu" x1="170" y1="65"  x2="328" y2="120" marker-end="url(#ah2)"></line>
+          <line class="svg-flow us" x1="170" y1="195" x2="328" y2="140" marker-end="url(#ah3)"></line>
+          <line class="svg-flow eu" x1="490" y1="120" x2="648" y2="65"  marker-end="url(#ah2)"></line>
+          <line class="svg-flow us" x1="490" y1="140" x2="648" y2="195" marker-end="url(#ah3)"></line>
+        </svg>
+        <figcaption>Geo steering maps a visitor's region to a specific pool.</figcaption>
+      </figure>
+
+      <!-- ============================================================= -->
+      <h2 id="affinity">3. Session affinity</h2>
+      <p>By default each request is steered independently. <strong>Session affinity</strong> ("sticky sessions") pins a
+        visitor to the same origin so stateful apps keep working.</p>
+      <ul class="bullets">
+        <li><b>By Cloudflare cookie</b> &mdash; the edge sets a <code class="inline">__cflb</code> cookie holding the chosen origin; configurable TTL.</li>
+        <li><b>By IP address</b> &mdash; hashes the client IP to an origin (no cookie needed; weaker behind shared NATs).</li>
+        <li><b>By header</b> &mdash; sticks based on a request header value (Enterprise).</li>
+        <li><b>Drain / zero-downtime</b> &mdash; on failure you can send affine traffic to another origin instead of dropping it.</li>
+      </ul>
+
+      <!-- ============================================================= -->
+      <h2 id="health">4. Health &amp; failover</h2>
+      <p>Monitors probe each origin on a schedule. Consecutive failures mark an origin (and, once all are down, the pool)
+        unhealthy; traffic then fails over to the next pool per the steering policy. Recovery is automatic once probes pass again.</p>
+
+      <table class="ref">
+        <thead><tr><th style="width:200px;">Monitor setting</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>Type</td><td class="d">HTTP, HTTPS, TCP, UDP-ICMP, ICMP-ping or SMTP.</td></tr>
+          <tr><td>Path &amp; Host</td><td class="d">For HTTP(S): the URL path probed and the <code class="inline">Host</code>/headers sent.</td></tr>
+          <tr><td>Expected codes / body</td><td class="d">e.g. <code class="inline">2xx</code> and an optional response-body substring.</td></tr>
+          <tr><td>Interval</td><td class="d">How often to probe (lower = faster detection, more load).</td></tr>
+          <tr><td>Timeout &amp; Retries</td><td class="d">Per-probe timeout and how many tries before failing.</td></tr>
+          <tr><td>Consecutive up/down</td><td class="d">How many results flip the health state (debounces flapping).</td></tr>
+          <tr><td>Regions</td><td class="d">Which Cloudflare regions run the probe (also feeds Dynamic steering RTT).</td></tr>
+        </tbody>
+      </table>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 820 210" role="img" aria-label="Failover: the EU pool is unhealthy so traffic reroutes to the US pool">
+          <defs>
+            <marker id="ah4" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#36d399"></path></marker>
+          </defs>
+          <rect class="svg-box lb" x="40" y="80" width="150" height="56" rx="10"></rect>
+          <text class="svg-t" x="115" y="104" text-anchor="middle">Load Balancer</text>
+          <text class="svg-s" x="115" y="122" text-anchor="middle">failover</text>
+
+          <rect class="svg-box down" x="360" y="20" width="180" height="56" rx="10"></rect>
+          <text class="svg-t" x="450" y="44" text-anchor="middle">EU-West pool</text>
+          <text class="svg-s" x="450" y="62" text-anchor="middle">2/2 origins down</text>
+          <text class="svg-bad" x="560" y="52" text-anchor="start">&#10007; unhealthy</text>
+
+          <rect class="svg-box us" x="360" y="130" width="180" height="56" rx="10"></rect>
+          <text class="svg-t" x="450" y="154" text-anchor="middle">US-East pool</text>
+          <text class="svg-s" x="450" y="172" text-anchor="middle">serving all traffic</text>
+          <text class="svg-ok" x="560" y="162" text-anchor="start">&#9679; healthy</text>
+
+          <line class="svg-flow down" x1="190" y1="100" x2="358" y2="52"></line>
+          <line class="svg-flow us"   x1="190" y1="116" x2="358" y2="158" marker-end="url(#ah4)"></line>
+        </svg>
+        <figcaption>When the primary pool's monitor fails, the edge reroutes to the next healthy pool automatically.</figcaption>
+      </figure>
+
+      <!-- ============================================================= -->
+      <h2 id="rules">5. Custom rules (header / geo overrides)</h2>
+      <p>Load Balancing <strong>custom rules</strong> let you override pool selection with the full Rules expression
+        language &mdash; by header, cookie, country, query string, and more. This is how you do <em>header-based</em>
+        steering in addition to geo:</p>
+      <pre><span class="cmt"># Force the EU pool when a routing header is present</span>
+<span class="kw">if</span>  http.request.headers["x-region"][0] == "eu"
+<span class="kw">then</span> use pool: eu-west-pool  (and disable session affinity, optional)
+
+<span class="cmt"># Send a country to a specific pool</span>
+<span class="kw">if</span>  ip.geoip.country == "DE"
+<span class="kw">then</span> use pool: eu-west-pool</pre>
+      <div class="note"><b>Order matters</b> Custom rules evaluate top-down; the first match wins and can either fix the
+        pool or fall through to the default steering policy.</div>
+
+      <!-- ============================================================= -->
+      <h2 id="configure">6. Configure it</h2>
+      <ol class="steps">
+        <li>
+          <h3>Create a health monitor</h3>
+          <p><em>Traffic &rarr; Load Balancing &rarr; Monitors</em>. Pick HTTP(S), set the path (e.g. <code class="inline">/health</code>), expected code <code class="inline">200</code>, interval and retries.</p>
+        </li>
+        <li>
+          <h3>Create the pools</h3>
+          <p>Create an <strong>EU-West</strong> pool and a <strong>US-East</strong> pool. Add each origin (IP/hostname + weight), attach the monitor, and set a notification email. A pool is healthy while it has at least one healthy origin.</p>
+        </li>
+        <li>
+          <h3>Create the load balancer</h3>
+          <p><em>Traffic &rarr; Load Balancing &rarr; Create</em>. Choose the hostname, attach both pools, pick a <a href="#steering">steering method</a> (Geo for the EU/US demo), and set the fallback pool.</p>
+        </li>
+        <li>
+          <h3>Map regions (geo steering) or add rules</h3>
+          <p>For Geo steering, map <em>Western/Eastern Europe &rarr; EU pool</em> and <em>North America &rarr; US pool</em>. Or add <a href="#rules">custom rules</a> for header/country overrides.</p>
+        </li>
+        <li>
+          <h3>Set session affinity (if stateful)</h3>
+          <p>Enable cookie/IP affinity and a TTL so a visitor sticks to one origin.</p>
+        </li>
+        <li>
+          <h3>Test steering &amp; failover</h3>
+          <pre>curl -sI https://app.example.com                 <span class="cmt"># see which pool served you</span>
+curl -sI https://app.example.com -H "x-region: eu"  <span class="cmt"># header override</span>
+<span class="cmt"># then stop the EU origin and watch traffic move to US</span></pre>
+        </li>
+      </ol>
+
+      <!-- ============================================================= -->
+      <h2 id="demo">7. Live EU/US demo</h2>
+      <p>The lab has a working demo that steers you to an <strong>EU</strong> or <strong>US</strong> "server" by your
+        location, and lets you override the choice with a header or query parameter. It reports the serving pool in the
+        <code class="inline">X-Served-By</code> response header.</p>
+      <div class="tip"><b>Try it</b>
+        Open the demo, then use the <em>Force EU</em> / <em>Force US</em> buttons (which set <code class="inline">?region=eu|us</code>,
+        equivalent to sending an <code class="inline">x-region</code> header) and watch <code class="inline">X-Served-By</code> change.</div>
+      <p><a class="btn" href="https://www.pimenta.fun/load-balancer/geo-origin/">Open the EU / US demo &rarr;</a></p>
+
+      <!-- ============================================================= -->
+      <h2 id="notes">8. Notes &amp; gotchas</h2>
+      <ul class="bullets">
+        <li>Load Balancing is a paid add-on billed by DNS queries; health checks from many regions add cost &mdash; tune the interval.</li>
+        <li>A <strong>fallback pool</strong> is required &mdash; it receives traffic when every other pool is unhealthy (better a slow origin than an error).</li>
+        <li>Geo steering resolves the visitor region at the edge; behind a VPN/WARP the region may differ from the user's physical location.</li>
+        <li>Proxied (orange-cloud) hostname is required for HTTP-aware steering, affinity and rules; grey-cloud LBs are DNS-only.</li>
+        <li>Monitors must be able to reach your origins directly &mdash; allowlist Cloudflare health-check IPs if the origin is firewalled.</li>
+      </ul>
+
+      <p style="margin-top:24px"><a class="btn ghost" href="https://developers.cloudflare.com/load-balancing/" style="border-color:var(--accent);">Cloudflare Load Balancing docs &rarr;</a></p>
+
+      <section class="disclaimer"><div class="box">
+        <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
+        Please consult the official documentation for the most accurate and up-to-date information.
+        We are not responsible for any issues, damages, or data loss that may occur from using this information.
+        <span class="risk">USE AT YOUR OWN RISK.</span>
+      </div></section>
+    </main>
+  </div>
+
+  <footer class="lab">
+    <span>&copy; 2026 pimenta.fun &mdash; Security Lab &middot; built by TPimenta LAB</span>
+    &nbsp;&middot;&nbsp;
+    <a href="https://www.pimenta.fun/#docs">Back to docs</a>
+  </footer>
+</body>
+</html>
