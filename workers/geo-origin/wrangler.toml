@@ -1,0 +1,15 @@
+name = "geo-origin"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# Fronts the EU/US origin-steering demo. The Worker reads request.cf to pick a
+# pool (EU-West vs US-East) and honours a ?region= / x-region header override,
+# reporting the choice in the X-Served-By response header.
+# Adjust the zone_name to your zone. Comment this out to deploy to
+# geo-origin.<your-subdomain>.workers.dev instead.
+routes = [
+  { pattern = "www.pimenta.fun/load-balancer/geo-origin*", zone_name = "pimenta.fun" }
+]
+
+# Optional: enable a workers.dev preview URL while testing.
+workers_dev = true
