@@ -1,0 +1,19 @@
+tools/api-test.mjs
+  s_45d7e19da6ce2d::t_8b16a66568a0ab 1-249
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3c19e6c53b533129f587a6f640064a16db08a80f",
+  "prompts": {},
+  "sessions": {
+    "s_45d7e19da6ce2d": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10621ba67ffeb0finUXEc7EfXx",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "tpimenta <tpimenta@cloudflare.com>"
+    }
+  }
+}
