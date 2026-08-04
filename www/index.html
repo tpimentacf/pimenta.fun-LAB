@@ -40,6 +40,13 @@
       transition: color 0.2s;
     }
     nav a:hover { color: var(--text); }
+    nav a.btn {
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 6px 12px;
+    }
+    nav a.btn:hover { color: var(--bg); background: var(--accent); }
     .hero {
       padding: 80px 6vw 60px;
       max-width: 900px;
@@ -186,6 +193,7 @@
       <a href="https://api.pimenta.fun">API</a>
       <a href="#tests">Tests</a>
       <a href="#docs">Docs</a>
+      <a class="btn" href="https://one.eu.newrelic.com/" target="_blank" rel="noopener">Logs</a>
     </nav>
   </header>
 
