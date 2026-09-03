@@ -1,0 +1,7 @@
+name = "login-inspector"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+routes = [
+  { pattern = "www.pimenta.fun/login-inspector*", zone_name = "pimenta.fun" }
+]
