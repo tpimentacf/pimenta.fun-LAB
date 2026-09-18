@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Page Shield Discovery &amp; Implementation Guide &mdash; Pimenta Lab</title>
+  <link rel="stylesheet" href="/assets/docs.css" />
+  <style>
+    .flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; margin: 22px 0; }
+    .node {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px 18px; flex: 1; min-width: 150px; text-align: center;
+    }
+    .node b { color: var(--text); display: block; margin-bottom: 4px; }
+    .node small { color: var(--muted); }
+    .leg { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 12px; min-width: 130px; }
+    .leg .arrow { color: var(--accent); font-size: 1.4rem; line-height: 1; }
+    .leg small { color: var(--green); font-size: 0.72rem; text-align: center; margin-top: 4px; }
+    .plan { font-weight: 700; font-size: 0.75rem; padding: 1px 8px; border-radius: 999px; }
+    .plan.all { background: rgba(54,211,153,0.12); color: var(--green); border: 1px solid rgba(54,211,153,0.4); }
+    .plan.biz { background: rgba(91,141,239,0.12); color: var(--blue); border: 1px solid rgba(91,141,239,0.4); }
+    .plan.adv { background: rgba(246,130,31,0.14); color: var(--accent); border: 1px solid rgba(246,130,31,0.45); }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#docs">&larr; Documents</a>
+      <a class="home" href="https://www.pimenta.fun/page-shield/page-shield-lab/">&rarr; Interactive Lab</a>
+      <h2>Contents</h2>
+      <a href="#what">0. What it is</a>
+      <a href="#how">1. How it works</a>
+      <a href="#features">2. Features &amp; options</a>
+      <a href="#implement">3. Implementation steps</a>
+      <a href="#policies">4. CSP policies (log &amp; enforce)</a>
+      <a href="#check">5. Ways to check &amp; verify</a>
+      <a href="#best">6. Best practices</a>
+    </nav>
+
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#docs">Documents</a> / Page Shield / Discovery &amp; implementation</div>
+        <span class="pill">Discovery</span>
+        <h1><span class="grad">Page Shield</span> (Client-side security) &mdash; discovery &amp; implementation</h1>
+        <p class="lead">How Page Shield protects your visitors from client-side supply-chain attacks (Magecart), every option it offers, and every way to verify it is working &mdash; with a live interactive lab to test each feature.</p>
+      </header>
+
+      <section id="what">
+        <h2>0. What it is</h2>
+        <p><strong>Page Shield</strong> is Cloudflare's client-side security product (renamed <strong>Client-side security</strong> in the dashboard, <em>Security &rarr; Client-side security</em>). Modern sites load third-party JavaScript for analytics, ads, chat, and payments. If one of those suppliers is compromised, the attacker can skim data straight out of your visitors' browsers &mdash; credit cards, credentials, PII &mdash; without ever touching your origin. That is a <strong>client-side supply-chain attack</strong>, and the most famous variant is <strong>Magecart</strong> (payment-card skimming).</p>
+        <p>Because your server never sees this traffic, server-side security (WAF, API Shield, mTLS) cannot see it either. Page Shield closes that gap: <strong>it watches what runs in the visitor's browser</strong> and can block anything you have not allowed.</p>
+        <div class="note">Availability: the base product is on <strong>every plan &mdash; including Free</strong>. Richer monitoring (connections, cookies, alerts) and ML detection + blocking policies are tiered; see the feature table in section 2.</div>
+      </section>
+
+      <section id="how">
+        <h2>1. How it works</h2>
+        <div class="flow">
+          <div class="node"><b>Browser</b><small>loads scripts, makes connections, sets cookies</small></div>
+          <div class="leg"><span class="arrow">&#8594;</span><small>edge injects CSP headers</small></div>
+          <div class="node"><b>Cloudflare</b><small>collects violation reports, builds resource inventory</small></div>
+          <div class="leg"><span class="arrow">&#8594;</span><small>analysis: known-good + ML classifiers</small></div>
+          <div class="node"><b>Alert &amp; block</b><small>email alerts, dashboard, CSP enforcement</small></div>
+        </div>
+        <ol class="steps">
+          <li><strong>Data collection.</strong> Cloudflare injects <code>Content-Security-Policy-Report-Only</code> / <code>Content-Security-Policy</code> headers (and report ingestion endpoints) into HTML responses. The browser then tells Cloudflare exactly which scripts loaded, which remote hosts scripts talked to, and which cookies were touched.</li>
+          <li><strong>Inventory.</strong> Reports are aggregated into the zone's inventory: scripts (with hash, first/last seen, page attribution), outbound connections, and cookies.</li>
+          <li><strong>Detection.</strong> New or changed resources trigger alerts. With the Advanced add-on, each detected script is downloaded and run through ML classifiers (Magecart, cryptomining, malware, JS integrity) against a 1&ndash;99 risk scale.</li>
+          <li><strong>Action.</strong> Beyond visibility, you can deploy CSP policies in <em>log</em> mode (observe) and, when ready, <em>enforce</em> mode &mdash; the browser itself refuses to execute non-allowlisted code.</li>
+        </ol>
+      </section>
+
+      <section id="features">
+        <h2>2. Features &amp; options</h2>
+        <table class="ref">
+          <tr><th>Feature</th><th>What you get</th><th>Plan</th></tr>
+          <tr><td>Script monitoring</td><td>Full inventory of JS by URL, hash, and first/last seen, per page (page attribution on Business+)</td><td><span class="plan all">All plans</span></td></tr>
+          <tr><td>Connection monitoring</td><td>fetch/XHR/beacon/WebSocket destinations of scripts</td><td><span class="plan biz">Business+</span></td></tr>
+          <tr><td>Cookie monitoring</td><td>Cookie inventory + attribute analysis (HttpOnly / Secure / SameSite)</td><td><span class="plan biz">Business+</span></td></tr>
+          <tr><td>Page attribution</td><td>Which pages load each resource</td><td><span class="plan biz">Business+</span></td></tr>
+          <tr><td>New resources / new domain alerts</td><td>Email/webhook notification when an unknown script or host appears</td><td><span class="plan biz">Business+</span></td></tr>
+          <tr><td>Malicious script / connection detection</td><td>ML scores: Magecart, cryptomining, malware, JS integrity (1&ndash;99)</td><td><span class="plan adv">Advanced add-on</span></td></tr>
+          <tr><td>Code-change detection</td><td>Alert when a script's hash changes (tampered or updated)</td><td><span class="plan adv">Advanced add-on</span></td></tr>
+          <tr><td>Content security rules (positive blocking)</td><td>Up to 5 CSP policies, log or enforce, injected at the edge</td><td><span class="plan adv">Advanced add-on</span></td></tr>
+          <tr><td>Logpush</td><td>4 Logpush jobs to stream detections to your SIEM</td><td><span class="plan adv">Advanced add-on</span></td></tr>
+        </table>
+        <div class="note">ML scores: <strong>1 = definitely malicious &larr;&rarr; 99 = definitely safe</strong>. A Magecart score of 6 on a payment page is a fire alarm; 96+ means effectively benign.</div>
+      </section>
+
+      <section id="implement">
+        <h2>3. Implementation steps</h2>
+        <ol class="steps">
+          <li>Dashboard &rarr; your zone &rarr; <strong>Security &rarr; Client-side security</strong> &rarr; <strong>Enable</strong>. Monitoring starts within minutes as real browsers hit pages.</li>
+          <li>Let it <strong>baseline</strong> for a few days. Review the inventory: every script, connection, and cookie that is <em>known-good</em> on your site.</li>
+          <li>Set up <strong>alerts</strong> (Notifications): <em>New Script Detected</em>, <em>New Domain Detected</em>; on Advanced also <em>Malicious Script</em>, <em>Malicious Connection</em>, <em>Script Code Change</em>.</li>
+          <li>(Advanced) Create a <strong>CSP policy in Log mode</strong>: allow what the inventory says should be there. Cloudflare injects <code>Content-Security-Policy-Report-Only</code>; scripts still execute, browsers report violations.</li>
+          <li>Review the <strong>violation reports</strong> for a week or two. Tuning the allowlist here is where all false positives are caught.</li>
+          <li>Flip the policy to <strong>Enforce</strong>. The edge now emits <code>Content-Security-Policy</code> and browsers block everything not in the allowlist before it runs.</li>
+          <li>Keep alerts on permanently. Any new third-party, marketing tag change, or compromise fires an alert within minutes.</li>
+        </ol>
+      </section>
+
+      <section id="policies">
+        <h2>4. CSP policies (log &amp; enforce)</h2>
+        <table class="ref">
+          <tr><th>Mode</th><th>Header injected</th><th>Behavior</th></tr>
+          <tr><td>Log</td><td><code>Content-Security-Policy-Report-Only</code></td><td>Everything runs; violations are only reported to Cloudflare. Zero user impact.</td></tr>
+          <tr><td>Enforce</td><td><code>Content-Security-Policy</code></td><td>Browser blocks non-allowlisted scripts/connections before execution.</td></tr>
+        </table>
+        <pre>Content-Security-Policy:
+  script-src 'self' cdnjs.cloudflare.com cdn.jsdelivr.net js.stripe.com;
+  connect-src 'self' api.example.com www.google-analytics.com;
+  report-uri https://csp-reporting.cloudflare.com/cdn-cgi/script_monitor/report?p=&lt;policy_id&gt;</pre>
+        <p>Cloudflare is the reverse proxy: it adds these headers to HTML responses on the way out, the browser enforces them, and violation reports flow back to Cloudflare's reporting endpoint for the dashboard.</p>
+      </section>
+
+      <section id="check">
+        <h2>5. Ways to check &amp; verify it works</h2>
+        <ol class="steps">
+          <li><strong>Dashboard inventory.</strong> Security &rarr; Client-side security: verify your known scripts/connections/cookies appear with sane first-seen dates. The interactive lab's live inventory panel mirrors what you should see.</li>
+          <li><strong>DevTools &rarr; Network &rarr; document headers.</strong> Reload a page and confirm the CSP headers are present (report-only in log mode, enforce header in enforce mode). The lab's <em>Probe CSP headers</em> button does this from the page itself.</li>
+          <li><strong>Console violations.</strong> With an enforce policy, a non-allowlisted script shows a browser console error (<code>Refused to load the script ... violates Content Security Policy</code>) and fails in the Network tab.</li>
+          <li><strong>New-script alert test.</strong> Deploy a page that loads a brand-new third-party URL (the lab injects <code>cdn.evil-tracker.invalid</code>) and confirm the <em>New Script Detected</em> alert fires and the URL appears in the inventory.</li>
+          <li><strong>GraphQL Analytics API.</strong> Query Page Shield detection data programmatically (same dataset that powers the dashboard) for automation or a custom view.</li>
+          <li><strong>Logpush (Advanced).</strong> Stream detection events to a SIEM and verify they arrive (4 jobs: detections for scripts, connections, cookies, code changes).</li>
+          <li><strong>Malicious-score spot check (Advanced).</strong> Set a low threshold, load a known-suspicious script in a test page, confirm the ML score + <em>Malicious Script</em> alert.</li>
+        </ol>
+      </section>
+
+      <section id="best">
+        <h2>6. Best practices</h2>
+        <ul class="bullets">
+          <li><strong>Monitor &rarr; log &rarr; enforce.</strong> Never enforce on day one; use the log period to build a trustworthy allowlist.</li>
+          <li><strong>Treat every new domain alert on checkout-like pages as urgent.</strong> Most Magecart incidents start with one unknown URL or hash change.</li>
+          <li><strong>Page attribution</strong>: if a resource only ever appears on /checkout, that's your riskiest signal &mdash; watch it.</li>
+          <li><strong>Minimize the blast radius:</strong> fewer third-party scripts = smaller attack surface. Page Shield tells you what is actually used.</li>
+          <li><strong>Pair with Subresource Integrity (SRI)</strong> on scripts you control; Page Shield covers the ones you don't.</li>
+          <li>Try every flow in the <a href="https://www.pimenta.fun/page-shield/page-shield-lab/">interactive lab</a>: live CSP probe, real inventory, Magecart walkthrough.</li>
+        </ul>
+        <div class="note">Official docs: <a href="https://developers.cloudflare.com/client-side-security/">Client-side security</a> &middot; <a href="https://developers.cloudflare.com/client-side-security/get-started/">Get started</a> &middot; <a href="https://developers.cloudflare.com/client-side-security/best-practices/handle-an-alert/">Handling an alert</a>.</div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
