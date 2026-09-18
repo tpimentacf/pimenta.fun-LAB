@@ -4,10 +4,50 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Page Shield Interactive Lab &mdash; Pimenta Lab</title>
-  <link rel="stylesheet" href="/assets/lab.css" />
+  <link rel="stylesheet" href="/assets/docs.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js"></script>
   <style>
+    .layout { max-width: 1480px; }
+    main { padding-left: 54px; padding-right: 54px; }
+    .hero { max-width: 1040px; }
+    .demo-nav {
+      display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px;
+      margin: 0 0 42px;
+    }
+    .demo-nav a {
+      display: block; color: var(--text); text-decoration: none; background: var(--panel);
+      border: 1px solid var(--border); border-radius: 12px; padding: 15px 16px;
+      transition: border-color .15s, transform .15s;
+    }
+    .demo-nav a:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .demo-nav b { display: block; color: var(--accent); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 4px; }
+    .demo-nav span { display: block; color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .demo-section {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+      padding: 28px 30px; margin: 0 0 32px; scroll-margin-top: 24px;
+    }
+    .demo-head { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 22px; }
+    .demo-head .num {
+      display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px;
+      border-radius: 11px; background: rgba(246,130,31,.13); border: 1px solid rgba(246,130,31,.45);
+      color: var(--accent); font-family: var(--mono); font-size: 14px; font-weight: 700;
+    }
+    .demo-head h2 { margin: 0 0 5px; padding: 0; border: 0; font-size: 23px; }
+    .demo-head p { margin: 0; color: var(--muted); max-width: 86ch; }
+    .workspace > h2, #mlPanel > h2, #cspPanel > h2 { margin: 22px 0 10px; padding: 0; border: 0; font-size: 17px; }
+    .workspace {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px; min-width: 0;
+    }
+    .workspace-title {
+      color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; margin-bottom: 12px;
+    }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 0 0 22px; }
+    .metric { background: var(--bg); border: 1px solid var(--border); border-radius: 11px; padding: 14px 16px; }
+    .metric .n { color: var(--accent); font-size: 25px; font-weight: 700; line-height: 1.2; }
+    .metric .l { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
     .stage-bar { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 20px; }
     .stage-btn {
       background: var(--panel2); border: 1px solid var(--border); color: var(--muted);
@@ -55,8 +95,19 @@
     .log .bad { color: var(--accent2); }
     .log .info { color: var(--blue); }
 
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-    @media (max-width: 780px) { .grid2 { grid-template-columns: 1fr; } }
+    .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+    .resource-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .attack-grid { grid-template-columns: minmax(380px, .9fr) minmax(450px, 1.1fr); }
+    @media (max-width: 1100px) {
+      .demo-nav { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+      .grid2, .resource-grid, .attack-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 820px) {
+      main { padding-left: 20px; padding-right: 20px; }
+      .demo-nav { grid-template-columns: 1fr; }
+      .demo-section { padding: 20px; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+    }
 
     table.mini { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 10px 0; }
     table.mini th, table.mini td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--muted); }
@@ -76,52 +127,86 @@
     .stash { display: none; margin-top: 12px; background: rgba(255,107,107,0.07); border: 1px solid rgba(255,107,107,0.35); border-radius: 9px; padding: 10px 14px; font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; color: #ffb4b4; }
     .exfil-line { display: none; margin-top: 10px; text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; color: var(--accent2); }
     .blocked-note { display:none; }
+    .toc-status { margin: 18px 10px 0; padding: 12px; border-radius: 9px; background: rgba(63,185,80,.08); border: 1px solid rgba(63,185,80,.3); }
+    .toc-status b { display: block; color: var(--green); font-size: 12px; margin-bottom: 3px; }
+    .toc-status span { display: block; color: var(--muted); font-size: 11px; line-height: 1.45; }
   </style>
 </head>
 <body>
-  <header class="lab">
-    <div class="brand">pimenta<span>.fun</span> lab</div>
-    <nav>
-      <a href="https://www.pimenta.fun">Home</a>
-      <a href="https://www.pimenta.fun/#tests">Tests</a>
-      <a href="https://www.pimenta.fun/page-shield-guide/">Implementation Guide</a>
+  <div class="layout">
+    <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#tests">&larr; Configuration tests</a>
+      <a class="home" href="https://www.pimenta.fun/page-shield-guide/">&rarr; Implementation guide</a>
+      <h2>Demo workspace</h2>
+      <a href="#probe">1. CSP header probe</a>
+      <a href="#inventory">2. Live resource inventory</a>
+      <a href="#magecart">3. Magecart simulation</a>
+      <a href="#features">4. Feature map</a>
+      <a href="#csp-modes">5. CSP log vs enforce</a>
+      <div class="toc-status">
+        <b>Run in order</b>
+        <span>Probe &rarr; inventory &rarr; attack &rarr; enforce. Each section is independent and safe to reset.</span>
+      </div>
     </nav>
-  </header>
+    <main>
+      <header class="hero" id="overview">
+        <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Page Shield / Interactive Lab</div>
+        <span class="pill">Client-side Security Lab</span>
+        <h1>Page Shield <span class="grad">Interactive Lab</span></h1>
+        <p class="lead">
+          A structured workspace for every Page Shield demo: live resource inventory, CSP header verification,
+          and a full Magecart attack path from script injection through ML detection, exfiltration, and enforcement.
+        </p>
+        <p>
+          Formerly <strong>Page Shield</strong>, now <strong>Client-side security</strong> in the Cloudflare dashboard.
+          Use the sidebar to move between independent demos or follow the recommended order below.
+        </p>
+      </header>
 
-  <main class="lab">
-    <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Page Shield / Interactive Lab</div>
-    <span class="tag">Client-side Security</span>
-    <h1>Page Shield <span class="grad">Interactive Lab</span></h1>
-    <p class="lead">
-      One page that exercises every Page Shield feature: live resource inventory (scripts, connections, cookies),
-      a CSP probe to check if the feature is active on this zone, and a full Magecart attack simulation
-      &mdash; skimmer injection, ML scoring, exfiltration, and CSP enforcement.
-    </p>
-    <p>
-      Formerly <strong>Page Shield</strong>, now <strong>Client-side security</strong> in the Cloudflare dashboard.
-      Deep-dive implementation doc: <a href="https://www.pimenta.fun/page-shield-guide/" style="color:var(--accent)">page-shield-guide/</a>.
-    </p>
+      <div class="demo-nav" aria-label="Lab demos">
+        <a href="#probe"><b>Demo 01 &middot; Live</b>CSP header probe<span>Detect log or enforce policies at the edge.</span></a>
+        <a href="#inventory"><b>Demo 02 &middot; Live</b>Resource inventory<span>Inspect scripts, connections, and cookies.</span></a>
+        <a href="#magecart"><b>Demo 03 &middot; Simulation</b>Magecart attack<span>Walk compromise, detection, and blocking.</span></a>
+        <a href="#features"><b>Reference 04</b>Feature map<span>Match capabilities to plan availability.</span></a>
+        <a href="#csp-modes"><b>Reference 05</b>CSP modes<span>Compare report-only and enforcement.</span></a>
+      </div>
 
     <!-- ========================= LIVE CSP PROBE ========================= -->
-    <div class="panel">
-      <h2>1 &middot; Is Page Shield active on this site? (live probe)</h2>
-      <p>Re-fetches this page and inspects the HTTP response headers that Page Shield injects when a
-      content security policy is configured: <code class="inline">Content-Security-Policy-Report-Only</code> (log mode)
-      and <code class="inline">Content-Security-Policy</code> (enforce mode).</p>
-      <button class="btn" id="probeBtn" type="button">Probe CSP headers</button>
-      <div id="probeOut" style="margin-top:14px;"></div>
+    <section class="demo-section" id="probe">
+      <div class="demo-head">
+        <span class="num">01</span>
+        <div>
+          <h2>CSP header probe</h2>
+          <p>Verify whether Page Shield content security rules are active on this zone and identify the deployed mode.</p>
+        </div>
+      </div>
+      <div class="workspace">
+        <div class="workspace-title">Live edge response test</div>
+        <p>Re-fetches this page and inspects the HTTP response headers that Page Shield injects when a
+        content security policy is configured: <code class="inline">Content-Security-Policy-Report-Only</code> (log mode)
+        and <code class="inline">Content-Security-Policy</code> (enforce mode).</p>
+        <button class="btn" id="probeBtn" type="button">Probe CSP headers</button>
+        <div id="probeOut" style="margin-top:14px;"></div>
+      </div>
       <div class="note" style="margin-top:14px;">
         If no CSP headers come back, the zone either has no policy configured yet (plan-gated feature) or it is in the
         process of learning the baseline. The dashboard inventory of <em>scripts</em>, <em>connections</em> and
         <em>cookies</em> works separately and should still list this page's resources after a few minutes
         (connections/cookies require Business+).
       </div>
-    </div>
+    </section>
 
     <!-- ========================= LIVE INVENTORY ========================= -->
-    <div class="panel">
-      <h2>2 &middot; Live inventory &mdash; what this page actually loads</h2>
-      <p>Page Shield builds this same inventory from visitor traffic. The panel below is rendered live in your browser.</p>
+    <section class="demo-section" id="inventory">
+      <div class="demo-head">
+        <span class="num">02</span>
+        <div>
+          <h2>Live resource inventory</h2>
+          <p>Generate and inspect the scripts, connections, and cookies that Page Shield learns from visitor traffic.</p>
+        </div>
+      </div>
 
       <div class="metrics" id="metricRow">
         <div class="metric"><div class="n" id="mScripts">0</div><div class="l">Scripts</div></div>
@@ -130,12 +215,14 @@
         <div class="metric"><div class="n" id="mThreats">0</div><div class="l">Threats flagged</div></div>
       </div>
 
-      <div class="grid2">
-        <div>
+      <div class="grid2 resource-grid">
+        <div class="workspace">
+          <div class="workspace-title">Script monitoring &middot; All plans</div>
           <h2>Scripts (document.scripts)</h2>
           <div class="script-list" id="scriptList"></div>
         </div>
-        <div>
+        <div class="workspace">
+          <div class="workspace-title">Connection monitoring &middot; Business+</div>
           <h2>Outbound connections</h2>
           <p>Make this page issue requests &mdash; on the real dashboard they appear under <em>Connections</em>.</p>
           <div class="stage-bar">
@@ -143,8 +230,10 @@
             <button class="stage-btn" id="connBad" type="button">Post to exfil.evil-tracker.invalid</button>
           </div>
           <div class="log" id="connLog" style="height:130px"></div>
-
-          <h2 style="margin-top:18px;">Cookies visible to JS</h2>
+        </div>
+        <div class="workspace">
+          <div class="workspace-title">Cookie monitoring &middot; Business+</div>
+          <h2>Cookies visible to JS</h2>
           <div class="script-list" id="cookieList"></div>
           <div class="stage-bar">
             <button class="stage-btn" id="setCookie" type="button">Set demo cookie</button>
@@ -153,14 +242,18 @@
           inventory (Business+) sees them anyway, via traffic.</p>
         </div>
       </div>
-    </div>
+    </section>
 
     <!-- ========================= MAGECART SIMULATION ========================= -->
-    <div class="panel">
-      <h2>3 &middot; Magecart attack simulation</h2>
-      <p>A fake checkout. Walk the stages: a third-party script gets compromised and starts skimming card fields,
-      Cloudflare's ML classifiers flag it, the skimmer exfiltrates the data, and finally a CSP enforce policy
-      makes the browser refuse to run anything outside the allowlist.</p>
+    <section class="demo-section" id="magecart">
+      <div class="demo-head">
+        <span class="num">03</span>
+        <div>
+          <h2>Magecart attack simulation</h2>
+          <p>Operate the attack timeline from a fake checkout and watch the Page Shield detection and enforcement state change.</p>
+        </div>
+      </div>
+      <div class="note"><strong>Runbook:</strong> select stages 1&ndash;5 in order. Type demo values into the checkout after stage 2 to see the simulated skimmer capture fields, then enforce CSP to disarm it.</div>
 
       <div class="stage-bar">
         <button class="stage-btn" data-stage="normal" type="button">1. Normal operation</button>
@@ -171,8 +264,9 @@
         <button class="stage-btn" data-stage="reset" type="button">Reset</button>
       </div>
 
-      <div class="grid2">
-        <div>
+      <div class="grid2 attack-grid">
+        <div class="workspace">
+          <div class="workspace-title">Target browser &middot; Fake checkout</div>
           <div class="shop">
             <div class="shop-head"><span class="name">ShopCo &mdash; Secure Checkout</span><span class="sec">&#128274; TLS</span></div>
             <div class="tot"><span>Premium Widget &times;1</span><span>$49.99</span></div>
@@ -199,7 +293,8 @@
           <code class="inline">script-src</code>, so the browser refuses to execute it &mdash; even though the compromised CDN still serves it.</div>
         </div>
 
-        <div>
+        <div class="workspace">
+          <div class="workspace-title">Page Shield dashboard &middot; Detection view</div>
           <h2>Scripts on the checkout (simulated inventory)</h2>
           <div class="script-list" id="simScriptList"></div>
           <div id="mlPanel" style="display:none; margin-top:14px;">
@@ -230,11 +325,18 @@
         unresolvable), but if Page Shield monitoring is enabled on this zone, the URL will show up as a
         <em>new script</em> in your dashboard inventory &mdash; exactly what a real supply-chain compromise looks like.
       </div>
-    </div>
+    </section>
 
     <!-- ========================= WHAT PAGE SHIELD MONITORS ========================= -->
-    <div class="panel">
-      <h2>4 &middot; What Page Shield monitors (feature map)</h2>
+    <section class="demo-section" id="features">
+      <div class="demo-head">
+        <span class="num">04</span>
+        <div>
+          <h2>Feature map and plan availability</h2>
+          <p>Use this reference to explain which part of each demo maps to the base product, Business+, or Advanced.</p>
+        </div>
+      </div>
+      <div class="workspace">
       <table class="mini">
         <tr><th>Feature</th><th>What it does</th><th>Plan</th></tr>
         <tr><td>Script monitoring</td><td>Inventories every JS file by URL, hash and first/last seen, per page</td><td>All plans</td></tr>
@@ -246,34 +348,45 @@
         <tr><td>Content security rules (positive blocking)</td><td>CSP log &amp; enforce policies injected at the edge (5 rules)</td><td>Advanced add-on</td></tr>
         <tr><td>Logpush</td><td>Stream detections to your SIEM (4 jobs)</td><td>Advanced add-on</td></tr>
       </table>
-    </div>
+      </div>
+    </section>
 
-    <div class="panel">
-      <h2>5 &middot; CSP modes &mdash; log vs enforce</h2>
+    <section class="demo-section" id="csp-modes">
+      <div class="demo-head">
+        <span class="num">05</span>
+        <div>
+          <h2>CSP log vs enforce modes</h2>
+          <p>Choose report-only while tuning the allowlist; move to enforcement only after violations are understood.</p>
+        </div>
+      </div>
+      <div class="workspace">
       <table class="mini">
         <tr><th>Mode</th><th>HTTP header</th><th>Effect</th></tr>
         <tr><td><strong>Log</strong></td><td class="mono">Content-Security-Policy-Report-Only</td><td>Scripts still run; the browser just reports violations to Cloudflare. Zero breakage &mdash; the safe starting point.</td></tr>
         <tr><td><strong>Enforce</strong></td><td class="mono">Content-Security-Policy</td><td>Browser blocks anything not in the allowlist before it executes. Positive protection after the baseline is verified.</td></tr>
       </table>
       <div class="ok">Best practice: monitor &rarr; log policy &rarr; review violation reports &rarr; enforce. Never jump straight to enforce.</div>
-    </div>
+      </div>
+    </section>
 
     <div class="note">
       Dashboard path: <strong>Cloudflare &rarr; your zone &rarr; Security &rarr; Client-side security</strong> (formerly Page Shield).
       Official docs: <a href="https://developers.cloudflare.com/client-side-security/get-started/" style="color:var(--blue)">developers.cloudflare.com/client-side-security</a>.
     </div>
-  </main>
 
-  <section class="disclaimer"><div class="box">
-    <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
-    Please consult the official documentation for the most accurate and up-to-date information.
-    We are not responsible for any issues, damages, or data loss that may occur from using this information.
-    <span class="risk">USE AT YOUR OWN RISK.</span>
-  </div></section>
+      <section class="disclaimer"><div class="box">
+        <b>Disclaimer:</b> All information provided on this page was developed by Pimenta.fun LAB.
+        Please consult the official documentation for the most accurate and up-to-date information.
+        We are not responsible for any issues, damages, or data loss that may occur from using this information.
+        <span class="risk">USE AT YOUR OWN RISK.</span>
+      </div></section>
 
-  <footer class="lab">
-    Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
-  </footer>
+      <footer>
+        Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a> &middot;
+        <a href="https://www.pimenta.fun/page-shield-guide/">implementation guide</a>
+      </footer>
+    </main>
+  </div>
 
   <script>
     var EVIL_SRC = 'https://cdn.evil-tracker.invalid/skimmer.min.js';
