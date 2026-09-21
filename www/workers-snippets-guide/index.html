@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cloudflare Workers vs Snippets Guide &mdash; Pimenta Lab</title>
+  <meta name="description" content="Decision guide for Cloudflare Workers and Snippets: differences, limits, architecture, best use cases, implementation, and migration guidance." />
+  <link rel="stylesheet" href="/assets/docs.css" />
+  <style>
+    .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 20px 0; }
+    .choice { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+    .choice.snippet { border-color: var(--green); }
+    .choice.worker { border-color: var(--accent); }
+    .choice .label { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
+    .choice.snippet .label { color: var(--green); }
+    .choice.worker .label { color: var(--accent); }
+    .choice h3 { margin: 0 0 8px; }
+    .choice p { color: var(--muted); margin: 0; }
+    .pick { display: inline-block; margin-top: 14px; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; }
+    .snippet .pick { color: var(--green); background: rgba(63,185,80,.12); }
+    .worker .pick { color: var(--accent); background: rgba(246,130,31,.12); }
+    .decision { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin: 14px 0; }
+    .decision .q { color: var(--text); font-weight: 700; }
+    .decision .answer { color: var(--muted); margin-top: 5px; }
+    .yes { color: var(--green); font-weight: 700; }
+    .no { color: var(--accent2); font-weight: 700; }
+    .limit { white-space: nowrap; }
+    .table-wrap { overflow-x: auto; }
+    .table-wrap table { min-width: 700px; }
+    table.ref tbody td:first-child { white-space: normal; }
+    @media (max-width: 820px) { .choice-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#docs">&larr; Documents</a>
+      <h2>Contents</h2>
+      <a href="#answer">0. The short answer</a>
+      <a href="#architecture">1. Where they run</a>
+      <a href="#comparison">2. Detailed comparison</a>
+      <a href="#snippet-cases">3. Best Snippet use cases</a>
+      <a href="#worker-cases">4. Best Worker use cases</a>
+      <a href="#decision">5. Decision tree</a>
+      <a href="#examples">6. Code comparison</a>
+      <a href="#deploy">7. Deploy &amp; operate</a>
+      <a href="#migrate">8. When to migrate</a>
+      <a href="#gotchas">9. Gotchas</a>
+    </nav>
+
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#docs">Documents</a> / Workers vs Snippets</div>
+        <span class="pill">Decision Guide</span>
+        <h1>Cloudflare <span class="grad">Workers vs Snippets</span></h1>
+        <p class="lead">Both run JavaScript on Cloudflare's network, but they solve different problems. This guide explains the boundaries, current limits, best use cases, and the simplest way to choose the right product.</p>
+      </header>
+
+      <section id="answer">
+        <h2>0. The short answer</h2>
+        <div class="choice-grid">
+          <div class="choice snippet">
+            <div class="label">Choose Snippets</div>
+            <h3>Lightweight HTTP middleware</h3>
+            <p>Use a Snippet when a Rules expression selects the traffic and small JavaScript logic modifies the request, origin fetch, cache behavior, or response. No state, bindings, background work, or application platform required.</p>
+            <span class="pick">Rules + short JavaScript</span>
+          </div>
+          <div class="choice worker">
+            <div class="label">Choose Workers</div>
+            <h3>Applications and platform compute</h3>
+            <p>Use a Worker for APIs, full responses, authentication services, storage, state, queues, scheduled tasks, AI, image processing, larger dependencies, observability, and software delivery workflows.</p>
+            <span class="pick">Full developer platform</span>
+          </div>
+        </div>
+        <div class="tip"><b>Use the lowest abstraction that solves the problem.</b> First ask whether a native Redirect, Transform, Cache, Configuration, or Origin Rule can do it without code. If not, use a Snippet for lightweight request/response logic. Move to Workers when the workload becomes an application.</div>
+      </section>
+
+      <section id="architecture">
+        <h2>1. Where they run</h2>
+        <h3>Snippets: code inside the Rules pipeline</h3>
+        <div class="flow">
+          <div class="flow-row">
+            <div class="box"><div class="t">Incoming request</div><div class="s">proxied DNS hostname</div></div>
+            <div class="arrow">&rarr;</div>
+            <div class="box"><div class="t">Ruleset expression</div><div class="s">URI, headers, cookies, IP, bot/WAF scores, lists</div></div>
+            <div class="arrow">&rarr;</div>
+            <div class="box green"><div class="t">Snippet(s)</div><div class="s">small, sequential request/response logic</div></div>
+            <div class="arrow">&rarr;</div>
+            <div class="box"><div class="t">Origin / response</div><div class="s">fetch, modify, return</div></div>
+          </div>
+        </div>
+        <p>Each Snippet has one associated Snippet rule. Only matching requests invoke it. Multiple matching Snippets can run sequentially, so one can modify the request or response passed to the next. In the Rules execution order, Snippets run after Cache Rules and before Cloud Connector.</p>
+
+        <h3>Workers: a programmable application endpoint</h3>
+        <div class="flow">
+          <div class="flow-row">
+            <div class="box"><div class="t">Event / request</div><div class="s">route, custom domain, cron, queue, email, service binding</div></div>
+            <div class="arrow">&rarr;</div>
+            <div class="box accent"><div class="t">Worker</div><div class="s">application logic, routing, APIs, rendering</div></div>
+            <div class="arrow">&rarr;</div>
+            <div class="box"><div class="t">Bindings</div><div class="s">KV, D1, R2, Durable Objects, Queues, AI, services</div></div>
+            <div class="arrow">&rarr;</div>
+            <div class="box"><div class="t">Response / workflow</div><div class="s">origin optional</div></div>
+          </div>
+        </div>
+        <p>A Worker can proxy an origin, but it does not need one. It can be the application, API, scheduled process, queue consumer, or coordination layer itself.</p>
+      </section>
+
+      <section id="comparison">
+        <h2>2. Detailed comparison</h2>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Capability</th><th>Snippets</th><th>Workers</th></tr></thead>
+          <tbody>
+            <tr><td>Primary job</td><td>Modify matching HTTP requests and responses</td><td>Run applications and general-purpose edge compute</td></tr>
+            <tr><td>Runtime</td><td>Workers runtime, lightweight subset</td><td>Full Workers runtime and Developer Platform</td></tr>
+            <tr><td>Traffic selection</td><td>Ruleset Engine expression; one rule per Snippet</td><td>Routes, custom domains, service bindings, and event triggers</td></tr>
+            <tr><td>Persistent state</td><td><span class="tag2 gap">No</span></td><td><span class="tag2 have">Yes</span> KV, D1, Durable Objects, R2</td></tr>
+            <tr><td>Bindings / secrets / vars</td><td><span class="tag2 gap">No platform bindings</span></td><td><span class="tag2 have">Yes</span></td></tr>
+            <tr><td>Non-HTTP triggers</td><td><span class="tag2 gap">No</span></td><td><span class="tag2 have">Yes</span> Cron, Queues, Email, Workflows</td></tr>
+            <tr><td>Observability</td><td>Rules-oriented preview and management</td><td>Logs, traces, analytics, Tail Workers, Logpush</td></tr>
+            <tr><td>Testing</td><td>Dashboard HTTP Preview; test matching expressions</td><td>Local development, Vitest, remote bindings, staging environments</td></tr>
+            <tr><td>Deployment</td><td>Dashboard, API, Terraform; no Version Management support</td><td>Wrangler, dashboard, API, Git integration, versions and gradual deployments</td></tr>
+            <tr><td>Pricing</td><td>No additional cost on Pro, Business, and Enterprise</td><td>Free tier, then usage-based Workers pricing</td></tr>
+            <tr><td>Best ownership model</td><td>Zone / CDN / security configuration team</td><td>Application / platform engineering team</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Current runtime limits</h3>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Limit</th><th>Snippets</th><th>Workers</th></tr></thead>
+          <tbody>
+            <tr><td>CPU / execution</td><td class="limit">5 ms</td><td>Free: 10 ms CPU; Paid: 30 seconds default, configurable up to 5 minutes</td></tr>
+            <tr><td>Memory</td><td class="limit">2 MB</td><td class="limit">128 MB per isolate</td></tr>
+            <tr><td>Package size</td><td class="limit">32 KB</td><td>Free: 3 MB; Paid: 10 MB</td></tr>
+            <tr><td>Subrequests</td><td>Pro: 2; Business: 3; Enterprise: 5</td><td>Much higher; depends on Workers plan and configured limits</td></tr>
+            <tr><td>Deployments per account/zone</td><td>Pro: 25; Business: 50; Enterprise: 300 per zone</td><td>Free: 100; Paid: 500 Workers per account</td></tr>
+          </tbody>
+        </table></div>
+        <div class="note"><b>Important:</b> Waiting for network I/O does not count as Workers CPU time. Snippets are intentionally constrained to small, predictable middleware. Always verify the latest values in the official limits pages before designing near a limit.</div>
+      </section>
+
+      <section id="snippet-cases">
+        <h2>3. Best use cases for Snippets</h2>
+        <div class="cards">
+          <div class="card"><div class="n">01</div><h3>Advanced header logic</h3><p>Set, remove, or compute request/response headers when a Transform Rule expression alone is not enough.</p></div>
+          <div class="card"><div class="n">02</div><h3>Complex redirects and rewrites</h3><p>Conditional URL normalization, locale routing, legacy migration behavior, or a response that needs JavaScript logic.</p></div>
+          <div class="card"><div class="n">03</div><h3>Origin routing and retry</h3><p>Select or retry an upstream based on request attributes or an upstream response, within the tight subrequest limit.</p></div>
+          <div class="card"><div class="n">04</div><h3>Stateless authentication</h3><p>Validate a JWT or enforce a small request gate without sessions, databases, or persistent state.</p></div>
+          <div class="card"><div class="n">05</div><h3>Cache customization</h3><p>Apply a small custom caching strategy or response transformation after Cache Rules need additional logic.</p></div>
+          <div class="card"><div class="n">06</div><h3>CDN code migration</h3><p>Replace lightweight VCL, EdgeWorkers, or appliance logic while keeping traffic selection in the Ruleset Engine.</p></div>
+          <div class="card"><div class="n">07</div><h3>A/B routing</h3><p>Choose a variant from a cookie, header, country, or request attribute when the decision is stateless.</p></div>
+          <div class="card"><div class="n">08</div><h3>Small custom responses</h3><p>Return a maintenance, denial, redirect, or diagnostic response for precisely matched traffic.</p></div>
+        </div>
+        <div class="warn"><b>Do not use Snippets</b> for session state, databases, long loops, heavy parsing, AI inference, image processing, large dependencies, many subrequests, scheduled jobs, or workloads that need rich logs and traces.</div>
+      </section>
+
+      <section id="worker-cases">
+        <h2>4. Best use cases for Workers</h2>
+        <div class="cards">
+          <div class="card"><div class="n">01</div><h3>APIs and full applications</h3><p>Build an API, backend-for-frontend, static/SSR site, webhook endpoint, or originless service.</p></div>
+          <div class="card"><div class="n">02</div><h3>State and storage</h3><p>Use KV, D1, R2, Durable Objects, or Hyperdrive for configuration, SQL data, objects, coordination, and database access.</p></div>
+          <div class="card"><div class="n">03</div><h3>Authentication systems</h3><p>Implement sessions, OAuth/OIDC callbacks, policy engines, token storage, and user-specific authorization.</p></div>
+          <div class="card"><div class="n">04</div><h3>Background processing</h3><p>Consume queues, run Cron Triggers, orchestrate Workflows, process webhooks, and retry asynchronous work.</p></div>
+          <div class="card"><div class="n">05</div><h3>AI and vector workloads</h3><p>Call Workers AI, Vectorize, AI Gateway, Browser Run, or external model providers.</p></div>
+          <div class="card"><div class="n">06</div><h3>Media and transformation</h3><p>Coordinate Images, Stream, document conversion, HTML rewriting, and larger payload processing.</p></div>
+          <div class="card"><div class="n">07</div><h3>Multi-service architecture</h3><p>Compose Workers with Service Bindings and isolate authentication, APIs, data, and frontend concerns.</p></div>
+          <div class="card"><div class="n">08</div><h3>Production software lifecycle</h3><p>Use local tests, secrets, environments, versions, gradual deployment, logs, traces, and CI/CD.</p></div>
+        </div>
+      </section>
+
+      <section id="decision">
+        <h2>5. Decision tree</h2>
+        <div class="decision"><div class="q">1. Can a native Cloudflare Rule do it?</div><div class="answer"><span class="yes">Yes:</span> use Redirect, Transform, Cache, Configuration, Origin, or WAF Rules. No code is simpler to operate. <span class="no">No:</span> continue.</div></div>
+        <div class="decision"><div class="q">2. Is it only lightweight request/response manipulation for rule-matched traffic?</div><div class="answer"><span class="yes">Yes:</span> continue toward a Snippet. <span class="no">No:</span> use a Worker.</div></div>
+        <div class="decision"><div class="q">3. Does it fit inside 5 ms CPU, 2 MB memory, 32 KB package size, and the plan's 2&ndash;5 subrequests?</div><div class="answer"><span class="yes">Yes:</span> continue. <span class="no">No:</span> use a Worker.</div></div>
+        <div class="decision"><div class="q">4. Does it need state, bindings, secrets, background triggers, application logs, or automated software releases?</div><div class="answer"><span class="yes">Yes:</span> use a Worker. <span class="no">No:</span> use a Snippet.</div></div>
+      </section>
+
+      <section id="examples">
+        <h2>6. Code comparison</h2>
+        <p>Both use the Workers runtime, so simple code looks familiar. The difference is the surrounding platform and operating model.</p>
+        <h3>Snippet: add a response header to rule-matched traffic</h3>
+        <pre>export default {
+  async fetch(request) {
+    const response = await fetch(request);
+    const modified = new Response(response.body, response);
+    modified.headers.set("x-edge-policy", "snippet");
+    return modified;
+  },
+};</pre>
+        <p>The associated Snippet rule decides exactly when this executes, for example only on a hostname and path prefix.</p>
+
+        <h3>Worker: feature flag backed by KV</h3>
+        <pre>export default {
+  async fetch(request, env) {
+    const enabled = await env.FLAGS.get("new-checkout");
+
+    if (enabled === "on") {
+      return env.CHECKOUT_V2.fetch(request);
+    }
+
+    return env.CHECKOUT_V1.fetch(request);
+  },
+};</pre>
+        <p>This requires bindings (<code>FLAGS</code>, <code>CHECKOUT_V1</code>, <code>CHECKOUT_V2</code>), persistent configuration, deployment configuration, and operational visibility &mdash; a Worker workload.</p>
+      </section>
+
+      <section id="deploy">
+        <h2>7. Deploy and operate</h2>
+        <div class="choice-grid">
+          <div class="choice snippet">
+            <div class="label">Snippet workflow</div>
+            <ol class="steps">
+              <li>Dashboard &rarr; zone &rarr; <strong>Rules &rarr; Snippets</strong>.</li>
+              <li>Create from a template or enter JavaScript.</li>
+              <li>Use HTTP Preview to test the request and output.</li>
+              <li>Create the Snippet rule expression that selects traffic.</li>
+              <li>Deploy directly or manage code + rule with Terraform/API.</li>
+            </ol>
+          </div>
+          <div class="choice worker">
+            <div class="label">Worker workflow</div>
+            <ol class="steps">
+              <li>Create a project with Wrangler or a framework.</li>
+              <li>Define routes, custom domains, bindings, vars, and secrets.</li>
+              <li>Develop locally and add unit/integration tests.</li>
+              <li>Deploy a version, validate logs and metrics, then roll traffic.</li>
+              <li>Operate with Workers Logs, traces, analytics, alerts, and CI/CD.</li>
+            </ol>
+          </div>
+        </div>
+        <pre>npm create cloudflare@latest -- workers-app
+npx wrangler dev
+npx wrangler deploy</pre>
+      </section>
+
+      <section id="migrate">
+        <h2>8. When to migrate</h2>
+        <h3>Worker &rarr; Snippet</h3>
+        <ul class="check">
+          <li>The Worker only changes headers, redirects, cache behavior, or origin routing.</li>
+          <li>It needs no bindings, storage, variables, secrets, or platform integrations.</li>
+          <li>The code and subrequests fit the Snippet limits.</li>
+          <li>Ruleset matching is a better control plane and eliminating usage billing matters.</li>
+        </ul>
+
+        <h3>Snippet &rarr; Worker</h3>
+        <ul class="check">
+          <li>The Snippet approaches CPU, memory, package, or subrequest limits.</li>
+          <li>The logic now needs KV, D1, R2, Durable Objects, Queues, AI, or Service Bindings.</li>
+          <li>The workload needs unit tests, local development, environments, rich logs, or deployment automation.</li>
+          <li>The logic is becoming an application instead of a small traffic rule.</li>
+        </ul>
+        <div class="note">Because both products share the Workers runtime, straightforward JavaScript usually migrates cleanly. The work is mainly moving traffic matching, bindings, configuration, deployment, and observability to the destination product.</div>
+      </section>
+
+      <section id="gotchas">
+        <h2>9. Gotchas and recommendations</h2>
+        <ul class="bullets">
+          <li><strong>Snippets are not available on Free zones.</strong> They are included at no additional cost on Pro, Business, and Enterprise.</li>
+          <li><strong>Version Management does not currently support Snippets.</strong> Use Terraform/API and source control for repeatable change management.</li>
+          <li><strong>Redirect hops consume subrequests.</strong> A Snippet fetch that follows one redirect uses two of the small subrequest allowance.</li>
+          <li><strong>Order matters.</strong> Snippets inherit modifications from earlier Rules products; multiple Snippets run sequentially and later logic can change prior results.</li>
+          <li><strong>Use proxied DNS.</strong> Snippets only apply when the domain or subdomain traffic passes through Cloudflare.</li>
+          <li><strong>A shared runtime does not mean equal capabilities.</strong> Snippets intentionally exclude bindings, state, Cron Triggers, and Workers observability.</li>
+          <li><strong>Avoid challenge loops.</strong> Test interactions between Snippet logic and challenge-producing security rules.</li>
+        </ul>
+        <div class="tip"><b>Default recommendation:</b> Rules first, Snippets second, Workers third. Move upward only when the simpler layer cannot meet the functional or operational requirement.</div>
+        <div class="note">Official references: <a href="https://developers.cloudflare.com/rules/snippets/when-to-use/">When to use Snippets vs Workers</a> &middot; <a href="https://developers.cloudflare.com/rules/snippets/">Snippets overview and limits</a> &middot; <a href="https://developers.cloudflare.com/workers/platform/limits/">Workers limits</a> &middot; <a href="https://developers.cloudflare.com/workers/">Workers docs</a>.</div>
+      </section>
+
+      <section class="disclaimer"><div class="box">
+        <b>Disclaimer:</b> Product availability and limits can change. Verify the linked Cloudflare documentation before production design. This guide was developed by Pimenta.fun LAB. <span class="risk">USE AT YOUR OWN RISK.</span>
+      </div></section>
+
+      <footer>
+        Pimenta lab &middot; <a href="https://www.pimenta.fun/#docs">back to documents</a>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
