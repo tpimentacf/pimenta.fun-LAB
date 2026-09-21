@@ -5,6 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>mTLS &mdash; Pimenta Lab</title>
   <link rel="stylesheet" href="/assets/lab.css" />
+  <style>
+    .cert-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+    .cert-workflow { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; margin: 18px 0; }
+    .cert-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+    .cert-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 11px; padding: 17px; min-width: 0; }
+    .cert-card h3 { margin: 0 0 8px; }
+    .cert-status { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
+    .cert-status.ready { border-color: rgba(54,211,153,.45); }
+    .cert-status.bad { border-color: rgba(255,107,107,.45); }
+    .cert-facts { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; margin-top: 10px; font-size: .82rem; }
+    .cert-facts b { color: var(--muted); font-weight: 500; }
+    .cert-facts span { color: var(--text); word-break: break-all; }
+    .privacy { color: var(--green); font-size: .8rem; margin-top: 8px; }
+    .browser-steps { margin: 10px 0 16px 20px; color: var(--muted); }
+    .browser-steps li { margin: 7px 0; }
+    .copy-result { color: var(--green); font-size: .8rem; margin-left: 8px; }
+    [hidden] { display: none !important; }
+    @media (max-width: 720px) {
+      .cert-grid { grid-template-columns: 1fr; }
+      .cert-facts { grid-template-columns: 1fr; gap: 2px; }
+    }
+  </style>
 </head>
 <body>
   <header class="lab">
@@ -28,7 +50,49 @@
     <h2>Test Leg&nbsp;1 live (client &rarr; Cloudflare)</h2>
     <p>Open the live mTLS inspector on the enforced hostname. Cloudflare requests a client certificate during the TLS
     handshake and only lets you through if it verifies against the lab CA.</p>
-    <p><a class="btn" href="https://mtls.pimenta.fun/">&#128272; Open mtls.pimenta.fun &rarr;</a></p>
+    <div class="cert-actions">
+      <button class="btn" id="chooseCert" type="button">&#128272; Choose client certificate &amp; test</button>
+      <a class="btn ghost" href="https://mtls.pimenta.fun/" target="_blank" rel="noopener">Open with an installed certificate &rarr;</a>
+    </div>
+
+    <div class="cert-workflow" id="certWorkflow" hidden>
+      <h2 style="margin-top:0;">Client-certificate test workflow</h2>
+      <p>Select your certificate locally. For a browser test, use a <code class="inline">.p12</code> or
+      <code class="inline">.pfx</code> file containing both the client certificate and its private key.</p>
+
+      <label for="certFile">Client certificate file</label>
+      <input id="certFile" type="file" accept=".p12,.pfx,.pem,.crt,.cer,application/x-pkcs12,application/pkix-cert" />
+      <div class="privacy">&#10003; The selected file stays in this browser. It is never uploaded or sent to pimenta.fun.</div>
+      <div class="cert-status" id="certStatus">Select a certificate to prepare the test.</div>
+
+      <div id="certReady" hidden>
+        <div class="cert-grid">
+          <div class="cert-card">
+            <h3>Browser test</h3>
+            <p>JavaScript cannot attach a file to a TLS handshake. Import the certificate first so the browser can present it when Cloudflare requests one.</p>
+            <ol class="browser-steps">
+              <li id="importInstruction">Import the PKCS#12 file into your browser or operating-system certificate store.</li>
+              <li>Confirm the imported certificate includes its private key and chains to the CA configured in Cloudflare.</li>
+              <li>Open the protected hostname and select the certificate if the browser prompts you.</li>
+            </ol>
+            <a class="btn" href="https://mtls.pimenta.fun/" target="_blank" rel="noopener">I imported it &mdash; open mtls.pimenta.fun &rarr;</a>
+          </div>
+
+          <div class="cert-card">
+            <h3>File-based CLI test</h3>
+            <p>For PEM certificates, optionally select the matching private key to generate the exact local command. File contents remain local.</p>
+            <label for="keyFile">Private key (PEM tests only)</label>
+            <input id="keyFile" type="file" accept=".key,.pem,application/x-pem-file" />
+            <pre id="curlCommand"></pre>
+            <button class="btn ghost" id="copyCurl" type="button">Copy curl command</button><span class="copy-result" id="copyResult"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="warn">
+      <strong>Browser security boundary:</strong> choosing a file on this page does not install it or give JavaScript access to TLS client-authentication APIs. The browser can only use a client certificate from its certificate store. The CLI can use selected files directly because <code class="inline">curl</code> owns the TLS connection.
+    </div>
     <div class="note">
       <strong>Without a valid client certificate you get a <code class="inline">403</code></strong> &mdash; Cloudflare blocks the
       unverified handshake at the edge. With your <code class="inline">client.p12</code> imported into the browser, the page renders
@@ -37,13 +101,12 @@
     </div>
 
     <h2>Live client-certificate check</h2>
-    <p>This calls a protected endpoint and shows what the edge reports about your client certificate.</p>
+    <p>This opens the protected mTLS inspector in JSON mode and shows what the edge reports about the certificate selected by your browser.</p>
     <button class="btn" id="check">Check my client certificate</button>
     <pre id="out">(not checked yet)</pre>
     <div class="note">
-      Browsers only send a client cert if one is installed and the site requests it. The check hits
-      <code class="inline">/cdn-cgi/access/get-identity</code> style data via a Worker route; in this lab it
-      returns the <code class="inline">cf-client-cert-*</code> headers if mTLS is configured.
+      Browsers only send a client certificate if one is installed and the requested hostname asks for it. The inspector
+      opens as a top-level navigation so the browser can perform client-certificate selection during the TLS handshake.
     </div>
 
     <h2>How to configure (Cloudflare)</h2>
@@ -74,22 +137,127 @@ curl -i --cert client.crt --key client.key https://mtls.pimenta.fun/</pre>
   </footer>
 
   <script>
-    document.getElementById("check").addEventListener("click", async () => {
-      const out = document.getElementById("out");
-      out.textContent = "Checking…";
-      try {
-        // Protected route returns client-cert details when mTLS is configured.
-        const res = await fetch("https://api.pimenta.fun/rest/user/whoami", { cache: "no-store" });
-        const lines = ["GET /rest/user/whoami -> " + res.status + " " + res.statusText, ""];
-        ["cf-client-cert-presented","cf-client-cert-verified","cf-client-cert-subject-dn","cf-ray"].forEach(h => {
-          const v = res.headers.get(h);
-          if (v) lines.push(h + ": " + v);
-        });
-        if (lines.length === 2) lines.push("(no client-certificate headers exposed — mTLS not configured on this route, or no cert presented)");
-        out.textContent = lines.join("\n");
-      } catch (e) {
-        out.textContent = "Error: " + e.message + "\nIf mTLS is enforced and you have no client cert, the request is expected to fail.";
+    const chooseCert = document.getElementById("chooseCert");
+    const certWorkflow = document.getElementById("certWorkflow");
+    const certFile = document.getElementById("certFile");
+    const keyFile = document.getElementById("keyFile");
+    const certStatus = document.getElementById("certStatus");
+    const certReady = document.getElementById("certReady");
+    const curlCommand = document.getElementById("curlCommand");
+    let selectedCert = null;
+
+    function shellPath(name) {
+      return '"/path/to/' + name.replace(/["\\$`]/g, "_") + '"';
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+      return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    }
+
+    async function fileSha256(file) {
+      const data = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", data);
+      return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    function certificateKind(file) {
+      const ext = file.name.toLowerCase().split(".").pop();
+      if (ext === "p12" || ext === "pfx") return "pkcs12";
+      if (ext === "pem" || ext === "crt" || ext === "cer") return "pem";
+      return "unknown";
+    }
+
+    function updateCurlCommand() {
+      if (!selectedCert) return;
+      const kind = certificateKind(selectedCert);
+      if (kind === "pkcs12") {
+        curlCommand.textContent = "curl -i --cert-type P12 --cert " + shellPath(selectedCert.name) + " https://mtls.pimenta.fun/";
+        return;
       }
+      const key = keyFile.files[0];
+      const keyPath = key ? shellPath(key.name) : '"/path/to/client.key"';
+      curlCommand.textContent = "curl -i --cert " + shellPath(selectedCert.name) + " --key " + keyPath + " https://mtls.pimenta.fun/";
+    }
+
+    chooseCert.addEventListener("click", () => {
+      certWorkflow.hidden = false;
+      certWorkflow.scrollIntoView({ behavior: "smooth", block: "start" });
+      certFile.click();
+    });
+
+    certFile.addEventListener("change", async () => {
+      selectedCert = certFile.files[0] || null;
+      certReady.hidden = true;
+      document.getElementById("copyResult").textContent = "";
+      if (!selectedCert) {
+        certStatus.className = "cert-status";
+        certStatus.textContent = "Select a certificate to prepare the test.";
+        return;
+      }
+
+      const kind = certificateKind(selectedCert);
+      if (kind === "unknown") {
+        certStatus.className = "cert-status bad";
+        certStatus.textContent = "Unsupported file type. Select .p12/.pfx for a browser import, or .pem/.crt/.cer for curl.";
+        return;
+      }
+      if (selectedCert.size > 5 * 1024 * 1024) {
+        certStatus.className = "cert-status bad";
+        certStatus.textContent = "The selected file exceeds 5 MB, which is unusual for a client certificate. Verify the file before continuing.";
+        return;
+      }
+
+      certStatus.className = "cert-status";
+      certStatus.textContent = "Calculating the local file SHA-256...";
+      try {
+        const hash = await fileSha256(selectedCert);
+        certStatus.className = "cert-status ready";
+        certStatus.innerHTML = "<strong>Certificate selected locally</strong>" +
+          '<div class="cert-facts"><b>File</b><span id="factName"></span><b>Format</b><span id="factFormat"></span><b>Size</b><span id="factSize"></span><b>File SHA-256</b><span id="factHash"></span></div>';
+        document.getElementById("factName").textContent = selectedCert.name;
+        document.getElementById("factFormat").textContent = kind === "pkcs12" ? "PKCS#12 (browser import + curl)" : "PEM/DER certificate (curl; bundle with its key for browser import)";
+        document.getElementById("factSize").textContent = formatBytes(selectedCert.size);
+        document.getElementById("factHash").textContent = hash.match(/.{1,2}/g).join(":");
+        certReady.hidden = false;
+
+        const ua = navigator.userAgent;
+        const instruction = document.getElementById("importInstruction");
+        if (kind !== "pkcs12") {
+          instruction.textContent = "For a browser test, bundle this certificate and its private key into PKCS#12 first: openssl pkcs12 -export -out client.p12 -inkey client.key -in client.crt";
+        } else if (/Firefox/.test(ua)) {
+          instruction.textContent = "Firefox: Settings > Privacy & Security > Certificates > View Certificates > Your Certificates > Import, then select the .p12/.pfx.";
+        } else if (/Macintosh|Mac OS X/.test(ua)) {
+          instruction.textContent = "macOS: double-click the selected .p12/.pfx in Finder, import it into the login Keychain, and enter its export password.";
+        } else if (/Windows/.test(ua)) {
+          instruction.textContent = "Windows: double-click the selected .p12/.pfx, choose Current User > Personal in Certificate Import Wizard, and enter its password.";
+        } else {
+          instruction.textContent = "Import the .p12/.pfx into your browser or operating-system certificate store, including its private key.";
+        }
+        updateCurlCommand();
+      } catch (error) {
+        certStatus.className = "cert-status bad";
+        certStatus.textContent = "Could not read the selected file locally: " + error.message;
+      }
+    });
+
+    keyFile.addEventListener("change", updateCurlCommand);
+
+    document.getElementById("copyCurl").addEventListener("click", async () => {
+      const result = document.getElementById("copyResult");
+      try {
+        await navigator.clipboard.writeText(curlCommand.textContent);
+        result.textContent = "Copied";
+      } catch (error) {
+        result.textContent = "Copy failed; select the command manually";
+      }
+    });
+
+    document.getElementById("check").addEventListener("click", () => {
+      const out = document.getElementById("out");
+      out.textContent = "Opening https://mtls.pimenta.fun/?format=json\nThe browser will use an installed client certificate during the new TLS handshake.";
+      window.open("https://mtls.pimenta.fun/?format=json", "_blank", "noopener");
     });
   </script>
 </body>
