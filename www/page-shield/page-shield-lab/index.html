@@ -12,7 +12,7 @@
     main { padding-left: 54px; padding-right: 54px; }
     .hero { max-width: 1040px; }
     .demo-nav {
-      display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px;
+      display: grid; grid-template-columns: repeat(3, minmax(210px, 1fr)); gap: 12px;
       margin: 0 0 42px;
     }
     .demo-nav a {
@@ -127,6 +127,17 @@
     .stash { display: none; margin-top: 12px; background: rgba(255,107,107,0.07); border: 1px solid rgba(255,107,107,0.35); border-radius: 9px; padding: 10px 14px; font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; color: #ffb4b4; }
     .exfil-line { display: none; margin-top: 10px; text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; color: var(--accent2); }
     .blocked-note { display:none; }
+    .action-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .test-result { border: 1px solid var(--border); border-radius: 10px; padding: 15px 16px; min-height: 88px; }
+    .test-result.idle { background: var(--panel2); color: var(--muted); }
+    .test-result.testing { background: rgba(75,159,255,.08); border-color: rgba(75,159,255,.35); }
+    .test-result.blocked { background: rgba(63,185,80,.08); border-color: rgba(63,185,80,.4); }
+    .test-result.reported { background: rgba(246,130,31,.09); border-color: rgba(246,130,31,.4); }
+    .test-result.failed { background: rgba(248,81,73,.08); border-color: rgba(248,81,73,.35); }
+    .test-result b { display: block; margin-bottom: 5px; }
+    .test-result p { color: var(--muted); font-size: 14px; margin: 0; }
+    .violation-details { display: none; margin-top: 16px; }
+    .violation-details pre { max-height: 220px; white-space: pre-wrap; word-break: break-word; }
     .toc-status { margin: 18px 10px 0; padding: 12px; border-radius: 9px; background: rgba(63,185,80,.08); border: 1px solid rgba(63,185,80,.3); }
     .toc-status b { display: block; color: var(--green); font-size: 12px; margin-bottom: 3px; }
     .toc-status span { display: block; color: var(--muted); font-size: 11px; line-height: 1.45; }
@@ -141,13 +152,14 @@
       <a class="home" href="https://www.pimenta.fun/page-shield-guide/">&rarr; Implementation guide</a>
       <h2>Demo workspace</h2>
       <a href="#probe">1. CSP header probe</a>
-      <a href="#inventory">2. Live resource inventory</a>
-      <a href="#magecart">3. Magecart simulation</a>
-      <a href="#features">4. Feature map</a>
-      <a href="#csp-modes">5. CSP log vs enforce</a>
+      <a href="#external-script">2. External script block</a>
+      <a href="#inventory">3. Live resource inventory</a>
+      <a href="#magecart">4. Magecart simulation</a>
+      <a href="#features">5. Feature map</a>
+      <a href="#csp-modes">6. CSP log vs enforce</a>
       <div class="toc-status">
         <b>Run in order</b>
-        <span>Probe &rarr; inventory &rarr; attack &rarr; enforce. Each section is independent and safe to reset.</span>
+        <span>Probe &rarr; external script &rarr; inventory &rarr; attack &rarr; enforce. Each section is independent and safe to reset.</span>
       </div>
     </nav>
     <main>
@@ -156,8 +168,8 @@
         <span class="pill">Client-side Security Lab</span>
         <h1>Page Shield <span class="grad">Interactive Lab</span></h1>
         <p class="lead">
-          A structured workspace for every Page Shield demo: live resource inventory, CSP header verification,
-          and a full Magecart attack path from script injection through ML detection, exfiltration, and enforcement.
+          A structured workspace for every Page Shield demo: CSP header verification, a real external-script block test,
+          live resource inventory, and a full Magecart attack path through detection, exfiltration, and enforcement.
         </p>
         <p>
           Formerly <strong>Page Shield</strong>, now <strong>Client-side security</strong> in the Cloudflare dashboard.
@@ -167,10 +179,11 @@
 
       <div class="demo-nav" aria-label="Lab demos">
         <a href="#probe"><b>Demo 01 &middot; Live</b>CSP header probe<span>Detect log or enforce policies at the edge.</span></a>
-        <a href="#inventory"><b>Demo 02 &middot; Live</b>Resource inventory<span>Inspect scripts, connections, and cookies.</span></a>
-        <a href="#magecart"><b>Demo 03 &middot; Simulation</b>Magecart attack<span>Walk compromise, detection, and blocking.</span></a>
-        <a href="#features"><b>Reference 04</b>Feature map<span>Match capabilities to plan availability.</span></a>
-        <a href="#csp-modes"><b>Reference 05</b>CSP modes<span>Compare report-only and enforcement.</span></a>
+        <a href="#external-script"><b>Demo 02 &middot; Live</b>External script block<span>Load a real non-allowlisted script and capture CSP evidence.</span></a>
+        <a href="#inventory"><b>Demo 03 &middot; Live</b>Resource inventory<span>Inspect scripts, connections, and cookies.</span></a>
+        <a href="#magecart"><b>Demo 04 &middot; Simulation</b>Magecart attack<span>Walk compromise, detection, and blocking.</span></a>
+        <a href="#features"><b>Reference 05</b>Feature map<span>Match capabilities to plan availability.</span></a>
+        <a href="#csp-modes"><b>Reference 06</b>CSP modes<span>Compare report-only and enforcement.</span></a>
       </div>
 
     <!-- ========================= LIVE CSP PROBE ========================= -->
@@ -198,10 +211,50 @@
       </div>
     </section>
 
+    <section class="demo-section" id="external-script">
+      <div class="demo-head">
+        <span class="num">02</span>
+        <div>
+          <h2>External script CSP block test</h2>
+          <p>Attempt to load a real external JavaScript file that should not be in the Client-side security CSP allowlist, then capture the browser's CSP decision.</p>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="workspace">
+          <div class="workspace-title">Test configuration</div>
+          <label for="cspScriptUrl">External script URL</label>
+          <input id="cspScriptUrl" type="url" value="https://unpkg.com/axios@1.7.9/dist/axios.min.js" spellcheck="false" />
+          <p class="muted-small" style="margin-top:10px;">The default is a valid pinned file on <code>unpkg.com</code>. Keep that host out of <code>script-src</code> so an enforce policy blocks it. If your policy already permits it, replace it with another valid HTTPS script host.</p>
+          <div class="action-row">
+            <button class="btn" id="loadExternalScript" type="button">Load external script</button>
+            <button class="btn ghost" id="resetExternalScript" type="button">Reset test</button>
+          </div>
+        </div>
+        <div class="workspace">
+          <div class="workspace-title">Browser CSP decision</div>
+          <div class="test-result idle" id="cspScriptResult" aria-live="polite">
+            <b>Ready to test</b>
+            <p>Click &ldquo;Load external script&rdquo;. A true block produces a <code>securitypolicyviolation</code> event with disposition <code>enforce</code>.</p>
+          </div>
+          <div class="violation-details" id="cspViolationDetails">
+            <table class="mini">
+              <tr><th>Blocked URI</th><td class="mono" id="cspBlockedUri"></td></tr>
+              <tr><th>Effective directive</th><td class="mono" id="cspDirective"></td></tr>
+              <tr><th>Disposition</th><td class="mono" id="cspDisposition"></td></tr>
+              <tr><th>Source</th><td class="mono" id="cspSource"></td></tr>
+            </table>
+            <div class="workspace-title">Original policy reported by the browser</div>
+            <pre id="cspOriginalPolicy"></pre>
+          </div>
+        </div>
+      </div>
+      <div class="note"><strong>Expected result:</strong> <em>Blocked by enforce CSP</em>. In report-only mode, the browser reports the violation but still loads the script. With no policy, or if <code>unpkg.com</code> is allowlisted, it loads without a CSP event. The lab reports each case separately.</div>
+    </section>
+
     <!-- ========================= LIVE INVENTORY ========================= -->
     <section class="demo-section" id="inventory">
       <div class="demo-head">
-        <span class="num">02</span>
+        <span class="num">03</span>
         <div>
           <h2>Live resource inventory</h2>
           <p>Generate and inspect the scripts, connections, and cookies that Page Shield learns from visitor traffic.</p>
@@ -247,7 +300,7 @@
     <!-- ========================= MAGECART SIMULATION ========================= -->
     <section class="demo-section" id="magecart">
       <div class="demo-head">
-        <span class="num">03</span>
+        <span class="num">04</span>
         <div>
           <h2>Magecart attack simulation</h2>
           <p>Operate the attack timeline from a fake checkout and watch the Page Shield detection and enforcement state change.</p>
@@ -330,7 +383,7 @@
     <!-- ========================= WHAT PAGE SHIELD MONITORS ========================= -->
     <section class="demo-section" id="features">
       <div class="demo-head">
-        <span class="num">04</span>
+        <span class="num">05</span>
         <div>
           <h2>Feature map and plan availability</h2>
           <p>Use this reference to explain which part of each demo maps to the base product, Business+, or Advanced.</p>
@@ -353,7 +406,7 @@
 
     <section class="demo-section" id="csp-modes">
       <div class="demo-head">
-        <span class="num">05</span>
+        <span class="num">06</span>
         <div>
           <h2>CSP log vs enforce modes</h2>
           <p>Choose report-only while tuning the allowlist; move to enforcement only after violations are understood.</p>
@@ -392,6 +445,11 @@
     var EVIL_SRC = 'https://cdn.evil-tracker.invalid/skimmer.min.js';
     var EVIL_EXFIL = 'https://exfil.evil-tracker.invalid/collect';
     var skimmerScript = null;
+    var cspTestScript = null;
+    var cspTestUrl = '';
+    var cspTestPending = false;
+    var cspViolationSeen = false;
+    var cspTestTimer = null;
     var connCount = 0;
     var threats = 0;
     var startTs = Date.now();
@@ -406,7 +464,7 @@
       el.appendChild(d);
       el.scrollTop = el.scrollHeight;
     }
-    function eb(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+    function eb(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 
     function hosts(u) { try { return new URL(u, location.href).href; } catch (e) { return u || '(inline)'; } }
 
@@ -418,10 +476,20 @@
         if (!sc.src || seen[sc.src]) return;
         seen[sc.src] = 1;
         var evil = sc.src.indexOf('evil-tracker') !== -1;
+        var cspTest = sc.dataset.cspTest === 'true';
+        var cspState = sc.dataset.cspState || '';
+        var unknown = evil || cspTest;
+        var badgeClass = cspState === 'blocked' ? 'new blocked' : (unknown ? 'new' : 'ok');
+        var badgeLabel = evil ? '&#9888; New / unknown' : 'Loaded';
+        if (cspTest) {
+          badgeLabel = cspState === 'blocked' ? '&#10003; Blocked by CSP'
+            : (cspState === 'reported' ? '&#9888; Reported only'
+              : (cspState === 'loaded' ? '&#9888; Loaded / allowed' : 'CSP test'));
+        }
         var row = document.createElement('div');
         row.className = 'script-row';
         row.innerHTML = '<span class="u">' + eb(sc.src) + '</span>' +
-          '<span class="badge2 ' + (evil ? 'new' : 'ok') + '">' + (evil ? '&#9888; New / unknown' : 'Loaded') + '</span>';
+          '<span class="badge2 ' + badgeClass + '">' + badgeLabel + '</span>';
         list.appendChild(row);
       });
       document.getElementById('mScripts').textContent = Object.keys(seen).length;
@@ -493,6 +561,126 @@
       }).catch(function (e) {
         out.innerHTML = '<div class="warn">Probe failed: ' + eb(e.message) + '</div>';
       });
+    });
+
+    function setCspTestResult(state, title, detail) {
+      var out = document.getElementById('cspScriptResult');
+      out.className = 'test-result ' + state;
+      out.innerHTML = '<b>' + eb(title) + '</b><p>' + detail + '</p>';
+    }
+
+    function clearCspViolationDetails() {
+      document.getElementById('cspViolationDetails').style.display = 'none';
+      ['cspBlockedUri', 'cspDirective', 'cspDisposition', 'cspSource', 'cspOriginalPolicy'].forEach(function (id) {
+        document.getElementById(id).textContent = '';
+      });
+    }
+
+    function resetExternalScript(showReady) {
+      clearTimeout(cspTestTimer);
+      if (cspTestScript) cspTestScript.remove();
+      cspTestScript = null;
+      cspTestUrl = '';
+      cspTestPending = false;
+      cspViolationSeen = false;
+      clearCspViolationDetails();
+      renderRealScripts();
+      if (showReady) {
+        setCspTestResult('idle', 'Ready to test', 'Click &ldquo;Load external script&rdquo;. A true block produces a <code>securitypolicyviolation</code> event with disposition <code>enforce</code>.');
+      }
+    }
+
+    document.addEventListener('securitypolicyviolation', function (event) {
+      if (!cspTestPending || !cspTestUrl) return;
+      var target;
+      try { target = new URL(cspTestUrl); } catch (e) { return; }
+      var blocked = event.blockedURI || '';
+      var source = event.sourceFile || '';
+      if (blocked.indexOf(target.origin) !== 0 && source.indexOf(target.origin) !== 0) return;
+
+      cspViolationSeen = true;
+      var enforced = event.disposition === 'enforce';
+      if (enforced) {
+        cspTestPending = false;
+        clearTimeout(cspTestTimer);
+      }
+      if (cspTestScript) cspTestScript.dataset.cspState = enforced ? 'blocked' : 'reported';
+      setCspTestResult(
+        enforced ? 'blocked' : 'reported',
+        enforced ? 'Blocked by Client-side security CSP' : 'CSP violation reported, but not blocked',
+        enforced
+          ? 'The browser refused to execute <code>' + eb(cspTestUrl) + '</code>. This is a verified CSP enforcement result.'
+          : 'The policy is report-only. The browser reported <code>' + eb(cspTestUrl) + '</code> to Cloudflare but still permits it to execute.'
+      );
+
+      document.getElementById('cspBlockedUri').textContent = blocked || '(not supplied)';
+      document.getElementById('cspDirective').textContent = event.effectiveDirective || event.violatedDirective || '(not supplied)';
+      document.getElementById('cspDisposition').textContent = event.disposition || '(not supplied)';
+      document.getElementById('cspSource').textContent = source
+        ? source + (event.lineNumber ? ':' + event.lineNumber + ':' + event.columnNumber : '')
+        : '(not supplied)';
+      document.getElementById('cspOriginalPolicy').textContent = event.originalPolicy || '(not supplied)';
+      document.getElementById('cspViolationDetails').style.display = 'block';
+      renderRealScripts();
+    });
+
+    document.getElementById('loadExternalScript').addEventListener('click', function () {
+      resetExternalScript(false);
+      var raw = document.getElementById('cspScriptUrl').value.trim();
+      var parsed;
+      try { parsed = new URL(raw); } catch (e) {
+        setCspTestResult('failed', 'Invalid script URL', 'Enter a complete HTTPS URL to a JavaScript file.');
+        return;
+      }
+      if (parsed.protocol !== 'https:') {
+        setCspTestResult('failed', 'HTTPS URL required', 'Use HTTPS so mixed-content blocking cannot be confused with CSP enforcement.');
+        return;
+      }
+
+      cspTestUrl = parsed.href;
+      cspTestPending = true;
+      setCspTestResult('testing', 'Loading external script...', 'Appending <code>&lt;script src="' + eb(cspTestUrl) + '"&gt;</code> and waiting for the browser CSP decision.');
+
+      var testScript = document.createElement('script');
+      cspTestScript = testScript;
+      testScript.src = cspTestUrl;
+      testScript.async = true;
+      testScript.dataset.cspTest = 'true';
+      testScript.dataset.cspState = 'testing';
+      testScript.onload = function () {
+        if (cspTestScript !== testScript) return;
+        clearTimeout(cspTestTimer);
+        cspTestPending = false;
+        testScript.dataset.cspState = cspViolationSeen ? 'reported' : 'loaded';
+        if (!cspViolationSeen) {
+          setCspTestResult('failed', 'External script loaded - not blocked', 'No CSP violation was observed. The zone has no enforce policy, or <code>' + eb(parsed.origin) + '</code> is already allowed by <code>script-src</code>.');
+        }
+        renderRealScripts();
+      };
+      testScript.onerror = function () {
+        if (cspTestScript !== testScript) return;
+        clearTimeout(cspTestTimer);
+        setTimeout(function () {
+          if (cspTestScript !== testScript) return;
+          cspTestPending = false;
+          if (!cspViolationSeen) {
+            setCspTestResult('failed', 'Script failed without CSP evidence', 'The browser did not emit a matching CSP violation. Check DevTools Network for DNS, TLS, CORS, or server errors; this result does not prove CSP blocking.');
+          }
+          renderRealScripts();
+        }, 50);
+      };
+      document.head.appendChild(testScript);
+      renderRealScripts();
+
+      cspTestTimer = setTimeout(function () {
+        if (!cspTestPending) return;
+        cspTestPending = false;
+        setCspTestResult('failed', 'No browser decision after 8 seconds', 'Inspect DevTools Network and Console. No matching CSP violation or successful load was observed.');
+      }, 8000);
+    });
+
+    document.getElementById('resetExternalScript').addEventListener('click', function () {
+      resetExternalScript(true);
     });
 
     var SIM_SCRIPTS = [
