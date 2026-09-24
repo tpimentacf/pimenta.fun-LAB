@@ -21,6 +21,7 @@
 //   --verbose, -v     print a response-body snippet for every test
 //   --no-color        disable ANSI colours
 //   --timeout=MS      per-request timeout (default 10000)
+//   --api-key=VALUE   api_key header value sent on every request (default 12345)
 //   --help, -h        show this help
 //
 // Exit code: 0 if all tests pass, 1 otherwise.
@@ -38,6 +39,7 @@ const POS = argv.filter((a) => !a.startsWith("-"));
 const BASE = (POS[0] || process.env.API_BASE || "https://api.pimenta.fun").replace(/\/+$/, "");
 const EMAIL = POS[1] || process.env.API_EMAIL || "admin@juice-sh.op";
 const PASSWORD = POS[2] || process.env.API_PASSWORD || "admin123";
+const API_KEY = (argv.find((a) => a.startsWith("--api-key=")) || "").slice(10) || process.env.API_KEY || "12345";
 const JSON_OUT = FLAGS.has("--json");
 const VERBOSE = FLAGS.has("--verbose") || FLAGS.has("-v");
 const TIMEOUT = Number((argv.find((a) => a.startsWith("--timeout=")) || "").split("=")[1]) || 10000;
@@ -53,7 +55,7 @@ const state = {}; // shared captures (token, ids, ...)
 // ---- HTTP helper ----------------------------------------------------------
 async function req(method, path, { token, body, headers = {} } = {}) {
   const url = BASE + path;
-  const opts = { method, headers: { Accept: "application/json", ...headers } };
+  const opts = { method, headers: { Accept: "application/json", ...headers, api_key: API_KEY } };
   if (token) opts.headers.Authorization = "Bearer " + token;
   if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
@@ -129,6 +131,7 @@ async function run() {
     console.log(`${C.b}Pimenta API functional test${C.n}`);
     console.log(`Target : ${BASE}`);
     console.log(`As     : ${EMAIL}`);
+    console.log(`Header : api_key=${API_KEY}`);
     console.log("------------------------------------------------------------");
   }
 
@@ -212,7 +215,7 @@ async function run() {
   const avg = results.length ? Math.round(totalMs / results.length) : 0;
 
   if (JSON_OUT) {
-    console.log(JSON.stringify({ base: BASE, email: EMAIL, passed, failed, total: results.length, avgMs: avg, results }, null, 2));
+    console.log(JSON.stringify({ base: BASE, email: EMAIL, apiKey: API_KEY, passed, failed, total: results.length, avgMs: avg, results }, null, 2));
   } else {
     console.log("------------------------------------------------------------");
     const head = failed === 0 ? `${C.g}${C.b}ALL PASSED${C.n}` : `${C.r}${C.b}${failed} FAILED${C.n}`;
@@ -232,12 +235,14 @@ Defaults:
   BASE_URL  https://api.pimenta.fun   (or $API_BASE)
   EMAIL     admin@juice-sh.op         (or $API_EMAIL)
   PASSWORD  admin123                  (or $API_PASSWORD)
+  API_KEY   12345                     (or $API_KEY)
 
 Flags:
   --json          machine-readable JSON report
   --verbose, -v   show a body snippet for every test
   --no-color      disable ANSI colours
   --timeout=MS    per-request timeout (default 10000)
+  --api-key=VALUE api_key header value sent on every request
   --help, -h      this help
 
 Exit code 0 = all passed, 1 = one or more failed.`;
