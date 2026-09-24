@@ -22,6 +22,7 @@
 //   --no-color        disable ANSI colours
 //   --timeout=MS      per-request timeout (default 10000)
 //   --api-key=VALUE   api_key header value sent on every request (default 12345)
+//   --token=JWT       fallback Bearer token for authenticated requests
 //   --help, -h        show this help
 //
 // Exit code: 0 if all tests pass, 1 otherwise.
@@ -40,6 +41,7 @@ const BASE = (POS[0] || process.env.API_BASE || "https://api.pimenta.fun").repla
 const EMAIL = POS[1] || process.env.API_EMAIL || "admin@juice-sh.op";
 const PASSWORD = POS[2] || process.env.API_PASSWORD || "admin123";
 const API_KEY = (argv.find((a) => a.startsWith("--api-key=")) || "").slice(10) || process.env.API_KEY || "12345";
+const PROVIDED_TOKEN = (argv.find((a) => a.startsWith("--token=")) || "").slice(8) || process.env.API_TOKEN || "";
 const JSON_OUT = FLAGS.has("--json");
 const VERBOSE = FLAGS.has("--verbose") || FLAGS.has("-v");
 const TIMEOUT = Number((argv.find((a) => a.startsWith("--timeout=")) || "").split("=")[1]) || 10000;
@@ -165,7 +167,10 @@ async function run() {
   const login = await check("login (ok)", "POST", "/rest/user/login", { body: { email: EMAIL, password: PASSWORD } }, (r) => {
     status(r, 200); const t = field(r, "authentication.token"); if (!t) throw new Error("empty token");
   });
-  state.token = get(login.json, "authentication.token") || "";
+  const loginToken = get(login.json, "authentication.token") || "";
+  state.token = loginToken || PROVIDED_TOKEN;
+  state.tokenSource = loginToken ? "login" : (PROVIDED_TOKEN ? "provided" : "none");
+  if (!JSON_OUT) console.log(`      JWT source: ${state.tokenSource}`);
 
   section("Auth required — must reject anonymous (401)");
   await check("whoami (anon)", "GET", "/rest/user/whoami", {}, (r) => status(r, 401));
@@ -215,7 +220,7 @@ async function run() {
   const avg = results.length ? Math.round(totalMs / results.length) : 0;
 
   if (JSON_OUT) {
-    console.log(JSON.stringify({ base: BASE, email: EMAIL, apiKey: API_KEY, passed, failed, total: results.length, avgMs: avg, results }, null, 2));
+    console.log(JSON.stringify({ base: BASE, email: EMAIL, apiKey: API_KEY, tokenSource: state.tokenSource, passed, failed, total: results.length, avgMs: avg, results }, null, 2));
   } else {
     console.log("------------------------------------------------------------");
     const head = failed === 0 ? `${C.g}${C.b}ALL PASSED${C.n}` : `${C.r}${C.b}${failed} FAILED${C.n}`;
@@ -236,6 +241,7 @@ Defaults:
   EMAIL     admin@juice-sh.op         (or $API_EMAIL)
   PASSWORD  admin123                  (or $API_PASSWORD)
   API_KEY   12345                     (or $API_KEY)
+  API_TOKEN unset                     (optional Bearer JWT fallback)
 
 Flags:
   --json          machine-readable JSON report
@@ -243,6 +249,7 @@ Flags:
   --no-color      disable ANSI colours
   --timeout=MS    per-request timeout (default 10000)
   --api-key=VALUE api_key header value sent on every request
+  --token=JWT     fallback Bearer token for authenticated requests
   --help, -h      this help
 
 Exit code 0 = all passed, 1 = one or more failed.`;
