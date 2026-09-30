@@ -1,0 +1,19 @@
+www/page-shield/page-shield-origin/origin-demo.js
+  s_45d7e19da6ce2d::t_76e3d9c784d942 1-412
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "713dcb0abd622d52d01a73fa8aca6bcd05671db2",
+  "prompts": {},
+  "sessions": {
+    "s_45d7e19da6ce2d": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10621ba67ffeb0finUXEc7EfXx",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "tpimenta <tpimenta@cloudflare.com>"
+    }
+  }
+}
