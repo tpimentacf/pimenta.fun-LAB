@@ -1,0 +1,19 @@
+www/page-shield-guide/index.html
+  s_45d7e19da6ce2d::t_bc30a44d6be01b 32,40-41,129,134-152,154,162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3f1bd8bbe0e3b7f0395f7ed20011a5aedca8878e",
+  "prompts": {},
+  "sessions": {
+    "s_45d7e19da6ce2d": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10621ba67ffeb0finUXEc7EfXx",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "tpimenta <tpimenta@cloudflare.com>"
+    }
+  }
+}
