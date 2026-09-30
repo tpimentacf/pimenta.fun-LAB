@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Page Shield Origin Demo &mdash; Pimenta Lab</title>
+  <meta name="description" content="A page served from the Apache origin that loads scripts, opens connections and sets cookies, then explains what Cloudflare Page Shield (Client-side security) observes for each one." />
+  <link rel="stylesheet" href="/assets/docs.css" />
+
+  <!-- Inline script: captures the CSP report-only violations the browser sends to Cloudflare.
+       It runs before any external script so no report is missed. Inline code is NOT listed by
+       Page Shield because the monitoring policy allows 'unsafe-inline'. -->
+  <script>
+    window.__psViolations = [];
+    document.addEventListener('securitypolicyviolation', function (e) {
+      window.__psViolations.push({
+        t: new Date().toISOString().slice(11, 19),
+        directive: e.effectiveDirective || e.violatedDirective,
+        blocked: e.blockedURI,
+        disposition: e.disposition,
+        policy: e.originalPolicy,
+        source: e.sourceFile,
+        line: e.lineNumber
+      });
+      if (window.__psOnViolation) window.__psOnViolation();
+    });
+  </script>
+
+  <!-- Third-party scripts (static tags in the HTML served by the origin) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js" defer></script>
+  <!-- First-party script (served by Apache from this folder) -->
+  <script src="/page-shield/page-shield-origin/origin-demo.js" defer></script>
+
+  <style>
+    .layout { max-width: 1400px; }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0; }
+    .metric { background: var(--panel); border: 1px solid var(--border); border-radius: 11px; padding: 14px 16px; }
+    .metric .n { font-size: 1.7rem; font-weight: 700; color: var(--accent); font-family: var(--mono); }
+    .metric .l { color: var(--muted); font-size: 0.82rem; }
+    .status-box { background: var(--panel); border: 1px solid var(--border); border-radius: 11px; padding: 12px 16px; margin: 12px 0; font-size: 0.92rem; }
+    .table-wrap { overflow-x: auto; margin: 12px 0; }
+    .table-wrap table { min-width: 760px; }
+    td.mono, span.mono { font-family: var(--mono); font-size: 0.78rem; word-break: break-all; color: #d7e2f7; }
+    tr.hl td { background: rgba(246,130,31,.07); }
+    .action-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+    #cookieNote { display: none; }
+    .toc-sub { margin-top: 14px; }
+    @media (max-width: 820px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#tests">&larr; Configuration tests</a>
+      <a class="home" href="https://www.pimenta.fun/page-shield/page-shield-lab/">&rarr; Interactive lab</a>
+      <a class="home" href="https://www.pimenta.fun/page-shield-guide/">&rarr; Implementation guide</a>
+      <h2>Contents</h2>
+      <a href="#served">0. How this page is served</a>
+      <a href="#connection">1. Request &amp; connection</a>
+      <a href="#scripts">2. Scripts</a>
+      <a href="#connections">3. Connections</a>
+      <a href="#cookies">4. Cookies</a>
+      <a href="#reports">5. CSP reports sent</a>
+      <a href="#fields">6. Page Shield fields</a>
+      <a href="#verify">7. Verify in the dashboard</a>
+    </nav>
+
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#tests">Tests</a> / Page Shield / Origin</div>
+        <span class="pill">Client-side Security &middot; Origin demo</span>
+        <h1>Page Shield <span class="grad">Origin Demo</span></h1>
+        <p class="lead">This page is plain static HTML served by the Apache origin, with no Worker in the path. It deliberately loads scripts, opens connections, and sets cookies. Each one is listed below with what Cloudflare Page Shield (now <em>Client-side security</em>) records for it, alongside what your browser actually did on this visit.</p>
+      </header>
+
+      <div class="metrics">
+        <div class="metric"><div class="n" id="mScripts">0</div><div class="l">External scripts</div></div>
+        <div class="metric"><div class="n" id="mConns">0</div><div class="l">Monitored connections</div></div>
+        <div class="metric"><div class="n" id="mCookies">0</div><div class="l">Cookies on this page</div></div>
+        <div class="metric"><div class="n" id="mReports">0</div><div class="l">CSP reports this view</div></div>
+      </div>
+      <div class="status-box" id="sampleStatus">Waiting for the browser&hellip;</div>
+      <div class="action-row">
+        <button class="btn" id="rerunConns" type="button">Re-run connections</button>
+        <button class="btn ghost" id="openWs" type="button">Open WebSocket</button>
+        <button class="btn ghost" id="refreshAll" type="button">Refresh inventory</button>
+      </div>
+
+      <section id="served">
+        <h2>0. How this page is served and observed</h2>
+        <div class="flow">
+          <div class="flow-row">
+            <div class="box"><div class="t">Browser</div><div class="s">runs scripts, opens connections, stores cookies</div></div>
+            <div class="arrow">&rarr;</div>
+            <div class="box accent"><div class="t">Cloudflare edge</div><div class="s">adds CSP report-only monitoring header to a sample of HTML responses; sees Set-Cookie and Cookie headers</div></div>
+            <div class="arrow">&rarr;</div>
+            <div class="box green"><div class="t">Apache origin</div><div class="s">static index.html + origin-demo.js; .htaccess sets 4 cookies</div></div>
+          </div>
+          <div class="flow-row">
+            <div class="box"><div class="t">Browser</div><div class="s">each external script or connection violates the report-only policy</div></div>
+            <div class="arrow">&rarr;</div>
+            <div class="box accent"><div class="t">csp-reporting.cloudflare.com</div><div class="s">/cdn-cgi/script_monitor/report (nothing is blocked)</div></div>
+            <div class="arrow">&rarr;</div>
+            <div class="box accent"><div class="t">Dashboard</div><div class="s">Security &rarr; Web assets &rarr; Client-side resources</div></div>
+          </div>
+        </div>
+        <p>The monitoring header Cloudflare adds looks like this:</p>
+        <pre>content-security-policy-report-only: script-src 'unsafe-inline' 'unsafe-eval'; connect-src 'none'; report-uri https://csp-reporting.cloudflare.com/cdn-cgi/script_monitor/report?...</pre>
+        <ul class="check">
+          <li><b>script-src without 'self' or hosts</b> &mdash; every external script (first- or third-party) triggers a report, which is how the script inventory is built. Inline code is allowed, so it is not listed.</li>
+          <li><b>connect-src 'none'</b> &mdash; every <code>fetch</code>, XHR, <code>sendBeacon</code>, and WebSocket triggers a report, including same-origin ones. Images, styles, and iframes are outside this policy.</li>
+          <li><b>Report-only</b> &mdash; nothing is blocked. Blocking comes only from your content security <em>allow</em> rules (<code>content-security-policy</code>).</li>
+          <li><b>Cookies</b> are not reported by the browser. Cloudflare reads them from HTTP traffic: <code>Set-Cookie</code> from the origin (First-party) and <code>Cookie</code> sent by the browser (Unknown if not set by the origin).</li>
+        </ul>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Feature</th><th>Free / Pro</th><th>Business / Enterprise</th><th>Client-Side Security Advanced</th></tr></thead>
+          <tbody>
+            <tr><td>Script monitoring</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td>Connection and cookie monitoring, page attribution, new resource alerts</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td>Malicious script/connection detection, code change detection, advanced cookie fields</td><td>No</td><td>No</td><td>Yes</td></tr>
+            <tr><td>Content security rules (positive blocking), Logpush</td><td>No</td><td>No</td><td>Yes</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="connection">
+        <h2>1. Your request and connection</h2>
+        <p>Read from your browser plus two same-origin connections made by <code>origin-demo.js</code>. Those two requests also show up as Page Shield connections.</p>
+        <h3>Navigation</h3>
+        <div class="table-wrap"><table class="ref"><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody id="navBody"><tr><td colspan="2">loading&hellip;</td></tr></tbody></table></div>
+        <h3>Cloudflare edge view (<code>/cdn-cgi/trace</code>)</h3>
+        <div class="table-wrap"><table class="ref"><thead><tr><th>Key</th><th>Value</th><th>Meaning</th></tr></thead><tbody id="traceBody"><tr><td colspan="3">loading&hellip;</td></tr></tbody></table></div>
+        <h3>Response headers of this page (HEAD request)</h3>
+        <div class="status-box" id="headNote">loading&hellip;</div>
+        <div class="table-wrap"><table class="ref"><thead><tr><th>Header</th><th>Value</th><th>Why it is here</th></tr></thead><tbody id="headersBody"><tr><td colspan="3">loading&hellip;</td></tr></tbody></table></div>
+        <div class="note"><b>Sampling:</b> the HEAD response is a separate request and is sampled on its own. It can include or omit the monitoring header regardless of what this page view received. Section 5 shows what this page view actually reported.</div>
+      </section>
+
+      <section id="scripts">
+        <h2>2. Scripts</h2>
+        <h3>What this page loads by design</h3>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Script URL</th><th>How it is loaded</th><th>Party</th><th>Expected Page Shield entry</th></tr></thead>
+          <tbody>
+            <tr><td>https://www.pimenta.fun/page-shield/page-shield-origin/origin-demo.js</td><td>&lt;script defer&gt; in the HTML from Apache</td><td>First-party</td><td>Listed. Seen on host <code>www.pimenta.fun</code>. Initiator of most connections below.</td></tr>
+            <tr><td>https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js</td><td>&lt;script defer&gt;</td><td>Third-party</td><td>Listed. Also used on other lab pages, so <em>Seen on pages</em> shows several URLs.</td></tr>
+            <tr><td>https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js</td><td>&lt;script defer&gt;</td><td>Third-party</td><td>Listed. Unique to this page, so <em>First seen on</em> = this page.</td></tr>
+            <tr><td>https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js</td><td>&lt;script defer&gt;</td><td>Third-party</td><td>Listed under host <code>cdn.jsdelivr.net</code>.</td></tr>
+            <tr><td>https://unpkg.com/axios@1.7.9/dist/axios.min.js</td><td>Injected at runtime by origin-demo.js</td><td>Third-party, dynamic</td><td>Listed even though it is not in the HTML source. This is how a compromised script can pull in others.</td></tr>
+            <tr><td>(inline) violation listener in &lt;head&gt;</td><td>Inline &lt;script&gt;</td><td>&mdash;</td><td>Not listed: the monitoring policy allows <code>'unsafe-inline'</code>.</td></tr>
+          </tbody>
+        </table></div>
+        <h3>What your browser ran (live)</h3>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Script</th><th>How loaded</th><th>Party</th><th>Runtime</th><th>CSP report</th></tr></thead>
+          <tbody id="scriptsBody"><tr><td colspan="5">loading&hellip;</td></tr></tbody>
+        </table></div>
+      </section>
+
+      <section id="connections">
+        <h2>3. Connections</h2>
+        <h3>What this page connects to by design</h3>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Target</th><th>API</th><th>Initiated by</th><th>Page Shield view</th></tr></thead>
+          <tbody>
+            <tr><td>https://www.pimenta.fun/cdn-cgi/trace</td><td>fetch GET</td><td>origin-demo.js</td><td>Connection to your own host (still reported: <code>connect-src 'none'</code>)</td></tr>
+            <tr><td>https://www.pimenta.fun/page-shield/page-shield-origin/</td><td>fetch HEAD</td><td>origin-demo.js</td><td>Same-origin connection</td></tr>
+            <tr><td>https://api.pimenta.fun/health</td><td>XMLHttpRequest GET</td><td>origin-demo.js</td><td>Another subdomain of your zone (CORS)</td></tr>
+            <tr><td>https://httpbin.org/anything/checkout</td><td>fetch POST (JSON with a TEST card)</td><td>origin-demo.js</td><td>Third-party. Looks exactly like a skimmer sending form data; Advanced flags known-malicious targets.</td></tr>
+            <tr><td>https://httpbin.org/post</td><td>navigator.sendBeacon</td><td>origin-demo.js</td><td>Third-party analytics-style beacon</td></tr>
+            <tr><td>https://httpbin.org/get?via=axios</td><td>axios GET</td><td>axios (unpkg.com)</td><td>Connection made by a dynamically injected third-party script</td></tr>
+            <tr><td>wss://ws.postman-echo.com/raw</td><td>WebSocket (button)</td><td>origin-demo.js</td><td>Reported only when you press <em>Open WebSocket</em></td></tr>
+            <tr><td>https://httpbin.org/status/204</td><td>new Image() pixel</td><td>origin-demo.js</td><td><b>Not reported</b>: <code>img-src</code> is not in the monitoring policy (a known blind spot)</td></tr>
+          </tbody>
+        </table></div>
+        <div class="tip"><b>Connection target details:</b> depending on the zone setting, Page Shield stores either the full connection URL or only the hostname. With hostname-only, all httpbin.org connections collapse into one entry.</div>
+        <h3>What your browser did (live)</h3>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Time</th><th>Connection</th><th>API / initiator</th><th>Result</th><th>CSP report</th></tr></thead>
+          <tbody id="connBody"><tr><td colspan="5">loading&hellip;</td></tr></tbody>
+        </table></div>
+      </section>
+
+      <section id="cookies">
+        <h2>4. Cookies</h2>
+        <p>Four cookies come from Apache (<code>.htaccess</code> in this folder) as <code>Set-Cookie</code> headers, so Page Shield classifies them as <b>First-party</b> and records their attributes. Two are created in the browser with <code>document.cookie</code>. Cloudflare sees those only when the browser sends them back in the <code>Cookie</code> header on the next request, and classifies them as <b>Unknown</b>. Reload once to send them.</p>
+        <div class="warn" id="cookieNote"><b>Origin cookies not detected.</b> Deploy <code>www/page-shield/page-shield-origin/.htaccess</code> (needs <code>AllowOverride All</code> and <code>mod_headers</code>). If the page was served from cache, purge it.</div>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Name</th><th>Set by</th><th>Page Shield type</th><th>Attributes</th><th>Lifetime</th><th>In this browser</th></tr></thead>
+          <tbody id="cookiesBody"><tr><td colspan="6">loading&hellip;</td></tr></tbody>
+        </table></div>
+        <ul class="bullets">
+          <li><b>ps_origin_session</b> is <code>HttpOnly</code>. JavaScript (and a skimmer) cannot read it, but Page Shield still lists it because it saw the <code>Set-Cookie</code> header.</li>
+          <li><b>ps_origin_weak</b> has no <code>Secure</code>, <code>HttpOnly</code>, or <code>SameSite</code>. Filter by <em>Secure = No</em> or <em>HTTP only = No</em> to find cookies like this.</li>
+          <li><b>ps_origin_tracker</b> uses <code>Domain=pimenta.fun</code>, so it is also sent to <code>shop.</code> and <code>api.</code>, and <code>SameSite=None</code> allows cross-site sending.</li>
+          <li>For <b>Unknown</b> cookies, only <em>Domain</em> and <em>Path</em> are shown, derived from the host and page, because Cloudflare never saw their attributes.</li>
+          <li>You may also see Cloudflare cookies such as <code>__cf_bm</code> or <code>cf_clearance</code> when Bot Management or challenges are active.</li>
+        </ul>
+      </section>
+
+      <section id="reports">
+        <h2>5. CSP reports this page view sent</h2>
+        <p>These are the same <code>securitypolicyviolation</code> events the browser posts to Cloudflare. <em>Page Shield monitor</em> reports come from the sampled monitoring header. <em>Your rule</em> reports come from content security log or allow rules configured on the zone.</p>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Time</th><th>Directive</th><th>Blocked URI (resource)</th><th>Source / disposition</th><th>Triggered from</th></tr></thead>
+          <tbody id="reportsBody"><tr><td colspan="5">No CSP reports captured yet.</td></tr></tbody>
+        </table></div>
+        <div class="note"><b>Triggered from</b> shows which script caused the event. For the axios connection, it points to the unpkg.com file, which is how Page Shield attributes connections to scripts.</div>
+      </section>
+
+      <section id="fields">
+        <h2>6. Page Shield fields reference</h2>
+        <h3>Scripts and connections</h3>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Field</th><th>Meaning</th><th>On this page</th></tr></thead>
+          <tbody>
+            <tr><td>Script URL / Connection URL</td><td>The resource reported by the browser</td><td>Rows in sections 2 and 3</td></tr>
+            <tr><td>Status</td><td><em>Infrequent</em> (fewer than 3 reports), <em>Active</em> (more than 3), <em>Inactive</em> (not seen for 7 days, deleted after 30)</td><td>Reload a few times to move from Infrequent to Active</td></tr>
+            <tr><td>Seen on host</td><td>Host where the script loads or the connection is made</td><td><code>www.pimenta.fun</code></td></tr>
+            <tr><td>First seen on</td><td>Page where the resource was first detected</td><td>This URL for lodash and axios</td></tr>
+            <tr><td>Seen on pages</td><td>Up to 10 most recent pages</td><td>jQuery lists this page plus other lab pages</td></tr>
+            <tr><td>First seen at / Last seen</td><td>Detection timestamps (30-day window)</td><td>Your first visit / most recent sampled visit</td></tr>
+            <tr><td>Versions + Hash</td><td>Last 10 script versions; hash is an internal id, not an SRI hash</td><td>Changes if origin-demo.js is edited</td></tr>
+            <tr><td>Malicious code analysis (Advanced)</td><td>Score 1&ndash;99 (1 = malicious, 99 = clean)</td><td>Expected clean for all scripts here</td></tr>
+            <tr><td>Threat intelligence (Advanced)</td><td>URL/domain in threat feeds, with categories, or <em>Not present</em></td><td>httpbin.org is a test service, not a known-malicious host</td></tr>
+          </tbody>
+        </table></div>
+        <h3>Cookies</h3>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Field</th><th>Meaning</th><th>Available for</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td><em>First-party</em> = set by origin <code>Set-Cookie</code>; <em>Unknown</em> = everything else</td><td>All cookies</td></tr>
+            <tr><td>Domain / Path</td><td>Cookie attribute, or derived from host / most recent page</td><td>All cookies</td></tr>
+            <tr><td>First seen at / Last seen / Seen on host / Seen on pages</td><td>Where and when the cookie was detected</td><td>All cookies</td></tr>
+            <tr><td>Max age / Expires / Lifetime</td><td>Attribute values and approximate lifetime</td><td>First-party, Advanced</td></tr>
+            <tr><td>HTTP only / Secure / Same site</td><td>Security attributes</td><td>First-party, Advanced</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="verify">
+        <h2>7. Verify in the dashboard</h2>
+        <ol class="steps">
+          <li><h3>Generate reports</h3><p>Reload this page 5&ndash;10 times, since the monitoring header is sampled. Section 5 tells you when a view was sampled.</p></li>
+          <li><h3>Open the inventory</h3><p>Cloudflare dashboard &rarr; zone <code>pimenta.fun</code> &rarr; <b>Security &rarr; Web assets &rarr; Client-side resources</b>. Use <em>View all scripts / connections</em> to include Infrequent entries.</p></li>
+          <li><h3>Filter to this page</h3><p>Add the filter <em>Seen on page</em> = <code>www.pimenta.fun/page-shield/page-shield-origin/</code>. For cookies, filter <em>Type</em> or names starting with <code>ps_</code>.</p></li>
+          <li><h3>Check headers from a terminal</h3>
+            <pre>curl -sI https://www.pimenta.fun/page-shield/page-shield-origin/ | grep -iE 'set-cookie|content-security|x-served-by|cf-ray'</pre>
+            <p>Run it a few times: <code>set-cookie</code> and <code>x-served-by</code> appear every time; the monitoring header appears only on sampled responses.</p></li>
+        </ol>
+        <div class="note">Official references: <a href="https://developers.cloudflare.com/client-side-security/how-it-works/">How client-side security works</a> &middot; <a href="https://developers.cloudflare.com/client-side-security/detection/monitor-connections-scripts/">Monitor resources and cookies</a> &middot; <a href="https://developers.cloudflare.com/client-side-security/reference/csp-header/">CSP header format</a> &middot; <a href="https://developers.cloudflare.com/client-side-security/reference/script-statuses/">Statuses</a>.</div>
+      </section>
+
+      <section class="disclaimer"><div class="box">
+        <b>Disclaimer:</b> The card number sent to httpbin.org is a public test number used only to simulate a skimmer connection. All information on this page was developed by Pimenta.fun LAB; consult the official documentation for up-to-date details. <span class="risk">USE AT YOUR OWN RISK.</span>
+      </div></section>
+
+      <footer>
+        Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
