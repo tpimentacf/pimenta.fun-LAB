@@ -1,0 +1,29 @@
+# Page Shield origin demo -- /page-shield/page-shield-origin/
+# Requires: AllowOverride All (set in apache/www.pimenta.fun.conf) + mod_headers.
+#
+# These Set-Cookie headers come from the ORIGIN (Apache), so Cloudflare
+# Page Shield / Client-side security classifies them as "First-party" cookies
+# and records their attributes (Max-Age, Expires, HttpOnly, Secure, SameSite).
+# Cookies created with document.cookie by origin-demo.js are classified as "Unknown".
+
+<IfModule mod_headers.c>
+    <Files "index.html">
+        # Never cache the HTML, so every view reaches the origin and sets cookies.
+        Header always set Cache-Control "no-store"
+        Header always set X-Served-By "apache-origin page-shield-origin"
+
+        # 1) Session cookie, locked down: HttpOnly (hidden from JS), Strict, path-scoped.
+        Header always add Set-Cookie "ps_origin_session=demo-session-7f3a; Path=/page-shield/page-shield-origin/; Secure; HttpOnly; SameSite=Strict"
+        # 2) Preference cookie with Max-Age (1 day).
+        Header always add Set-Cookie "ps_origin_pref=theme-dark; Path=/; Max-Age=86400; Secure; SameSite=Lax"
+        # 3) Cross-site style cookie: parent Domain, Expires date, SameSite=None.
+        Header always add Set-Cookie "ps_origin_tracker=uid-42; Domain=pimenta.fun; Path=/; Expires=Fri, 31 Dec 2027 23:59:59 GMT; Secure; SameSite=None"
+        # 4) Weak cookie with no security attributes (what you want Page Shield to surface).
+        Header always add Set-Cookie "ps_origin_weak=1; Path=/"
+    </Files>
+
+    <Files "origin-demo.js">
+        Header always set Cache-Control "public, max-age=300"
+        Header always set X-Served-By "apache-origin page-shield-origin"
+    </Files>
+</IfModule>
