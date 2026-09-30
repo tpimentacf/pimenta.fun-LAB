@@ -55,13 +55,14 @@
       <a href="#what">0. What it is</a>
       <a href="#flow">1. Network workflow</a>
       <a href="#blocks">2. Building blocks</a>
-      <a href="#packet">3. Encapsulation &amp; MTU</a>
-      <a href="#modes">4. DSR vs egress</a>
-      <a href="#example">5. Example design</a>
-      <a href="#steps">6. Configuration steps</a>
-      <a href="#ondemand">7. Always-on vs on-demand</a>
-      <a href="#verify">8. Verify &amp; troubleshoot</a>
-      <a href="#faq">9. FAQ: single IPs</a>
+      <a href="#tunnels">3. GRE &amp; CNI explained</a>
+      <a href="#packet">4. Encapsulation &amp; MTU</a>
+      <a href="#modes">5. DSR vs egress</a>
+      <a href="#example">6. Example design</a>
+      <a href="#steps">7. Configuration steps</a>
+      <a href="#ondemand">8. Always-on vs on-demand</a>
+      <a href="#verify">9. Verify &amp; troubleshoot</a>
+      <a href="#faq">10. FAQ: single IPs</a>
     </nav>
 
     <main>
@@ -270,8 +271,162 @@
         </table></div>
       </section>
 
+      <section id="tunnels">
+        <h2>3. How GRE tunnels and CNI work</h2>
+        <p>After scrubbing, Cloudflare must deliver clean packets to your network. The destination IPs belong to the prefix Cloudflare is announcing, so it cannot simply send them back across the Internet: they would route straight back to Cloudflare. It needs a separate on-ramp that carries the packets to your router: a <strong>GRE</strong> or <strong>IPsec</strong> tunnel over the Internet, or a private <strong>Cloudflare Network Interconnect (CNI)</strong> link.</p>
+
+        <h3>3.1 GRE: a packet inside a packet</h3>
+        <p>Generic Routing Encapsulation (GRE, RFC 2784, IP protocol 47) wraps the original packet in a new IP header that is addressed to your router's public IP. Routers along the Internet path only see the outer header. Your router strips the outer header and forwards the original packet, which still has its original source (the client) and destination (your server).</p>
+        <ul class="check">
+          <li><strong>Stateless:</strong> no handshake and no session. A tunnel "exists" as soon as both ends have matching configuration.</li>
+          <li><strong>Not encrypted:</strong> the inner packet travels in clear text over the Internet. Use IPsec if you need encryption on the path to Cloudflare.</li>
+          <li><strong>Small overhead:</strong> 24 bytes (20 outer IP + 4 GRE), so the tunnel MTU is 1,476. See <a href="#packet">section 4</a>.</li>
+          <li><strong>Any protocol inside:</strong> TCP, UDP, ICMP, and others are carried unchanged.</li>
+        </ul>
+
+        <h3>3.2 Anycast GRE: one tunnel, every data center</h3>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 400" role="img" aria-label="Anycast GRE tunnel terminating in every Cloudflare data center">
+            <defs>
+              <marker id="a6o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f6821f"/></marker>
+              <marker id="a6b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b8def"/></marker>
+            </defs>
+            <rect x="16" y="16" width="330" height="330" rx="14" class="svg-zone cf"/>
+            <text x="32" y="42" class="svg-la">CLOUDFLARE (anycast endpoint = same IP everywhere)</text>
+            <rect x="40" y="64" width="280" height="72" rx="10" class="svg-box cf"/>
+            <text x="58" y="92" class="svg-t">Lisbon</text><text x="58" y="114" class="svg-s">GRE src: CF endpoint IP</text>
+            <rect x="40" y="156" width="280" height="72" rx="10" class="svg-box cf"/>
+            <text x="58" y="184" class="svg-t">Frankfurt</text><text x="58" y="206" class="svg-s">GRE src: CF endpoint IP</text>
+            <rect x="40" y="248" width="280" height="72" rx="10" class="svg-box cf"/>
+            <text x="58" y="276" class="svg-t">Ashburn</text><text x="58" y="298" class="svg-s">GRE src: CF endpoint IP</text>
+
+            <rect x="640" y="140" width="300" height="110" rx="12" class="svg-box cust"/>
+            <text x="660" y="170" class="svg-t">Your edge router</text>
+            <text x="660" y="194" class="svg-s">local 198.51.100.10</text>
+            <text x="660" y="214" class="svg-s">remote CF endpoint IP</text>
+            <text x="660" y="234" class="svg-s">tunnel 10.100.0.1/31</text>
+
+            <path d="M320,100 C470,100 520,170 638,178" class="svg-tunnel"/>
+            <path d="M320,100 C470,100 520,170 638,178" class="svg-flow cf" marker-end="url(#a6o)"/>
+            <path d="M320,192 L638,195" class="svg-tunnel"/>
+            <path d="M320,192 L638,195" class="svg-flow cf" marker-end="url(#a6o)"/>
+            <path d="M320,284 C470,284 520,220 638,212" class="svg-tunnel"/>
+            <path d="M320,284 C470,284 520,220 638,212" class="svg-flow cf" marker-end="url(#a6o)"/>
+            <text x="400" y="84" class="svg-la">ingress: GRE from any colo</text>
+
+            <path d="M700,250 C640,330 460,340 322,118" class="svg-flow cust" marker-end="url(#a6b)"/>
+            <text x="470" y="352" class="svg-lb">return GRE / probe replies go to the anycast IP</text>
+            <text x="470" y="370" class="svg-lb">&rarr; BGP delivers them to the nearest colo</text>
+          </svg>
+          <figcaption>Figure 4 &mdash; You configure one GRE tunnel per ISP circuit, but every Cloudflare data center can use it. Whichever colo scrubbed the packet sends it straight to your router, with no extra hop inside Cloudflare.</figcaption>
+        </figure>
+        <ol class="steps">
+          <li><h3>Cloudflare assigns anycast endpoints</h3><p>Your account gets Cloudflare tunnel endpoint IPs that are announced from all data centers. You use one as the <em>remote</em> address on each router tunnel.</p></li>
+          <li><h3>You define both ends</h3><p>In Cloudflare, set the <em>customer endpoint</em> (your router's public IP), the Cloudflare endpoint, and a <code>/31</code> interface address. Mirror the same values on the router, using the other IP of the <code>/31</code>.</p></li>
+          <li><h3>Health checks keep it honest</h3><p>GRE has no session state, so Cloudflare sends ICMP probes through the tunnel. Your router decapsulates each probe and routes the reply back through the tunnel. If replies stop, the tunnel is marked degraded or down and routes fail over to the next priority.</p></li>
+          <li><h3>Routes pick the tunnel</h3><p>Static routes (or BGP) map prefixes to the tunnel's <code>/31</code> next hop. Equal priority means ECMP across tunnels.</p></li>
+        </ol>
+        <div class="tip"><b>GRE vs IPsec:</b> both use the same anycast model and routing. IPsec (IKEv2, ESP) adds encryption and more overhead (MSS 1,360), and you should disable anti-replay. GRE is simpler and uses fewer router CPU cycles, and the traffic was already public Internet traffic.</div>
+
+        <h3>3.3 CNI: a private link instead of the Internet</h3>
+        <p>Cloudflare Network Interconnect (CNI) replaces the Internet path between Cloudflare and your router with a dedicated point-to-point connection. You get the same Magic Transit services over a link that does not cross shared Internet infrastructure, which gives more consistent latency and throughput.</p>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 250" role="img" aria-label="Three types of Cloudflare Network Interconnect">
+            <text x="16" y="30" class="svg-t">Three ways to connect</text>
+            <rect x="16" y="46" width="296" height="186" rx="12" class="svg-box cf"/>
+            <text x="32" y="72" class="svg-la">DIRECT CNI</text>
+            <rect x="32" y="88" width="110" height="46" rx="8" class="svg-box cust"/><text x="44" y="116" class="svg-s">your router</text>
+            <rect x="186" y="88" width="110" height="46" rx="8" class="svg-box cf"/><text x="198" y="116" class="svg-s">CF router</text>
+            <path d="M142,111 L186,111" class="svg-flow ok"/>
+            <text x="32" y="160" class="svg-l">Physical cross-connect in a</text>
+            <text x="32" y="178" class="svg-l">shared facility (10G/100G LR).</text>
+            <text x="32" y="196" class="svg-l">Cloudflare sends an LOA so you</text>
+            <text x="32" y="214" class="svg-l">can order the cross-connect.</text>
+
+            <rect x="332" y="46" width="296" height="186" rx="12" class="svg-box cf"/>
+            <text x="348" y="72" class="svg-la">PARTNER CNI</text>
+            <rect x="348" y="88" width="80" height="46" rx="8" class="svg-box cust"/><text x="358" y="116" class="svg-s">router</text>
+            <rect x="440" y="88" width="80" height="46" rx="8" class="svg-box"/><text x="450" y="116" class="svg-s">partner</text>
+            <rect x="532" y="88" width="80" height="46" rx="8" class="svg-box cf"/><text x="542" y="116" class="svg-s">CF</text>
+            <path d="M428,111 L440,111" class="svg-flow ok"/><path d="M520,111 L532,111" class="svg-flow ok"/>
+            <text x="348" y="160" class="svg-l">Virtual circuit ordered from a</text>
+            <text x="348" y="178" class="svg-l">connectivity partner's portal.</text>
+            <text x="348" y="196" class="svg-l">For networks that are not in a</text>
+            <text x="348" y="214" class="svg-l">Cloudflare facility.</text>
+
+            <rect x="648" y="46" width="296" height="186" rx="12" class="svg-box cf"/>
+            <text x="664" y="72" class="svg-la">CLOUD CNI</text>
+            <rect x="664" y="88" width="110" height="46" rx="8" class="svg-box cust"/><text x="676" y="116" class="svg-s">cloud VPC</text>
+            <rect x="818" y="88" width="110" height="46" rx="8" class="svg-box cf"/><text x="830" y="116" class="svg-s">Cloudflare</text>
+            <path d="M774,111 L818,111" class="svg-flow ok"/>
+            <text x="664" y="160" class="svg-l">Private interconnect from a</text>
+            <text x="664" y="178" class="svg-l">public cloud provider to</text>
+            <text x="664" y="196" class="svg-l">Cloudflare for cloud-hosted</text>
+            <text x="664" y="214" class="svg-l">workloads.</text>
+          </svg>
+          <figcaption>Figure 5 &mdash; All CNI types use a <code>/31</code> for point-to-point addressing between your router and Cloudflare.</figcaption>
+        </figure>
+
+        <h3>3.4 CNI dataplanes: v1 (GRE over CNI) vs v2 (no GRE)</h3>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 250" role="img" aria-label="CNI dataplane v1 versus v2">
+            <defs>
+              <marker id="a7o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f6821f"/></marker>
+              <marker id="a7g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3fb950"/></marker>
+            </defs>
+            <text x="16" y="30" class="svg-t">Dataplane v1 &mdash; edge data center</text>
+            <rect x="16" y="46" width="180" height="60" rx="10" class="svg-box cf"/><text x="32" y="82" class="svg-t">CF edge</text>
+            <rect x="760" y="46" width="184" height="60" rx="10" class="svg-box cust"/><text x="776" y="82" class="svg-t">Your router</text>
+            <rect x="196" y="58" width="564" height="36" rx="18" class="svg-box"/>
+            <path d="M210,76 L748,76" class="svg-tunnel"/>
+            <path d="M210,76 L748,76" class="svg-flow cf" marker-end="url(#a7o)"/>
+            <text x="300" y="70" class="svg-la">GRE tunnel inside the CNI link</text>
+            <text x="16" y="130" class="svg-l">Ingress can be 1,500 MTU (GRE-less delivery is optional for DSR); egress to Cloudflare needs 1,476 MTU. One 802.1Q VLAN, BFD, LACP.</text>
+
+            <text x="16" y="170" class="svg-t">Dataplane v2 &mdash; Customer Connectivity Router (CCR)</text>
+            <rect x="16" y="186" width="180" height="50" rx="10" class="svg-box cf"/><text x="32" y="217" class="svg-t">CF CCR</text>
+            <rect x="760" y="186" width="184" height="50" rx="10" class="svg-box cust"/><text x="776" y="217" class="svg-t">Your router</text>
+            <path d="M196,204 L758,204" class="svg-flow ok" marker-end="url(#a7g)"/>
+            <path d="M758,220 L198,220" class="svg-flow ok" marker-end="url(#a7g)"/>
+            <text x="300" y="198" class="svg-lg">plain IP, 1,500 MTU both ways, BGP routes</text>
+          </svg>
+          <figcaption>Figure 6 &mdash; v2 removes GRE entirely: simpler routing, full 1,500-byte MTU, and automatic prefix advertisement and withdrawal tied to BGP.</figcaption>
+        </figure>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>On-ramp</th><th>Path</th><th>Encryption</th><th>Tunnel MTU</th><th>Routing</th><th>Best for</th></tr></thead>
+          <tbody>
+            <tr><td>GRE</td><td>Public Internet</td><td>No</td><td>1,476</td><td>Static or BGP (beta)</td><td>Fast setup, any router, multiple ISPs</td></tr>
+            <tr><td>IPsec</td><td>Public Internet</td><td>Yes (ESP)</td><td>Lower (MSS 1,360)</td><td>Static or BGP (beta)</td><td>Firewalls, encryption required</td></tr>
+            <tr><td>CNI v1</td><td>Private link</td><td>No</td><td>1,500 in / 1,476 out</td><td>GRE over CNI + BGP</td><td>Colocated, VLAN/LACP/BFD needs</td></tr>
+            <tr><td>CNI v2</td><td>Private link</td><td>No</td><td>1,500 both ways</td><td>BGP, no GRE</td><td>High throughput, simplest data path</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>3.5 Setting up a CNI</h3>
+        <ol class="steps">
+          <li><h3>Request</h3><p>Open a CNI request with your account team: type (Direct, Partner, or Cloud), location, dataplane, and use case. An Implementation Manager is assigned.</p></li>
+          <li><h3>Review configuration (v1 only)</h3><p>Approve the configuration document: <code>/31</code> addressing, VLAN, and BGP details.</p></li>
+          <li><h3>Order the circuit</h3><p>Direct: order the cross-connect from the facility with Cloudflare's LOA. Partner: order the virtual circuit in the partner portal.</p></li>
+          <li><h3>Configure the router</h3>
+            <pre># FRR-style example, CNI dataplane v2 (no GRE)
+interface eth1
+ ip address 10.200.0.1/31
+ mtu 1500
+!
+router bgp 64500
+ neighbor 10.200.0.0 remote-as &lt;CLOUDFLARE_SIDE_ASN&gt;
+ neighbor 10.200.0.0 password &lt;MD5_SECRET&gt;
+ address-family ipv4 unicast
+  network 203.0.113.0/24
+ exit-address-family</pre>
+            <p>The prefix you announce over this session enters your Magic Transit routing table, which tells Cloudflare to deliver <code>203.0.113.0/24</code> through this link. Use the ASN and addresses from your CNI configuration.</p></li>
+          <li><h3>Test</h3><p>Ping across the <code>/31</code>, confirm the BGP session is established, and enable tunnel health checks.</p></li>
+          <li><h3>Activate</h3><p>Route Magic Transit traffic over the CNI. Keep GRE or IPsec tunnels at a higher priority value as backup, and subscribe to CNI maintenance notifications.</p></li>
+        </ol>
+      </section>
+
       <section id="packet">
-        <h2>3. Encapsulation, MTU, and MSS</h2>
+        <h2>4. Encapsulation, MTU, and MSS</h2>
         <figure class="diagram">
           <svg viewBox="0 0 960 250" role="img" aria-label="GRE encapsulation headers">
             <text x="24" y="34" class="svg-t">Packet on the wire between Cloudflare and your router (GRE)</text>
@@ -288,13 +443,13 @@
             <text x="24" y="190" class="svg-l">IPsec adds ESP overhead &rarr; clamp MSS to 1360 on the IPsec tunnel interface when egress traffic uses it.</text>
             <text x="24" y="214" class="svg-l">Tunnel-in-tunnel (your own IPsec/GRE inside the prefix): MSS clamp does not help &mdash; lower the inner tunnel MTU (&minus;24 B GRE / &minus;140 B IPsec).</text>
           </svg>
-          <figcaption>Figure 4 &mdash; Encapsulation overhead is why MSS clamping is mandatory. Without it, large TCP packets are fragmented or dropped (classic symptom: small pages load, big downloads hang).</figcaption>
+          <figcaption>Figure 7 &mdash; Encapsulation overhead is why MSS clamping is mandatory. Without it, large TCP packets are fragmented or dropped (classic symptom: small pages load, big downloads hang).</figcaption>
         </figure>
         <div class="warn"><b>Also clear the DF bit</b> or allow fragmentation for non-TCP traffic, and disable anti-replay on IPsec (Cloudflare anycast means packets may arrive from many locations).</div>
       </section>
 
       <section id="modes">
-        <h2>4. Ingress-only (DSR) vs ingress + egress</h2>
+        <h2>5. Ingress-only (DSR) vs ingress + egress</h2>
         <figure class="diagram">
           <svg viewBox="0 0 960 330" role="img" aria-label="Direct server return versus egress through Cloudflare">
             <defs>
@@ -323,7 +478,7 @@
             <path d="M328,270 L166,270" class="svg-flow cust" marker-end="url(#a4b)"/>
             <text x="520" y="300" class="svg-lb">reply returns through the tunnel (PBR on router)</text>
           </svg>
-          <figcaption>Figure 5 &mdash; DSR keeps latency low and is the default. Egress is required when your ISP will not accept your source prefix, and enables stateful firewalling of both directions.</figcaption>
+          <figcaption>Figure 8 &mdash; DSR keeps latency low and is the default. Egress is required when your ISP will not accept your source prefix, and enables stateful firewalling of both directions.</figcaption>
         </figure>
         <div class="table-wrap"><table class="ref">
           <thead><tr><th>Mode</th><th>Pros</th><th>Requirements</th></tr></thead>
@@ -335,7 +490,7 @@
       </section>
 
       <section id="example">
-        <h2>5. Example design</h2>
+        <h2>6. Example design</h2>
         <p>A company protects one data center with two ISP uplinks and a secondary site.</p>
         <div class="kv">
           <b>Protected prefix</b><span>203.0.113.0/24 (origin AS64500)</span>
@@ -358,7 +513,7 @@
       </section>
 
       <section id="steps">
-        <h2>6. Configuration steps</h2>
+        <h2>7. Configuration steps</h2>
         <ol class="steps">
           <li><h3>Prepare IP space</h3>
             <p>Own a publicly routable prefix of at least <code>/24</code>, or request Cloudflare-leased IPs. Create/update the IRR route object and RPKI ROA for the originating ASN, and draft the Letter of Agency (LOA).</p></li>
@@ -417,7 +572,7 @@ iptables -A INPUT -i cf_ispA -p icmp -j ACCEPT</pre></li>
       </section>
 
       <section id="ondemand">
-        <h2>7. Always-on vs on-demand</h2>
+        <h2>8. Always-on vs on-demand</h2>
         <figure class="diagram">
           <svg viewBox="0 0 960 220" role="img" aria-label="On-demand advertisement with Network Flow">
             <defs>
@@ -437,12 +592,12 @@ iptables -A INPUT -i cf_ispA -p icmp -j ACCEPT</pre></li>
             <text x="20" y="172" class="svg-l">Always-on: prefix permanently advertised &mdash; constant protection, no BGP convergence during an attack (recommended).</text>
             <text x="20" y="196" class="svg-l">On-demand: prefix withdrawn in peacetime; advertised manually, via API, or automatically by Network Flow rules when an attack is detected.</text>
           </svg>
-          <figcaption>Figure 6 &mdash; On-demand saves peacetime bandwidth but adds minutes of BGP convergence during an attack. Tunnels and routes must already be configured and healthy.</figcaption>
+          <figcaption>Figure 9 &mdash; On-demand saves peacetime bandwidth but adds minutes of BGP convergence during an attack. Tunnels and routes must already be configured and healthy.</figcaption>
         </figure>
       </section>
 
       <section id="verify">
-        <h2>8. Verify and troubleshoot</h2>
+        <h2>9. Verify and troubleshoot</h2>
         <div class="table-wrap"><table class="ref">
           <thead><tr><th>Check</th><th>How</th></tr></thead>
           <tbody>
@@ -463,7 +618,7 @@ iptables -A INPUT -i cf_ispA -p icmp -j ACCEPT</pre></li>
       </section>
 
       <section id="faq">
-        <h2>9. FAQ: can I advertise single IPs (for example two /32s)?</h2>
+        <h2>10. FAQ: can I advertise single IPs (for example two /32s)?</h2>
         <p><strong>No.</strong> The Internet does not globally accept IPv4 announcements longer than <code>/24</code>, so Magic Transit only onboards and advertises prefixes of <code>/24</code> or larger. Addresses such as <code>93.94.103.254</code> and <code>93.94.103.255</code> cannot be announced on their own.</p>
         <ul class="bullets">
           <li><strong>If you control the whole /24</strong> (for example <code>93.94.103.0/24</code>): onboard and advertise the /24 with LOA, IRR, and ROA. Then use <em>routes</em> to send smaller subnets inside it to different tunnels. Cloudflare's traffic-steering docs show subnets such as <code>/29</code>, and longest-prefix match applies within the /24.</li>
