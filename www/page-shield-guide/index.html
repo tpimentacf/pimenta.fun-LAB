@@ -29,6 +29,7 @@
       <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
       <a class="home" href="https://www.pimenta.fun/#docs">&larr; Documents</a>
       <a class="home" href="https://www.pimenta.fun/page-shield/page-shield-lab/">&rarr; Interactive Lab</a>
+      <a class="home" href="https://www.pimenta.fun/page-shield/page-shield-origin/">&rarr; Origin Demo</a>
       <h2>Contents</h2>
       <a href="#what">0. What it is</a>
       <a href="#how">1. How it works</a>
@@ -36,7 +37,8 @@
       <a href="#implement">3. Implementation steps</a>
       <a href="#policies">4. CSP policies (log &amp; enforce)</a>
       <a href="#check">5. Ways to check &amp; verify</a>
-      <a href="#best">6. Best practices</a>
+      <a href="#origin-demo">6. Origin demo</a>
+      <a href="#best">7. Best practices</a>
     </nav>
 
     <main>
@@ -124,12 +126,32 @@
           <li><strong>New-script alert test.</strong> Deploy a page that loads a brand-new third-party URL (the lab injects <code>cdn.evil-tracker.invalid</code>) and confirm the <em>New Script Detected</em> alert fires and the URL appears in the inventory.</li>
           <li><strong>GraphQL Analytics API.</strong> Query Page Shield detection data programmatically (same dataset that powers the dashboard) for automation or a custom view.</li>
           <li><strong>Logpush (Advanced).</strong> Stream detection events to a SIEM and verify they arrive (4 jobs: detections for scripts, connections, cookies, code changes).</li>
+          <li><strong>Origin demo walkthrough.</strong> Open the <a href="#origin-demo">Page Shield Origin Demo</a>, reload it until it reports a sampled view, then compare its expected inventory with the dashboard filtered by <em>Seen on page</em>.</li>
           <li><strong>Malicious-score spot check (Advanced).</strong> Set a low threshold, load a known-suspicious script in a test page, confirm the ML score + <em>Malicious Script</em> alert.</li>
         </ol>
       </section>
 
+      <section id="origin-demo">
+        <h2>6. Page Shield Origin Demo</h2>
+        <p>The <a href="https://www.pimenta.fun/page-shield/page-shield-origin/">Page Shield Origin Demo</a> is a static page served by the Apache origin, with no Worker in the path. It intentionally loads scripts, opens connections, and sets cookies. For each one it shows what Page Shield should record, next to what your browser actually did on that visit.</p>
+        <div class="cards">
+          <div class="card"><div class="n">SCRIPTS</div><h3>5 external + 1 inline</h3><p>First-party <code>origin-demo.js</code>, jQuery, lodash, dayjs, and axios injected at runtime. Inline code is not listed because the monitoring policy allows <code>'unsafe-inline'</code>.</p></div>
+          <div class="card"><div class="n">CONNECTIONS</div><h3>fetch, XHR, beacon, WS</h3><p>Same-origin <code>/cdn-cgi/trace</code>, <code>api.pimenta.fun</code>, a simulated skimmer POST with a test card, a connection made by axios, and an image pixel that is <em>not</em> monitored.</p></div>
+          <div class="card"><div class="n">COOKIES</div><h3>First-party vs Unknown</h3><p>Four cookies set by Apache <code>Set-Cookie</code> (HttpOnly, Max-Age, Expires, parent Domain, weak) and two set with <code>document.cookie</code>.</p></div>
+        </div>
+        <table class="ref">
+          <tr><th>Demo section</th><th>What it teaches</th></tr>
+          <tr><td>How this page is served</td><td>Browser &rarr; Cloudflare edge &rarr; Apache, and how CSP reports flow to <code>csp-reporting.cloudflare.com</code>. Monitoring header: <code>script-src 'unsafe-inline' 'unsafe-eval'; connect-src 'none'</code>.</td></tr>
+          <tr><td>Request &amp; connection</td><td>Live <code>/cdn-cgi/trace</code> (colo, IP, TLS, HTTP), navigation timing, and the page's response headers, including whether the monitoring header was sampled.</td></tr>
+          <tr><td>Scripts / Connections / Cookies</td><td>Expected Page Shield entry per resource, compared with the live browser inventory and whether a CSP report was sent.</td></tr>
+          <tr><td>CSP reports sent</td><td>The actual <code>securitypolicyviolation</code> events, labelled as Page Shield monitor or your own content security rule, with the script that triggered each one.</td></tr>
+          <tr><td>Fields reference &amp; verify</td><td>Every script, connection, and cookie field in the dashboard, plus the steps and <code>curl</code> check to confirm them.</td></tr>
+        </table>
+        <div class="tip"><b>Try it:</b> reload the demo 5&ndash;10 times (monitoring is sampled), then go to <em>Security &rarr; Web assets &rarr; Client-side resources</em> and filter <em>Seen on page</em> = <code>www.pimenta.fun/page-shield/page-shield-origin/</code>. Connection and cookie monitoring need Business or Enterprise; advanced cookie fields and malicious detection need Client-Side Security Advanced.</div>
+      </section>
+
       <section id="best">
-        <h2>6. Best practices</h2>
+        <h2>7. Best practices</h2>
         <ul class="bullets">
           <li><strong>Monitor &rarr; log &rarr; enforce.</strong> Never enforce on day one; use the log period to build a trustworthy allowlist.</li>
           <li><strong>Treat every new domain alert on checkout-like pages as urgent.</strong> Most Magecart incidents start with one unknown URL or hash change.</li>
@@ -137,6 +159,7 @@
           <li><strong>Minimize the blast radius:</strong> fewer third-party scripts = smaller attack surface. Page Shield tells you what is actually used.</li>
           <li><strong>Pair with Subresource Integrity (SRI)</strong> on scripts you control; Page Shield covers the ones you don't.</li>
           <li>Try every flow in the <a href="https://www.pimenta.fun/page-shield/page-shield-lab/">interactive lab</a>: live CSP probe, real inventory, Magecart walkthrough.</li>
+          <li>Use the <a href="https://www.pimenta.fun/page-shield/page-shield-origin/">origin demo</a> as a known baseline: if the dashboard does not match its expected scripts, connections, and cookies, check sampling, plan features, and whether HTML is served through Cloudflare.</li>
         </ul>
         <div class="note">Official docs: <a href="https://developers.cloudflare.com/client-side-security/">Client-side security</a> &middot; <a href="https://developers.cloudflare.com/client-side-security/get-started/">Get started</a> &middot; <a href="https://developers.cloudflare.com/client-side-security/best-practices/handle-an-alert/">Handling an alert</a>.</div>
       </section>
