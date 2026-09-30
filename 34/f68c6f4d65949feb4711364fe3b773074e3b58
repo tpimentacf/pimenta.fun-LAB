@@ -1,0 +1,19 @@
+www/magic-transit-guide/index.html
+  s_45d7e19da6ce2d::t_fac4fa854665a7 58-65,274-427,429,446,452,481,493,516,575,595,600,621
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "34f68c6f4d65949feb4711364fe3b773074e3b58",
+  "prompts": {},
+  "sessions": {
+    "s_45d7e19da6ce2d": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10621ba67ffeb0finUXEc7EfXx",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "tpimenta <tpimenta@cloudflare.com>"
+    }
+  }
+}
