@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Magic Transit Guide &mdash; Pimenta Lab</title>
+  <meta name="description" content="How Cloudflare Magic Transit works: BGP anycast advertisement, GRE/IPsec/CNI tunnels, routes, health checks, Network Firewall, DSR vs egress, with diagrams, examples, and configuration steps." />
+  <link rel="stylesheet" href="/assets/docs.css" />
+  <style>
+    figure.diagram { margin: 20px 0; }
+    figure.diagram svg { width: 100%; height: auto; display: block;
+      background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+    figure.diagram figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; text-align: center; }
+    .svg-box { fill: var(--panel-2); stroke: var(--border); stroke-width: 1.4; }
+    .svg-box.cf { stroke: var(--accent); }
+    .svg-box.cust { stroke: var(--blue); }
+    .svg-box.ok { stroke: var(--green); }
+    .svg-box.bad { stroke: var(--red); }
+    .svg-zone { fill: none; stroke: var(--border); stroke-dasharray: 6 5; }
+    .svg-zone.cf { stroke: rgba(246,130,31,.55); }
+    .svg-zone.cust { stroke: rgba(91,141,239,.55); }
+    .svg-t { fill: var(--text); font: 700 14px var(--sans); }
+    .svg-s { fill: var(--muted); font: 12px var(--mono); }
+    .svg-l { fill: var(--muted); font: 12px var(--sans); }
+    .svg-la { fill: var(--accent); font: 600 12px var(--mono); }
+    .svg-lb { fill: var(--blue); font: 600 12px var(--mono); }
+    .svg-lg { fill: var(--green); font: 600 12px var(--mono); }
+    .svg-lr { fill: var(--red); font: 600 12px var(--mono); }
+    .svg-flow { stroke: #9aa4b2; stroke-width: 1.8; fill: none; }
+    .svg-flow.cf { stroke: var(--accent); }
+    .svg-flow.cust { stroke: var(--blue); }
+    .svg-flow.ok { stroke: var(--green); }
+    .svg-flow.bad { stroke: var(--red); stroke-dasharray: 5 4; }
+    .svg-tunnel { stroke: var(--accent); stroke-width: 10; stroke-opacity: .18; fill: none; }
+    .svg-hdr { stroke: var(--border); stroke-width: 1.2; }
+    .svg-hdr.outer { fill: rgba(246,130,31,.16); stroke: var(--accent); }
+    .svg-hdr.gre { fill: rgba(91,141,239,.16); stroke: var(--blue); }
+    .svg-hdr.inner { fill: rgba(63,185,80,.14); stroke: var(--green); }
+    .kv { display: grid; grid-template-columns: 210px 1fr; gap: 6px 14px; margin: 12px 0; font-size: 14px; }
+    .kv b { color: var(--muted); font-weight: 500; }
+    .kv span { font-family: var(--mono); color: #ffd9b0; }
+    .table-wrap { overflow-x: auto; }
+    .table-wrap table { min-width: 680px; }
+    table.ref tbody td:first-child { white-space: normal; }
+    @media (max-width: 820px) { .kv { grid-template-columns: 1fr; gap: 2px; } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#docs">&larr; Documents</a>
+      <h2>Contents</h2>
+      <a href="#what">0. What it is</a>
+      <a href="#flow">1. Network workflow</a>
+      <a href="#blocks">2. Building blocks</a>
+      <a href="#packet">3. Encapsulation &amp; MTU</a>
+      <a href="#modes">4. DSR vs egress</a>
+      <a href="#example">5. Example design</a>
+      <a href="#steps">6. Configuration steps</a>
+      <a href="#ondemand">7. Always-on vs on-demand</a>
+      <a href="#verify">8. Verify &amp; troubleshoot</a>
+      <a href="#faq">9. FAQ: single IPs</a>
+    </nav>
+
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#docs">Documents</a> / Magic Transit</div>
+        <span class="pill">Guide</span>
+        <h1>Cloudflare <span class="grad">Magic Transit</span></h1>
+        <p class="lead">Network-layer (L3) DDoS protection and firewalling for entire IP prefixes. Cloudflare announces your prefixes from its anycast network, scrubs attack traffic at the edge, and delivers only clean packets to your data centers through tunnels.</p>
+      </header>
+
+      <section id="what">
+        <h2>0. What it is</h2>
+        <p>Magic Transit protects <strong>IP networks</strong>, not individual hostnames. It works for any IP protocol &mdash; TCP, UDP, ICMP, GRE &mdash; so it covers game servers, VPN concentrators, mail, DNS, VoIP, and whole data centers, not just websites.</p>
+        <div class="cards">
+          <div class="card"><div class="n">ADVERTISE</div><h3>BGP anycast</h3><p>Cloudflare announces your <code>/24</code> (or larger) from every data center, so Internet traffic to your IPs lands on the nearest Cloudflare location.</p></div>
+          <div class="card"><div class="n">PROTECT</div><h3>Scrub at the edge</h3><p>DDoS mitigation and Cloudflare Network Firewall (formerly Magic Firewall) rules run in every location before traffic moves on.</p></div>
+          <div class="card"><div class="n">DELIVER</div><h3>Tunnels to you</h3><p>Clean packets travel over GRE, IPsec, or Cloudflare Network Interconnect (CNI) to your routers, selected by static routes or BGP.</p></div>
+        </div>
+        <div class="note"><b>Magic Transit vs CDN/WAF proxy:</b> the CDN proxies HTTP(S) for a hostname and terminates TLS. Magic Transit forwards raw IP packets for a prefix. Your servers keep their own IPs, certificates, and TCP sessions.</div>
+      </section>
+
+      <section id="flow">
+        <h2>1. Network workflow</h2>
+        <h3>Before and after Magic Transit</h3>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 420" role="img" aria-label="Traffic path before and after Magic Transit">
+            <defs>
+              <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa4b2"/></marker>
+              <marker id="a1r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f85149"/></marker>
+              <marker id="a1o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f6821f"/></marker>
+              <marker id="a1g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3fb950"/></marker>
+            </defs>
+            <text x="24" y="34" class="svg-t">BEFORE &mdash; your ISP announces 203.0.113.0/24</text>
+            <rect x="24" y="54" width="170" height="70" rx="10" class="svg-box"/>
+            <text x="44" y="84" class="svg-t">Users</text><text x="44" y="104" class="svg-s">legit traffic</text>
+            <rect x="24" y="134" width="170" height="54" rx="10" class="svg-box bad"/>
+            <text x="44" y="166" class="svg-lr">Botnet 400 Gbps</text>
+            <rect x="340" y="84" width="200" height="80" rx="10" class="svg-box"/>
+            <text x="362" y="116" class="svg-t">Your ISP / transit</text><text x="362" y="138" class="svg-s">10 Gbps uplink</text>
+            <rect x="700" y="84" width="230" height="80" rx="10" class="svg-box cust"/>
+            <text x="722" y="116" class="svg-t">Data center</text><text x="722" y="138" class="svg-s">203.0.113.0/24</text>
+            <path d="M194,90 L338,112" class="svg-flow" marker-end="url(#a1)"/>
+            <path d="M194,160 L338,136" class="svg-flow bad" marker-end="url(#a1r)"/>
+            <path d="M540,124 L698,124" class="svg-flow bad" marker-end="url(#a1r)"/>
+            <text x="560" y="112" class="svg-lr">link saturated</text>
+
+            <line x1="24" y1="214" x2="936" y2="214" stroke="#2a3140" stroke-dasharray="4 4"/>
+
+            <text x="24" y="246" class="svg-t">AFTER &mdash; Cloudflare announces 203.0.113.0/24 from every data center</text>
+            <rect x="24" y="266" width="170" height="70" rx="10" class="svg-box"/>
+            <text x="44" y="296" class="svg-t">Users</text><text x="44" y="316" class="svg-s">legit traffic</text>
+            <rect x="24" y="346" width="170" height="54" rx="10" class="svg-box bad"/>
+            <text x="44" y="378" class="svg-lr">Botnet 400 Gbps</text>
+            <rect x="300" y="270" width="280" height="126" rx="12" class="svg-box cf"/>
+            <text x="322" y="300" class="svg-t">Cloudflare anycast edge</text>
+            <text x="322" y="324" class="svg-s">1. DDoS mitigation</text>
+            <text x="322" y="344" class="svg-s">2. Network Firewall rules</text>
+            <text x="322" y="364" class="svg-s">3. Route lookup &rarr; tunnel</text>
+            <text x="322" y="384" class="svg-la">attack dropped here</text>
+            <rect x="700" y="296" width="230" height="80" rx="10" class="svg-box cust"/>
+            <text x="722" y="328" class="svg-t">Data center</text><text x="722" y="350" class="svg-s">router: 198.51.100.10</text>
+            <path d="M194,300 L298,316" class="svg-flow" marker-end="url(#a1)"/>
+            <path d="M194,372 L298,352" class="svg-flow bad" marker-end="url(#a1r)"/>
+            <path d="M580,336 L698,336" class="svg-tunnel"/>
+            <path d="M580,336 L698,336" class="svg-flow ok" marker-end="url(#a1g)"/>
+            <text x="594" y="324" class="svg-lg">clean only</text>
+            <text x="594" y="360" class="svg-la">GRE/IPsec/CNI</text>
+          </svg>
+          <figcaption>Figure 1 &mdash; Without Magic Transit, an attack saturates your uplink before your own firewall can act. With it, the attack is absorbed across Cloudflare's network and only clean traffic reaches you.</figcaption>
+        </figure>
+
+        <h3>Step-by-step packet journey (ingress)</h3>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 250" role="img" aria-label="Ingress packet journey through Magic Transit">
+            <defs>
+              <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f6821f"/></marker>
+            </defs>
+            <g>
+              <rect x="16" y="40" width="160" height="96" rx="10" class="svg-box"/>
+              <text x="30" y="66" class="svg-la">&#9312; Client</text>
+              <text x="30" y="90" class="svg-s">dst 203.0.113.10</text>
+              <text x="30" y="110" class="svg-s">tcp/443</text>
+            </g>
+            <g>
+              <rect x="204" y="40" width="170" height="96" rx="10" class="svg-box cf"/>
+              <text x="218" y="66" class="svg-la">&#9313; BGP anycast</text>
+              <text x="218" y="90" class="svg-s">nearest CF colo</text>
+              <text x="218" y="110" class="svg-s">e.g. LIS / MAD</text>
+            </g>
+            <g>
+              <rect x="402" y="40" width="170" height="96" rx="10" class="svg-box cf"/>
+              <text x="416" y="66" class="svg-la">&#9314; Protect</text>
+              <text x="416" y="90" class="svg-s">DDoS managed rules</text>
+              <text x="416" y="110" class="svg-s">Network Firewall</text>
+            </g>
+            <g>
+              <rect x="600" y="40" width="170" height="96" rx="10" class="svg-box cf"/>
+              <text x="614" y="66" class="svg-la">&#9315; Route</text>
+              <text x="614" y="90" class="svg-s">203.0.113.0/24 &rarr;</text>
+              <text x="614" y="110" class="svg-s">tunnel_dc1 (prio 100)</text>
+            </g>
+            <g>
+              <rect x="798" y="40" width="146" height="96" rx="10" class="svg-box cust"/>
+              <text x="812" y="66" class="svg-lb">&#9316; Your router</text>
+              <text x="812" y="90" class="svg-s">decapsulate</text>
+              <text x="812" y="110" class="svg-s">&rarr; server</text>
+            </g>
+            <path d="M176,88 L202,88" class="svg-flow cf" marker-end="url(#a2)"/>
+            <path d="M374,88 L400,88" class="svg-flow cf" marker-end="url(#a2)"/>
+            <path d="M572,88 L598,88" class="svg-flow cf" marker-end="url(#a2)"/>
+            <path d="M770,88 L796,88" class="svg-flow cf" marker-end="url(#a2)"/>
+            <text x="16" y="180" class="svg-l">&#9312; A client sends a packet to your IP. &#9313; Because Cloudflare advertises the prefix everywhere, BGP delivers it to the closest Cloudflare data center.</text>
+            <text x="16" y="202" class="svg-l">&#9314; Attack traffic is dropped; firewall rules allow/block by IP, port, protocol, country, ASN. &#9315; The route table picks the healthiest tunnel.</text>
+            <text x="16" y="224" class="svg-l">&#9316; Cloudflare wraps the packet in GRE/IPsec and sends it to your router, which unwraps it and forwards the original packet to the server.</text>
+          </svg>
+          <figcaption>Figure 2 &mdash; Every Cloudflare data center runs the full pipeline, so mitigation capacity scales with the whole network.</figcaption>
+        </figure>
+      </section>
+
+      <section id="blocks">
+        <h2>2. Building blocks you configure</h2>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 470" role="img" aria-label="Magic Transit configuration building blocks">
+            <defs>
+              <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa4b2"/></marker>
+            </defs>
+            <rect x="12" y="12" width="936" height="210" rx="14" class="svg-zone cf"/>
+            <text x="30" y="38" class="svg-la">CLOUDFLARE ACCOUNT (dashboard / API / Terraform)</text>
+
+            <rect x="30" y="56" width="210" height="148" rx="10" class="svg-box cf"/>
+            <text x="46" y="82" class="svg-t">&#9312; IP prefix</text>
+            <text x="46" y="106" class="svg-s">203.0.113.0/24</text>
+            <text x="46" y="126" class="svg-s">LOA + IRR route obj</text>
+            <text x="46" y="146" class="svg-s">RPKI ROA (ASN)</text>
+            <text x="46" y="172" class="svg-l">BGP prefix: advertise</text>
+            <text x="46" y="190" class="svg-l">/ withdraw control</text>
+
+            <rect x="258" y="56" width="210" height="148" rx="10" class="svg-box cf"/>
+            <text x="274" y="82" class="svg-t">&#9313; Tunnels</text>
+            <text x="274" y="106" class="svg-s">GRE / IPsec / CNI</text>
+            <text x="274" y="126" class="svg-s">CF endpoint (anycast)</text>
+            <text x="274" y="146" class="svg-s">customer endpoint</text>
+            <text x="274" y="166" class="svg-s">interface /31, MTU</text>
+            <text x="274" y="190" class="svg-l">+ tunnel health checks</text>
+
+            <rect x="486" y="56" width="210" height="148" rx="10" class="svg-box cf"/>
+            <text x="502" y="82" class="svg-t">&#9314; Routes</text>
+            <text x="502" y="106" class="svg-s">static: prefix &rarr; nexthop</text>
+            <text x="502" y="126" class="svg-s">priority + weight (ECMP)</text>
+            <text x="502" y="146" class="svg-s">region scoping</text>
+            <text x="502" y="166" class="svg-s">or BGP peering</text>
+            <text x="502" y="190" class="svg-l">+ endpoint health checks</text>
+
+            <rect x="714" y="56" width="216" height="148" rx="10" class="svg-box cf"/>
+            <text x="730" y="82" class="svg-t">&#9315; Protection</text>
+            <text x="730" y="106" class="svg-s">DDoS managed rules</text>
+            <text x="730" y="126" class="svg-s">Network Firewall</text>
+            <text x="730" y="146" class="svg-s">Network Flow (NetFlow)</text>
+            <text x="730" y="166" class="svg-s">notifications</text>
+            <text x="730" y="190" class="svg-l">+ analytics / Logpush</text>
+
+            <rect x="12" y="250" width="936" height="208" rx="14" class="svg-zone cust"/>
+            <text x="30" y="276" class="svg-lb">YOUR NETWORK</text>
+
+            <rect x="30" y="294" width="280" height="148" rx="10" class="svg-box cust"/>
+            <text x="46" y="320" class="svg-t">&#9316; Edge router(s)</text>
+            <text x="46" y="344" class="svg-s">tunnel iface 10.100.0.1/31</text>
+            <text x="46" y="364" class="svg-s">MTU 1476 (GRE)</text>
+            <text x="46" y="384" class="svg-s">MSS clamp 1436 / 1360</text>
+            <text x="46" y="404" class="svg-s">reply to health probes</text>
+            <text x="46" y="428" class="svg-l">one tunnel per ISP link</text>
+
+            <rect x="340" y="294" width="280" height="148" rx="10" class="svg-box cust"/>
+            <text x="356" y="320" class="svg-t">&#9317; Return path</text>
+            <text x="356" y="344" class="svg-s">DSR: reply via your ISP</text>
+            <text x="356" y="364" class="svg-s">egress: reply via tunnel</text>
+            <text x="356" y="384" class="svg-s">(policy-based routing)</text>
+            <text x="356" y="404" class="svg-s">ISP must allow src prefix</text>
+            <text x="356" y="428" class="svg-l">no strict uRPF on the ISP</text>
+
+            <rect x="650" y="294" width="280" height="148" rx="10" class="svg-box cust"/>
+            <text x="666" y="320" class="svg-t">&#9318; Servers</text>
+            <text x="666" y="344" class="svg-s">203.0.113.10 web</text>
+            <text x="666" y="364" class="svg-s">203.0.113.20 VPN</text>
+            <text x="666" y="384" class="svg-s">203.0.113.30 game/UDP</text>
+            <text x="666" y="404" class="svg-s">keep their real IPs</text>
+            <text x="666" y="428" class="svg-l">no app change needed</text>
+
+            <path d="M363,204 L200,292" class="svg-flow" marker-end="url(#a3)"/>
+            <path d="M591,204 L480,292" class="svg-flow" marker-end="url(#a3)"/>
+          </svg>
+          <figcaption>Figure 3 &mdash; Seven blocks to configure: four in Cloudflare, three on your side. Tunnels and routes on the Cloudflare side must mirror the router configuration.</figcaption>
+        </figure>
+
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Block</th><th>What you configure</th><th>Why it matters</th></tr></thead>
+          <tbody>
+            <tr><td>IP prefix (BYOIP)</td><td>Prefix &ge; /24, LOA, IRR route object, RPKI ROA, origin ASN (yours or AS13335)</td><td>Transit providers only accept Cloudflare's announcement if authorization matches</td></tr>
+            <tr><td>BGP prefix</td><td>Which prefixes are announced; advertise/withdraw status; optional auto-advertise</td><td>Controls when traffic is attracted to Cloudflare (always-on vs on-demand)</td></tr>
+            <tr><td>Tunnels</td><td>Type, Cloudflare endpoint, customer endpoint, interface address (/31), MTU, health check type/direction</td><td>The only path from Cloudflare to your network</td></tr>
+            <tr><td>Routes</td><td>Static prefix &rarr; tunnel nexthop, priority, weight, region; or BGP over CNI/tunnels</td><td>Selects which tunnel/data center gets each subnet; enables failover and ECMP</td></tr>
+            <tr><td>Health checks</td><td>Tunnel checks (ICMP through the tunnel) and endpoint checks to targets behind it</td><td>Unhealthy tunnels are de-prioritized automatically</td></tr>
+            <tr><td>Network Firewall</td><td>Stateless/stateful allow/deny rules by IP, port, protocol, packet fields</td><td>Blocks unwanted traffic at the edge instead of at your firewall</td></tr>
+            <tr><td>Router</td><td>Tunnel interface, MTU/MSS clamp, anti-replay off, probe replies, return routing</td><td>Most onboarding problems are MTU, health check, or return-path issues</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="packet">
+        <h2>3. Encapsulation, MTU, and MSS</h2>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 250" role="img" aria-label="GRE encapsulation headers">
+            <text x="24" y="34" class="svg-t">Packet on the wire between Cloudflare and your router (GRE)</text>
+            <rect x="24" y="56" width="250" height="70" rx="6" class="svg-hdr outer"/>
+            <text x="40" y="82" class="svg-la">Outer IPv4 (20 B)</text>
+            <text x="40" y="104" class="svg-s">src CF endpoint &rarr; dst 198.51.100.10</text>
+            <rect x="274" y="56" width="120" height="70" rx="6" class="svg-hdr gre"/>
+            <text x="290" y="82" class="svg-lb">GRE (4 B)</text>
+            <text x="290" y="104" class="svg-s">proto 0x0800</text>
+            <rect x="394" y="56" width="542" height="70" rx="6" class="svg-hdr inner"/>
+            <text x="410" y="82" class="svg-lg">Original packet (up to 1476 B)</text>
+            <text x="410" y="104" class="svg-s">src client IP &rarr; dst 203.0.113.10 | TCP 443 | payload</text>
+            <text x="24" y="166" class="svg-l">1500 (Internet MTU) &minus; 20 outer IP &minus; 4 GRE = 1476 tunnel MTU &nbsp;&rarr;&nbsp; 1476 &minus; 20 IP &minus; 20 TCP = MSS 1436</text>
+            <text x="24" y="190" class="svg-l">IPsec adds ESP overhead &rarr; clamp MSS to 1360 on the IPsec tunnel interface when egress traffic uses it.</text>
+            <text x="24" y="214" class="svg-l">Tunnel-in-tunnel (your own IPsec/GRE inside the prefix): MSS clamp does not help &mdash; lower the inner tunnel MTU (&minus;24 B GRE / &minus;140 B IPsec).</text>
+          </svg>
+          <figcaption>Figure 4 &mdash; Encapsulation overhead is why MSS clamping is mandatory. Without it, large TCP packets are fragmented or dropped (classic symptom: small pages load, big downloads hang).</figcaption>
+        </figure>
+        <div class="warn"><b>Also clear the DF bit</b> or allow fragmentation for non-TCP traffic, and disable anti-replay on IPsec (Cloudflare anycast means packets may arrive from many locations).</div>
+      </section>
+
+      <section id="modes">
+        <h2>4. Ingress-only (DSR) vs ingress + egress</h2>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 330" role="img" aria-label="Direct server return versus egress through Cloudflare">
+            <defs>
+              <marker id="a4o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f6821f"/></marker>
+              <marker id="a4b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b8def"/></marker>
+            </defs>
+            <text x="24" y="30" class="svg-t">A) Ingress-only / Direct Server Return (default)</text>
+            <rect x="24" y="48" width="140" height="56" rx="10" class="svg-box"/><text x="44" y="82" class="svg-t">Client</text>
+            <rect x="330" y="48" width="170" height="56" rx="10" class="svg-box cf"/><text x="350" y="82" class="svg-t">Cloudflare</text>
+            <rect x="700" y="48" width="230" height="56" rx="10" class="svg-box cust"/><text x="720" y="82" class="svg-t">Your router / server</text>
+            <path d="M164,66 L328,66" class="svg-flow cf" marker-end="url(#a4o)"/>
+            <path d="M500,66 L698,66" class="svg-flow cf" marker-end="url(#a4o)"/>
+            <text x="540" y="58" class="svg-la">tunnel</text>
+            <path d="M700,98 C520,150 330,150 166,98" class="svg-flow cust" marker-end="url(#a4b)"/>
+            <text x="360" y="154" class="svg-lb">reply goes out via your own ISP (asymmetric)</text>
+
+            <line x1="24" y1="180" x2="936" y2="180" stroke="#2a3140" stroke-dasharray="4 4"/>
+
+            <text x="24" y="210" class="svg-t">B) Ingress + egress (symmetric through Cloudflare)</text>
+            <rect x="24" y="228" width="140" height="56" rx="10" class="svg-box"/><text x="44" y="262" class="svg-t">Client</text>
+            <rect x="330" y="228" width="170" height="56" rx="10" class="svg-box cf"/><text x="350" y="262" class="svg-t">Cloudflare</text>
+            <rect x="700" y="228" width="230" height="56" rx="10" class="svg-box cust"/><text x="720" y="262" class="svg-t">Your router / server</text>
+            <path d="M164,246 L328,246" class="svg-flow cf" marker-end="url(#a4o)"/>
+            <path d="M500,246 L698,246" class="svg-flow cf" marker-end="url(#a4o)"/>
+            <path d="M698,270 L502,270" class="svg-flow cust" marker-end="url(#a4b)"/>
+            <path d="M328,270 L166,270" class="svg-flow cust" marker-end="url(#a4b)"/>
+            <text x="520" y="300" class="svg-lb">reply returns through the tunnel (PBR on router)</text>
+          </svg>
+          <figcaption>Figure 5 &mdash; DSR keeps latency low and is the default. Egress is required when your ISP will not accept your source prefix, and enables stateful firewalling of both directions.</figcaption>
+        </figure>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Mode</th><th>Pros</th><th>Requirements</th></tr></thead>
+          <tbody>
+            <tr><td>Ingress-only (DSR)</td><td>Lowest latency on replies; no extra Cloudflare bandwidth for egress</td><td>ISP must allow traffic sourced from your prefix; health checks unidirectional</td></tr>
+            <tr><td>Ingress + egress</td><td>Symmetric flows; stateful Network Firewall; works with Cloudflare-leased IPs</td><td>Policy-based routing so return traffic uses the tunnel; bidirectional health checks</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="example">
+        <h2>5. Example design</h2>
+        <p>A company protects one data center with two ISP uplinks and a secondary site.</p>
+        <div class="kv">
+          <b>Protected prefix</b><span>203.0.113.0/24 (origin AS64500)</span>
+          <b>DC1 router public IPs</b><span>198.51.100.10 (ISP A), 192.0.2.10 (ISP B)</span>
+          <b>DC2 router public IP</b><span>198.51.100.200</span>
+          <b>Tunnels</b><span>tun_dc1_ispA, tun_dc1_ispB, tun_dc2</span>
+          <b>Interface addresses</b><span>10.100.0.0/31, 10.100.0.2/31, 10.100.0.4/31</span>
+          <b>Cloudflare endpoint</b><span>anycast IP assigned to your account</span>
+        </div>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Prefix</th><th>Nexthop</th><th>Priority</th><th>Weight</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td>203.0.113.0/24</td><td>tun_dc1_ispA</td><td>100</td><td>128</td><td>Primary, ECMP with ISP B</td></tr>
+            <tr><td>203.0.113.0/24</td><td>tun_dc1_ispB</td><td>100</td><td>128</td><td>Primary, ECMP with ISP A</td></tr>
+            <tr><td>203.0.113.0/24</td><td>tun_dc2</td><td>200</td><td>&mdash;</td><td>Failover if DC1 tunnels are unhealthy</td></tr>
+            <tr><td>203.0.113.128/25</td><td>tun_dc2</td><td>100</td><td>&mdash;</td><td>Longest-prefix match: this half always goes to DC2</td></tr>
+          </tbody>
+        </table></div>
+        <div class="tip"><b>Rules of thumb:</b> lower priority wins; equal priority uses ECMP (weights tune the split); longest prefix always wins over priority; scope routes to regions near the data center to reduce last-hop latency.</div>
+      </section>
+
+      <section id="steps">
+        <h2>6. Configuration steps</h2>
+        <ol class="steps">
+          <li><h3>Prepare IP space</h3>
+            <p>Own a publicly routable prefix of at least <code>/24</code>, or request Cloudflare-leased IPs. Create/update the IRR route object and RPKI ROA for the originating ASN, and draft the Letter of Agency (LOA).</p></li>
+          <li><h3>Onboard the prefix</h3>
+            <p>Cloudflare validates the LOA/IRR/ROA and creates the IP prefix plus a default BGP prefix. It stays <em>withdrawn</em> until you are ready.</p></li>
+          <li><h3>Verify router compatibility</h3>
+            <p>GRE or IPsec support, one tunnel per ISP, MSS clamping, and asymmetric flows for DSR.</p></li>
+          <li><h3>Create tunnels in Cloudflare</h3>
+            <pre>curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/magic/gre_tunnels" \
+  --request POST \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --json '{
+    "name": "tun_dc1_ispA",
+    "customer_gre_endpoint": "198.51.100.10",
+    "cloudflare_gre_endpoint": "&lt;CLOUDFLARE_ANYCAST_ENDPOINT&gt;",
+    "interface_address": "10.100.0.0/31",
+    "mtu": 1476,
+    "health_check": { "enabled": true, "type": "request", "direction": "unidirectional" }
+  }'</pre></li>
+          <li><h3>Configure the router side</h3>
+            <p>Example on Linux (mirror the same values on Cisco/Juniper/Fortinet/Palo Alto):</p>
+            <pre>ip tunnel add cf_ispA mode gre local 198.51.100.10 remote &lt;CLOUDFLARE_ANYCAST_ENDPOINT&gt; ttl 64
+ip addr add 10.100.0.1/31 dev cf_ispA
+ip link set cf_ispA mtu 1476 up
+
+# clamp TCP MSS for traffic through the tunnel
+iptables -t mangle -A FORWARD -o cf_ispA -p tcp --tcp-flags SYN,RST SYN \
+  -j TCPMSS --set-mss 1436
+
+# reply to Cloudflare health probes (allow ICMP from Cloudflare ranges)
+iptables -A INPUT -i cf_ispA -p icmp -j ACCEPT</pre></li>
+          <li><h3>Add routes</h3>
+            <pre>curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/magic/routes" \
+  --request POST \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --json '{
+    "prefix": "203.0.113.0/24",
+    "nexthop": "10.100.0.1",
+    "priority": 100,
+    "weight": 128,
+    "description": "DC1 via ISP A"
+  }'</pre></li>
+          <li><h3>Configure health checks</h3>
+            <p>Confirm tunnel health is <em>healthy</em> on the Network health page. Add endpoint health checks for critical IPs behind the tunnel. Use <em>Request</em> type with stateful firewalls.</p></li>
+          <li><h3>Configure Network Firewall and DDoS settings</h3>
+            <p>Start with allow rules for the services you expose (for example tcp/443 to 203.0.113.10, udp/51820 to the VPN), then a default block for the rest. Review DDoS managed ruleset sensitivity.</p></li>
+          <li><h3>Advertise the prefix</h3>
+            <pre>curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/addressing/prefixes/$PREFIX_ID/bgp/prefixes/$BGP_PREFIX_ID" \
+  --request PATCH \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --json '{ "on_demand": { "advertised": true } }'</pre>
+            <p>Then ask your ISPs to stop announcing the same prefix (or announce it less-specific / prepended) so Cloudflare's path is preferred.</p></li>
+          <li><h3>Validate and monitor</h3>
+            <p>Check traceroutes land on Cloudflare, confirm traffic in Magic Transit analytics, and set notifications for tunnel health and DDoS events.</p></li>
+        </ol>
+      </section>
+
+      <section id="ondemand">
+        <h2>7. Always-on vs on-demand</h2>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 220" role="img" aria-label="On-demand advertisement with Network Flow">
+            <defs>
+              <marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa4b2"/></marker>
+            </defs>
+            <rect x="20" y="40" width="200" height="90" rx="10" class="svg-box cust"/>
+            <text x="36" y="68" class="svg-t">Your routers</text><text x="36" y="92" class="svg-s">export NetFlow/sFlow</text><text x="36" y="112" class="svg-s">to Cloudflare</text>
+            <rect x="270" y="40" width="200" height="90" rx="10" class="svg-box cf"/>
+            <text x="286" y="68" class="svg-t">Network Flow</text><text x="286" y="92" class="svg-s">detects volumetric</text><text x="286" y="112" class="svg-s">attack threshold</text>
+            <rect x="520" y="40" width="200" height="90" rx="10" class="svg-box cf"/>
+            <text x="536" y="68" class="svg-t">Auto-advertise</text><text x="536" y="92" class="svg-s">BGP prefix &rarr;</text><text x="536" y="112" class="svg-s">advertised</text>
+            <rect x="770" y="40" width="170" height="90" rx="10" class="svg-box ok"/>
+            <text x="786" y="68" class="svg-t">Protected</text><text x="786" y="92" class="svg-s">traffic via</text><text x="786" y="112" class="svg-s">Magic Transit</text>
+            <path d="M220,85 L268,85" class="svg-flow" marker-end="url(#a5)"/>
+            <path d="M470,85 L518,85" class="svg-flow" marker-end="url(#a5)"/>
+            <path d="M720,85 L768,85" class="svg-flow" marker-end="url(#a5)"/>
+            <text x="20" y="172" class="svg-l">Always-on: prefix permanently advertised &mdash; constant protection, no BGP convergence during an attack (recommended).</text>
+            <text x="20" y="196" class="svg-l">On-demand: prefix withdrawn in peacetime; advertised manually, via API, or automatically by Network Flow rules when an attack is detected.</text>
+          </svg>
+          <figcaption>Figure 6 &mdash; On-demand saves peacetime bandwidth but adds minutes of BGP convergence during an attack. Tunnels and routes must already be configured and healthy.</figcaption>
+        </figure>
+      </section>
+
+      <section id="verify">
+        <h2>8. Verify and troubleshoot</h2>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Check</th><th>How</th></tr></thead>
+          <tbody>
+            <tr><td>Prefix advertised</td><td>Dashboard &rarr; IP addresses &rarr; prefix status <em>Advertised</em>; public looking glass / <code>bgp.tools</code> shows AS13335 upstream</td></tr>
+            <tr><td>Traffic lands on Cloudflare</td><td><code>mtr 203.0.113.10</code> from outside shows a Cloudflare hop before your network</td></tr>
+            <tr><td>Tunnel healthy</td><td>Network health page; <code>ping 10.100.0.0</code> across the tunnel from the router</td></tr>
+            <tr><td>MTU correct</td><td><code>ping -M do -s 1448 10.100.0.0</code> (1476 &minus; 28) succeeds; 1449 fails</td></tr>
+            <tr><td>Firewall effect</td><td>Network Firewall analytics show matched/blocked packets per rule</td></tr>
+            <tr><td>Return path (DSR)</td><td>Replies leave via your ISP with source 203.0.113.x &mdash; ISP must not filter them</td></tr>
+          </tbody>
+        </table></div>
+        <ul class="bullets">
+          <li><strong>Tunnel flapping / unhealthy with stateful firewall:</strong> switch health check type from <em>Reply</em> to <em>Request</em>.</li>
+          <li><strong>IPsec up but no traffic:</strong> disable anti-replay (or set window to 0); check crypto parameters.</li>
+          <li><strong>Large transfers stall:</strong> MSS clamp missing or DF set.</li>
+          <li><strong>Route not used:</strong> a more-specific route or lower priority value elsewhere is winning.</li>
+        </ul>
+      </section>
+
+      <section id="faq">
+        <h2>9. FAQ: can I advertise single IPs (for example two /32s)?</h2>
+        <p><strong>No.</strong> The Internet does not globally accept IPv4 announcements longer than <code>/24</code>, so Magic Transit only onboards and advertises prefixes of <code>/24</code> or larger. Addresses such as <code>93.94.103.254</code> and <code>93.94.103.255</code> cannot be announced on their own.</p>
+        <ul class="bullets">
+          <li><strong>If you control the whole /24</strong> (for example <code>93.94.103.0/24</code>): onboard and advertise the /24 with LOA, IRR, and ROA. Then use <em>routes</em> to send smaller subnets inside it to different tunnels. Cloudflare's traffic-steering docs show subnets such as <code>/29</code>, and longest-prefix match applies within the /24.</li>
+          <li><strong>If you only have a few IPs:</strong> use <em>Cloudflare-leased IPs</em> for Magic Transit. No LOA is needed; egress is enabled automatically.</li>
+          <li><strong>If you only need HTTP(S):</strong> the CDN/WAF proxy or Spectrum protects individual hostnames and ports without owning a /24.</li>
+        </ul>
+        <div class="note">Also note: <code>.255</code> is the broadcast address of a /24 and is not normally assigned to a host.</div>
+        <div class="note">Official references: <a href="https://developers.cloudflare.com/magic-transit/">Magic Transit docs</a> &middot; <a href="https://developers.cloudflare.com/magic-transit/get-started/">Get started</a> &middot; <a href="https://developers.cloudflare.com/magic-transit/how-to/advertise-prefixes/">Advertise prefixes</a> &middot; <a href="https://developers.cloudflare.com/magic-transit/reference/traffic-steering/">Traffic steering</a> &middot; <a href="https://developers.cloudflare.com/magic-transit/reference/mtu-mss/">MTU and MSS</a> &middot; <a href="https://developers.cloudflare.com/magic-transit/cloudflare-ips/">Cloudflare IPs</a>.</div>
+      </section>
+
+      <section class="disclaimer"><div class="box">
+        <b>Disclaimer:</b> Example IPs use documentation ranges (RFC 5737). Verify current values in Cloudflare documentation before production design. Developed by Pimenta.fun LAB. <span class="risk">USE AT YOUR OWN RISK.</span>
+      </div></section>
+
+      <footer>
+        Pimenta lab &middot; <a href="https://www.pimenta.fun/#docs">back to documents</a>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
