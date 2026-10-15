@@ -1,0 +1,19 @@
+tools/api-traffic.mjs
+  s_45d7e19da6ce2d::t_e9543c05cdfd18 1-398
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "628555a09c319a0232103fb894b5f45d7d0a0844",
+  "prompts": {},
+  "sessions": {
+    "s_45d7e19da6ce2d": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_10621ba67ffeb0finUXEc7EfXx",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "tpimenta <tpimenta@cloudflare.com>"
+    }
+  }
+}
