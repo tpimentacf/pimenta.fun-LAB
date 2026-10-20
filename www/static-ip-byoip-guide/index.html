@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Static IPs &amp; BYOIP Guide &mdash; Pimenta Lab</title>
+  <meta name="description" content="How Cloudflare Static IPs and Bring Your Own IP (BYOIP) work: shared anycast vs dedicated addresses, prefix onboarding, service bindings, BGP advertisement, address maps, and the full client-to-origin connection flow with diagrams." />
+  <link rel="stylesheet" href="/assets/docs.css" />
+  <style>
+    figure.diagram { margin: 20px 0; }
+    figure.diagram svg { width: 100%; height: auto; display: block;
+      background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+    figure.diagram figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; text-align: center; }
+    .svg-box { fill: var(--panel-2); stroke: var(--border); stroke-width: 1.4; }
+    .svg-box.cf { stroke: var(--accent); }
+    .svg-box.cust { stroke: var(--blue); }
+    .svg-box.ok { stroke: var(--green); }
+    .svg-box.bad { stroke: var(--red); }
+    .svg-zone { fill: none; stroke: var(--border); stroke-dasharray: 6 5; }
+    .svg-zone.cf { stroke: rgba(246,130,31,.55); }
+    .svg-zone.cust { stroke: rgba(91,141,239,.55); }
+    .svg-t { fill: var(--text); font: 700 14px var(--sans); }
+    .svg-s { fill: var(--muted); font: 12px var(--mono); }
+    .svg-l { fill: var(--muted); font: 12px var(--sans); }
+    .svg-la { fill: var(--accent); font: 600 12px var(--mono); }
+    .svg-lb { fill: var(--blue); font: 600 12px var(--mono); }
+    .svg-lg { fill: var(--green); font: 600 12px var(--mono); }
+    .svg-lr { fill: var(--red); font: 600 12px var(--mono); }
+    .svg-flow { stroke: #9aa4b2; stroke-width: 1.8; fill: none; }
+    .svg-flow.cf { stroke: var(--accent); }
+    .svg-flow.cust { stroke: var(--blue); }
+    .svg-flow.ok { stroke: var(--green); }
+    .svg-flow.dash { stroke-dasharray: 5 4; }
+    .svg-num { fill: var(--accent); }
+    .svg-numt { fill: #0b0f17; font: 700 12px var(--sans); }
+    .table-wrap { overflow-x: auto; }
+    .table-wrap table { min-width: 680px; }
+    table.ref tbody td:first-child { white-space: normal; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc">
+      <div class="brand"><span class="dot"></span> pimenta<span>.fun</span> lab</div>
+      <a class="home" href="https://www.pimenta.fun">&larr; Home</a>
+      <a class="home" href="https://www.pimenta.fun/#docs">&larr; Documents</a>
+      <a class="home" href="https://www.pimenta.fun/magic-transit-guide/">&rarr; Magic Transit guide</a>
+      <h2>Contents</h2>
+      <a href="#why">0. Why custom IPs</a>
+      <a href="#compare">1. Shared vs Static vs BYOIP</a>
+      <a href="#flow">2. Client connection workflow</a>
+      <a href="#blocks">3. BYOIP building blocks</a>
+      <a href="#static-steps">4. Static IPs: step by step</a>
+      <a href="#byoip-steps">5. BYOIP: step by step</a>
+      <a href="#egress">6. Egress IPs (to origin)</a>
+      <a href="#verify">7. Verify &amp; troubleshoot</a>
+      <a href="#choose">8. Which one to choose</a>
+    </nav>
+
+    <main>
+      <header class="hero">
+        <div class="crumb"><a href="https://www.pimenta.fun/#docs">Documents</a> / Static IPs &amp; BYOIP</div>
+        <span class="pill">Guide</span>
+        <h1>Cloudflare <span class="grad">Static IPs</span> &amp; <span class="grad">BYOIP</span></h1>
+        <p class="lead">By default, proxied hostnames resolve to shared Cloudflare anycast IPs that can change at any time. Static IPs give you dedicated Cloudflare addresses that stay fixed. BYOIP (Bring Your Own IP) lets Cloudflare announce <em>your own</em> prefix from every data center. This guide explains how both work, how a client connection travels through them, and every step to implement them.</p>
+      </header>
+
+      <section id="why">
+        <h2>0. Why customize the IPs Cloudflare uses</h2>
+        <div class="cards">
+          <div class="card"><div class="n">ALLOWLISTS</div><h3>Fixed, known addresses</h3><p>Partners, corporate firewalls, and mobile apps that pin IPs need addresses that do not change without notice.</p></div>
+          <div class="card"><div class="n">APEX / A RECORDS</div><h3>No CNAME needed</h3><p>Partial (CNAME) setups and SaaS custom hostnames can point an apex <code>A</code> record at a static IP when the DNS provider cannot flatten CNAMEs.</p></div>
+          <div class="card"><div class="n">OWNERSHIP</div><h3>Keep your reputation</h3><p>BYOIP keeps traffic on addresses you own: same IP reputation, geolocation registration, and contracts, but with Cloudflare's network in front.</p></div>
+        </div>
+        <div class="note"><b>Availability:</b> Static IPs and BYOIP are Enterprise add-ons arranged through your account team. Free, Pro, and Business zones always use the shared anycast pool, and Cloudflare does not rotate those IPs on request.</div>
+      </section>
+
+      <section id="compare">
+        <h2>1. Shared anycast vs Static IPs vs BYOIP</h2>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 360" role="img" aria-label="Comparison of shared anycast, static IPs and BYOIP DNS answers">
+            <defs>
+              <marker id="c1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa4b2"/></marker>
+            </defs>
+            <text x="20" y="32" class="svg-t">Same DNS question, three different answers</text>
+            <rect x="20" y="52" width="180" height="70" rx="10" class="svg-box"/>
+            <text x="36" y="80" class="svg-t">dig A</text><text x="36" y="102" class="svg-s">shop.example.com</text>
+
+            <rect x="290" y="52" width="210" height="280" rx="12" class="svg-box cf"/>
+            <text x="308" y="80" class="svg-t">Cloudflare DNS</text>
+            <text x="308" y="104" class="svg-s">record is proxied</text>
+            <text x="308" y="134" class="svg-l">Is the zone (or account)</text>
+            <text x="308" y="152" class="svg-l">a member of an</text>
+            <text x="308" y="170" class="svg-la">address map?</text>
+            <text x="308" y="206" class="svg-s">no  &rarr; shared pool</text>
+            <text x="308" y="228" class="svg-s">yes &rarr; IPs in the map</text>
+            <text x="308" y="262" class="svg-l">Zone membership wins</text>
+            <text x="308" y="280" class="svg-l">over account membership.</text>
+            <text x="308" y="310" class="svg-l">Origin IP is never returned.</text>
+            <path d="M200,87 L288,87" class="svg-flow" marker-end="url(#c1)"/>
+
+            <rect x="590" y="52" width="350" height="80" rx="10" class="svg-box"/>
+            <text x="608" y="78" class="svg-t">Default: shared anycast</text>
+            <text x="608" y="100" class="svg-s">104.16.x.x / 172.67.x.x (example)</text>
+            <text x="608" y="120" class="svg-l">shared with other customers, may change</text>
+
+            <rect x="590" y="152" width="350" height="80" rx="10" class="svg-box ok"/>
+            <text x="608" y="178" class="svg-t">Static IPs (leased from Cloudflare)</text>
+            <text x="608" y="200" class="svg-lg">192.0.2.10, 192.0.2.11 (example)</text>
+            <text x="608" y="220" class="svg-l">dedicated to your account, change only on request</text>
+
+            <rect x="590" y="252" width="350" height="80" rx="10" class="svg-box cust"/>
+            <text x="608" y="278" class="svg-t">BYOIP (your prefix)</text>
+            <text x="608" y="300" class="svg-lb">203.0.113.10 from 203.0.113.0/24</text>
+            <text x="608" y="320" class="svg-l">you own it; Cloudflare announces it via BGP</text>
+
+            <path d="M500,120 L588,92" class="svg-flow" marker-end="url(#c1)"/>
+            <path d="M500,192 L588,192" class="svg-flow ok" marker-end="url(#c1)"/>
+            <path d="M500,264 L588,292" class="svg-flow cust" marker-end="url(#c1)"/>
+          </svg>
+          <figcaption>Figure 1 &mdash; Address maps are the switch. Without one, proxied records get shared anycast IPs. With one, Cloudflare answers with the static or BYOIP addresses in the map.</figcaption>
+        </figure>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th></th><th>Shared anycast (default)</th><th>Static IPs</th><th>BYOIP</th></tr></thead>
+          <tbody>
+            <tr><td>Who owns the IPs</td><td>Cloudflare</td><td>Cloudflare (leased to you)</td><td>You (registered at an RIR)</td></tr>
+            <tr><td>Dedicated to you</td><td>No</td><td>Yes, at account level (zones can share them)</td><td>Yes</td></tr>
+            <tr><td>Can change</td><td>Any time, without notice</td><td>Only with notice, usually at your request</td><td>Only if you change them</td></tr>
+            <tr><td>Minimum size</td><td>&mdash;</td><td>A small set of IPs</td><td>IPv4 <code>/24</code>, IPv6 <code>/48</code></td></tr>
+            <tr><td>Paperwork</td><td>None</td><td>Contract add-on</td><td>RIR registration, IRR route object, RPKI ROA, ownership validation, LOA</td></tr>
+            <tr><td>Address map</td><td>Not used</td><td>Created by Cloudflare; you edit it</td><td>You create it</td></tr>
+            <tr><td>Services</td><td>CDN/WAF</td><td>CDN/WAF ingress, Spectrum</td><td>CDN/WAF, Spectrum, Magic Transit, Gateway DNS locations and dedicated egress, CDN egress</td></tr>
+            <tr><td>Lead time</td><td>Instant</td><td>Days</td><td>Weeks (validation, 4&ndash;6 h bindings, BGP)</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="flow">
+        <h2>2. How a client connection works</h2>
+        <p>The same path applies to Static IPs and BYOIP. The only difference is who owns the address the client connects to.</p>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 560" role="img" aria-label="End-to-end client connection through Cloudflare with static IPs or BYOIP">
+            <defs>
+              <marker id="f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa4b2"/></marker>
+              <marker id="f1o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f6821f"/></marker>
+              <marker id="f1b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b8def"/></marker>
+              <marker id="f1g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3fb950"/></marker>
+            </defs>
+
+            <rect x="20" y="40" width="160" height="90" rx="10" class="svg-box"/>
+            <text x="36" y="68" class="svg-t">Client</text>
+            <text x="36" y="90" class="svg-s">browser / app</text>
+            <text x="36" y="110" class="svg-s">in Lisbon</text>
+
+            <rect x="290" y="30" width="250" height="110" rx="10" class="svg-box cf"/>
+            <text x="306" y="56" class="svg-t">Cloudflare authoritative DNS</text>
+            <text x="306" y="80" class="svg-s">shop.example.com proxied</text>
+            <text x="306" y="100" class="svg-s">zone in address map</text>
+            <text x="306" y="122" class="svg-la">A 203.0.113.10</text>
+
+            <rect x="650" y="30" width="290" height="110" rx="10" class="svg-box"/>
+            <text x="666" y="56" class="svg-t">Internet routing (BGP)</text>
+            <text x="666" y="80" class="svg-s">203.0.113.0/24</text>
+            <text x="666" y="100" class="svg-s">origin AS13335 (Cloudflare)</text>
+            <text x="666" y="122" class="svg-l">announced from every colo</text>
+
+            <path d="M180,70 L288,70" class="svg-flow" marker-end="url(#f1)"/>
+            <path d="M288,108 L182,108" class="svg-flow cf" marker-end="url(#f1o)"/>
+
+            <rect x="20" y="190" width="920" height="200" rx="14" class="svg-zone cf"/>
+            <text x="36" y="214" class="svg-la">NEAREST CLOUDFLARE DATA CENTER (e.g. LIS), selected by anycast</text>
+
+            <rect x="40" y="230" width="200" height="140" rx="10" class="svg-box cf"/>
+            <text x="56" y="256" class="svg-t">Service binding</text>
+            <text x="56" y="280" class="svg-s">203.0.113.0/24</text>
+            <text x="56" y="298" class="svg-s">  &rarr; CDN (default)</text>
+            <text x="56" y="316" class="svg-s">203.0.113.64/27</text>
+            <text x="56" y="334" class="svg-s">  &rarr; Spectrum</text>
+            <text x="56" y="356" class="svg-l">which product handles it</text>
+
+            <rect x="262" y="230" width="200" height="140" rx="10" class="svg-box cf"/>
+            <text x="278" y="256" class="svg-t">TLS + SNI</text>
+            <text x="278" y="280" class="svg-s">SNI shop.example.com</text>
+            <text x="278" y="298" class="svg-s">&rarr; zone + edge cert</text>
+            <text x="278" y="316" class="svg-s">no SNI &rarr; default_sni</text>
+            <text x="278" y="334" class="svg-s">(address map)</text>
+            <text x="278" y="356" class="svg-l">hostname, not IP, picks zone</text>
+
+            <rect x="484" y="230" width="210" height="140" rx="10" class="svg-box cf"/>
+            <text x="500" y="256" class="svg-t">Security + performance</text>
+            <text x="500" y="280" class="svg-s">DDoS, WAF, Bots</text>
+            <text x="500" y="298" class="svg-s">Rules, Workers</text>
+            <text x="500" y="316" class="svg-s">Cache (HIT returns now)</text>
+            <text x="500" y="334" class="svg-s">Load Balancing</text>
+            <text x="500" y="356" class="svg-l">same as shared IPs</text>
+
+            <rect x="716" y="230" width="204" height="140" rx="10" class="svg-box cf"/>
+            <text x="732" y="256" class="svg-t">Origin fetch</text>
+            <text x="732" y="280" class="svg-s">DNS record content</text>
+            <text x="732" y="298" class="svg-s">&rarr; origin 198.51.100.7</text>
+            <text x="732" y="316" class="svg-s">src: shared egress or</text>
+            <text x="732" y="334" class="svg-s">dedicated egress IPs</text>
+            <text x="732" y="356" class="svg-l">address map does not change it</text>
+
+            <path d="M240,300 L260,300" class="svg-flow cf" marker-end="url(#f1o)"/>
+            <path d="M462,300 L482,300" class="svg-flow cf" marker-end="url(#f1o)"/>
+            <path d="M694,300 L714,300" class="svg-flow cf" marker-end="url(#f1o)"/>
+
+            <path d="M100,130 L100,228" class="svg-flow cf" marker-end="url(#f1o)"/>
+            <text x="110" y="168" class="svg-la">TCP/QUIC to 203.0.113.10:443</text>
+            <path d="M795,140 C795,170 300,160 140,226" class="svg-flow dash"/>
+            <text x="560" y="176" class="svg-l">BGP delivers the packet to the closest colo</text>
+
+            <rect x="650" y="440" width="290" height="96" rx="10" class="svg-box cust"/>
+            <text x="666" y="468" class="svg-t">Your origin</text>
+            <text x="666" y="490" class="svg-s">198.51.100.7 (any IP, any host)</text>
+            <text x="666" y="512" class="svg-s">firewall: allow CF egress IPs</text>
+            <path d="M818,370 L818,438" class="svg-flow cust" marker-end="url(#f1b)"/>
+
+            <rect x="20" y="440" width="560" height="96" rx="10" class="svg-box ok"/>
+            <text x="36" y="468" class="svg-t">Response</text>
+            <text x="36" y="490" class="svg-s">origin &rarr; Cloudflare colo &rarr; client</text>
+            <text x="36" y="512" class="svg-s">client only ever sees 203.0.113.10 (src of replies)</text>
+            <path d="M648,488 L582,488" class="svg-flow ok" marker-end="url(#f1g)"/>
+          </svg>
+          <figcaption>Figure 2 &mdash; DNS chooses the IP (address map), BGP chooses the data center (anycast), the service binding chooses the product, SNI chooses the zone, and the DNS record content chooses the origin.</figcaption>
+        </figure>
+        <ol class="steps">
+          <li><h3>DNS lookup</h3><p>The client resolves <code>shop.example.com</code>. The record is proxied (orange cloud), so Cloudflare never returns the origin IP. Because the zone is a member of an address map, it answers with <code>203.0.113.10</code> instead of a shared anycast IP.</p></li>
+          <li><h3>Routing to the nearest data center</h3><p>Cloudflare announces <code>203.0.113.0/24</code> with BGP from all its locations (anycast). The client's ISP picks the shortest path, so the TCP SYN or QUIC packet lands in the closest Cloudflare data center. Static IPs are part of Cloudflare's own announced ranges, so this step is identical.</p></li>
+          <li><h3>Service binding</h3><p>The data center looks up which product owns the destination IP: CDN (HTTP proxy), Spectrum (TCP/UDP proxy), or Magic Transit (L3). Unspecified IPs use the prefix's default binding.</p></li>
+          <li><h3>TLS and hostname</h3><p>For CDN, the TLS ClientHello carries SNI, which selects the zone and edge certificate. The IP does not decide which site is served. Clients without SNI get the address map's <code>default_sni</code>.</p></li>
+          <li><h3>Security and performance</h3><p>DDoS mitigation, WAF, bot rules, Workers, and cache run exactly as they do for shared IPs. A cache hit is returned immediately.</p></li>
+          <li><h3>Origin connection</h3><p>On a miss, Cloudflare connects to the origin in the DNS record (<code>198.51.100.7</code>). The source IP is a shared Cloudflare egress IP, or your dedicated CDN egress IPs if you have them (section 6). Address maps never change this leg.</p></li>
+          <li><h3>Response</h3><p>The origin answers Cloudflare, and Cloudflare answers the client from <code>203.0.113.10</code> over the same connection.</p></li>
+        </ol>
+      </section>
+
+      <section id="blocks">
+        <h2>3. BYOIP building blocks</h2>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 300" role="img" aria-label="BYOIP objects: IP prefix, BGP prefix, service bindings, address maps">
+            <defs>
+              <marker id="b1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa4b2"/></marker>
+            </defs>
+            <rect x="16" y="40" width="210" height="200" rx="10" class="svg-box cust"/>
+            <text x="32" y="66" class="svg-t">&#9312; IP prefix</text>
+            <text x="32" y="90" class="svg-s">203.0.113.0/24</text>
+            <text x="32" y="110" class="svg-s">asn 13335</text>
+            <text x="32" y="130" class="svg-s">LOA (auto-generated)</text>
+            <text x="32" y="150" class="svg-s">IRR + RPKI + ownership</text>
+            <text x="32" y="176" class="svg-lb">approved: P &rarr; V</text>
+            <text x="32" y="210" class="svg-l">proves you may announce it</text>
+
+            <rect x="252" y="40" width="210" height="200" rx="10" class="svg-box cf"/>
+            <text x="268" y="66" class="svg-t">&#9313; Service bindings</text>
+            <text x="268" y="90" class="svg-s">/24 &rarr; CDN (default)</text>
+            <text x="268" y="110" class="svg-s">/27 &rarr; Spectrum</text>
+            <text x="268" y="130" class="svg-s">4&ndash;6 h to provision</text>
+            <text x="268" y="150" class="svg-s">set while withdrawn</text>
+            <text x="268" y="176" class="svg-la">state: active</text>
+            <text x="268" y="210" class="svg-l">which product gets each IP</text>
+
+            <rect x="488" y="40" width="210" height="200" rx="10" class="svg-box cf"/>
+            <text x="504" y="66" class="svg-t">&#9314; BGP prefix</text>
+            <text x="504" y="90" class="svg-s">created automatically</text>
+            <text x="504" y="110" class="svg-s">starts withdrawn</text>
+            <text x="504" y="130" class="svg-s">wait &ge; 5 h, then</text>
+            <text x="504" y="150" class="svg-s">advertised: true</text>
+            <text x="504" y="176" class="svg-la">on-demand control</text>
+            <text x="504" y="210" class="svg-l">when the Internet sees it</text>
+
+            <rect x="724" y="40" width="220" height="200" rx="10" class="svg-box ok"/>
+            <text x="740" y="66" class="svg-t">&#9315; Address map</text>
+            <text x="740" y="90" class="svg-s">ips: 203.0.113.10-11</text>
+            <text x="740" y="110" class="svg-s">members: zone / account</text>
+            <text x="740" y="130" class="svg-s">enabled: true</text>
+            <text x="740" y="150" class="svg-s">default_sni (optional)</text>
+            <text x="740" y="176" class="svg-lg">CDN only</text>
+            <text x="740" y="210" class="svg-l">what proxied DNS returns</text>
+
+            <path d="M226,140 L250,140" class="svg-flow" marker-end="url(#b1)"/>
+            <path d="M462,140 L486,140" class="svg-flow" marker-end="url(#b1)"/>
+            <path d="M698,140 L722,140" class="svg-flow" marker-end="url(#b1)"/>
+            <text x="16" y="272" class="svg-l">Static IPs skip blocks 1&ndash;3: Cloudflare already owns, binds, and announces them, and pre-creates the address map for you to edit.</text>
+          </svg>
+          <figcaption>Figure 3 &mdash; Configure in this order. Advertising before bindings are active, or mapping IPs before the BGP prefix is advertised, is not allowed or disrupts traffic.</figcaption>
+        </figure>
+      </section>
+
+      <section id="static-steps">
+        <h2>4. Static IPs: step by step</h2>
+        <ol class="steps">
+          <li><h3>Order the add-on</h3><p>Ask your account team for Static IPs on the Enterprise contract. Decide how many IPs and whether you need IPv4, IPv6, or both.</p></li>
+          <li><h3>Receive the IPs</h3><p>Cloudflare allocates the addresses to your account. You can see them in the dashboard under <b>Address space &rarr; Leased IPs</b>. Cloudflare also creates an address map containing them. You cannot create a second map with the same static IPs.</p></li>
+          <li><h3>Choose the zones</h3><p>Go to <b>IP addresses &rarr; Address maps</b>, open the Cloudflare-created map, and select <b>Review</b>. Add the zones that should answer with the static IPs, or add the whole account. A zone membership overrides an account membership.</p>
+            <pre>curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/addressing/address_maps/$MAP_ID/zones/$ZONE_ID" \
+  --request PUT \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN"</pre></li>
+          <li><h3>Enable the map</h3><p>Make sure the map is enabled. DNS answers change only when the map is enabled and the zone is a member, with no expected downtime.</p></li>
+          <li><h3>Verify DNS</h3><pre>dig +short shop.example.com A
+192.0.2.10
+192.0.2.11</pre></li>
+          <li><h3>Publish the IPs</h3><p>Give the addresses to partners or firewalls, or point an apex <code>A</code> record at them (partial zones, SaaS custom hostnames).</p></li>
+          <li><h3>Optional: Spectrum and non-SNI</h3><p>For Spectrum apps, set <code>"edge_ips": {"type": "static", "ips": ["192.0.2.10"]}</code>. For clients without SNI, set <code>default_sni</code> on the map (API only).</p></li>
+        </ol>
+        <div class="tip"><b>Token permission:</b> address map changes need <code>Address Maps Write</code>.</div>
+      </section>
+
+      <section id="byoip-steps">
+        <h2>5. BYOIP: step by step</h2>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 150" role="img" aria-label="BYOIP onboarding timeline">
+            <defs>
+              <marker id="t1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f6821f"/></marker>
+            </defs>
+            <line x1="40" y1="60" x2="920" y2="60" class="svg-flow cf" marker-end="url(#t1)"/>
+            <circle cx="60" cy="60" r="13" class="svg-num"/><text x="56" y="65" class="svg-numt">0</text>
+            <circle cx="200" cy="60" r="13" class="svg-num"/><text x="196" y="65" class="svg-numt">1</text>
+            <circle cx="340" cy="60" r="13" class="svg-num"/><text x="336" y="65" class="svg-numt">2</text>
+            <circle cx="480" cy="60" r="13" class="svg-num"/><text x="476" y="65" class="svg-numt">3</text>
+            <circle cx="620" cy="60" r="13" class="svg-num"/><text x="616" y="65" class="svg-numt">4</text>
+            <circle cx="760" cy="60" r="13" class="svg-num"/><text x="756" y="65" class="svg-numt">5</text>
+            <circle cx="880" cy="60" r="13" class="svg-num"/><text x="876" y="65" class="svg-numt">6</text>
+            <text x="20" y="100" class="svg-s">IRR + ROA</text><text x="20" y="118" class="svg-l">prerequisites</text>
+            <text x="164" y="100" class="svg-s">add prefix</text><text x="164" y="118" class="svg-l">get token</text>
+            <text x="300" y="100" class="svg-s">validate</text><text x="300" y="118" class="svg-l">approved V</text>
+            <text x="440" y="100" class="svg-s">bindings</text><text x="440" y="118" class="svg-l">4&ndash;6 h</text>
+            <text x="580" y="100" class="svg-s">advertise</text><text x="580" y="118" class="svg-l">BGP, minutes</text>
+            <text x="716" y="100" class="svg-s">address map</text><text x="716" y="118" class="svg-l">no downtime</text>
+            <text x="850" y="100" class="svg-s">verify</text><text x="850" y="118" class="svg-l">dig / curl</text>
+            <text x="20" y="30" class="svg-t">Onboarding order (CDN / Spectrum prefix)</text>
+          </svg>
+          <figcaption>Figure 4 &mdash; Magic Transit prefixes follow the Magic Transit onboarding instead (see the Magic Transit guide).</figcaption>
+        </figure>
+        <ol class="steps">
+          <li><h3>Check the prerequisites</h3>
+            <ul class="check">
+              <li>Prefix registered at an RIR (ARIN, RIPE, APNIC, LACNIC, AFRINIC).</li>
+              <li>Size: IPv4 <code>/24</code> or larger; IPv6 between <code>/48</code> and <code>/32</code>.</li>
+              <li>IRR <code>route</code>/<code>route6</code> object that exactly matches the prefix, with <code>origin: AS13335</code>.</li>
+              <li>RPKI ROA for the prefix and AS13335, checked in Cloudflare's RPKI portal and a second validator.</li>
+              <li>Contract includes BYOIP. Announcing under your own ASN needs the account team.</li>
+            </ul>
+            <pre>route:   203.0.113.0/24
+descr:   Example Corp served by Cloudflare
+origin:  AS13335
+mnt-by:  MAINT-EXAMPLE
+source:  RIPE</pre></li>
+          <li><h3>Add the prefix</h3>
+            <pre>curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/addressing/prefixes" \
+  --request POST \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --json '{"cidr":"203.0.113.0/24","asn":13335,"delegate_loa_creation":true}'</pre>
+            <p>Save <code>id</code> and <code>ownership_validation_token</code>. With <code>delegate_loa_creation</code>, Cloudflare generates the Letter of Agency for you. The prefix starts with <code>approved: "P"</code> (pending).</p></li>
+          <li><h3>Prove ownership</h3>
+            <p>Use <b>one</b> of the two methods:</p>
+            <pre># Option A: IRR route object remarks/descr
+cf-validation: &lt;OWNERSHIP_VALIDATION_TOKEN&gt;
+
+# Option B: reverse DNS zone 113.0.203.in-addr.arpa
+cf-validation.113.0.203.in-addr.arpa. IN TXT "&lt;OWNERSHIP_VALIDATION_TOKEN&gt;"</pre>
+            <p>Then trigger validation and poll until IRR, RPKI, and ownership pass and <code>approved</code> becomes <code>"V"</code>:</p>
+            <pre>curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/addressing/prefixes/$PREFIX_ID/validate" \
+  --request POST --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+
+curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/addressing/prefixes/$PREFIX_ID" \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN"</pre></li>
+          <li><h3>Create service bindings</h3>
+            <p>List services (<code>GET /accounts/$ACCOUNT_ID/addressing/services</code>), then bind the whole prefix to the default service. Optionally bind smaller CIDRs to another service:</p>
+            <pre>curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/addressing/prefixes/$PREFIX_ID/bindings" \
+  --request POST --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --json '{"cidr":"203.0.113.0/24","service_id":"&lt;CDN_SERVICE_ID&gt;"}'
+
+curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/addressing/prefixes/$PREFIX_ID/bindings" \
+  --request POST --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --json '{"cidr":"203.0.113.64/27","service_id":"&lt;SPECTRUM_SERVICE_ID&gt;"}'</pre>
+            <p>Each binding takes 4&ndash;6 hours (<code>provisioning</code> &rarr; <code>active</code>). Cloudflare creates the BGP prefix in a withdrawn state; allow at least 5 hours before advertising. Group contiguous IPs into one CIDR instead of one binding per IP.</p></li>
+          <li><h3>Advertise the prefix</h3>
+            <pre>curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/addressing/prefixes/$PREFIX_ID/bgp/prefixes" \
+  --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+
+curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/addressing/prefixes/$PREFIX_ID/bgp/prefixes/$BGP_PREFIX_ID" \
+  --request PATCH --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --json '{"on_demand":{"advertised":true}}'</pre>
+            <p>Propagation takes minutes. If the prefix is currently announced by your own network or ISP, plan the cutover with them so traffic moves cleanly to Cloudflare.</p></li>
+          <li><h3>Create the address map (CDN)</h3>
+            <pre>curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/addressing/address_maps" \
+  --request POST --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --json '{
+    "description": "shop on BYOIP",
+    "enabled": true,
+    "ips": ["203.0.113.10", "203.0.113.11"],
+    "memberships": [{ "identifier": "&lt;ZONE_ID&gt;", "kind": "zone" }]
+  }'</pre>
+            <p>Spectrum apps use <code>edge_ips</code> type <code>static</code> with BYOIP addresses instead. Not needed for Magic Transit or Gateway.</p></li>
+          <li><h3>Verify, then move production</h3><p>Check DNS, BGP, and HTTP (section 7) before announcing the change to users.</p></li>
+        </ol>
+        <div class="warn"><b>Rules to remember:</b> one BYOIP prefix can be used for CDN <em>ingress</em> or CDN <em>egress</em>, not both. Magic Transit can only be the default binding of a whole prefix. Delegations let another account use part of the prefix, but bindings stay in the parent account.</div>
+      </section>
+
+      <section id="egress">
+        <h2>6. Egress IPs: Cloudflare to your origin</h2>
+        <p>Static IPs and BYOIP change the address clients connect <em>to</em>. Traffic from Cloudflare <em>to</em> your origin comes from different addresses.</p>
+        <figure class="diagram">
+          <svg viewBox="0 0 960 220" role="img" aria-label="Ingress versus egress IPs">
+            <defs>
+              <marker id="e1o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f6821f"/></marker>
+              <marker id="e1b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b8def"/></marker>
+            </defs>
+            <rect x="20" y="70" width="160" height="70" rx="10" class="svg-box"/><text x="40" y="110" class="svg-t">Client</text>
+            <rect x="390" y="50" width="200" height="110" rx="12" class="svg-box cf"/>
+            <text x="410" y="80" class="svg-t">Cloudflare</text>
+            <text x="410" y="104" class="svg-s">ingress: static/BYOIP</text>
+            <text x="410" y="124" class="svg-s">egress: shared or</text>
+            <text x="410" y="144" class="svg-s">dedicated egress IP</text>
+            <rect x="780" y="70" width="160" height="70" rx="10" class="svg-box cust"/><text x="800" y="110" class="svg-t">Origin</text>
+            <path d="M180,105 L388,105" class="svg-flow cf" marker-end="url(#e1o)"/>
+            <text x="196" y="94" class="svg-la">dst 203.0.113.10</text>
+            <path d="M590,105 L778,105" class="svg-flow cust" marker-end="url(#e1b)"/>
+            <text x="604" y="94" class="svg-lb">src dedicated egress</text>
+            <text x="20" y="196" class="svg-l">Ingress customization (address maps) and egress customization (Dedicated CDN Egress IPs) are separate products that can be combined.</text>
+          </svg>
+          <figcaption>Figure 5 &mdash; Lock the origin firewall to your dedicated egress IPs for the strongest origin protection.</figcaption>
+        </figure>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Product</th><th>Direction</th><th>What it gives you</th></tr></thead>
+          <tbody>
+            <tr><td>Dedicated CDN Egress IPs (Smart Shield Advanced, formerly Aegis)</td><td>Cloudflare &rarr; origin (CDN, WAF, Spectrum)</td><td>A few IPs reserved for your account, so the origin firewall can allow only them. About 40,000 concurrent connections per IP per origin IP:port. Can use a BYOIP prefix (egress-only).</td></tr>
+            <tr><td>Gateway dedicated egress IPs</td><td>Your users &rarr; Internet (Zero Trust)</td><td>Static source IPs for SaaS allowlists, selected by egress policies. At least two IPs in two cities. Cloudflare-leased or BYOIP.</td></tr>
+            <tr><td>Shared Cloudflare ranges</td><td>Cloudflare &rarr; origin (default)</td><td>Published at cloudflare.com/ips. Allowlist all of them, or use Authenticated Origin Pulls or Cloudflare Tunnel instead.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="verify">
+        <h2>7. Verify and troubleshoot</h2>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Check</th><th>Command / place</th><th>Expected</th></tr></thead>
+          <tbody>
+            <tr><td>DNS answer</td><td><code>dig +short shop.example.com A</code></td><td>Your static/BYOIP addresses, not shared anycast IPs</td></tr>
+            <tr><td>Prefix approved</td><td><code>GET .../addressing/prefixes/$PREFIX_ID</code></td><td><code>approved: "V"</code>, all validation states passed</td></tr>
+            <tr><td>Bindings active</td><td><code>GET .../prefixes/$PREFIX_ID/bindings</code></td><td><code>provisioning.state: active</code></td></tr>
+            <tr><td>Announced by Cloudflare</td><td>bgp.tools, RIPEstat, or a looking glass</td><td>Origin AS13335, ROA valid</td></tr>
+            <tr><td>Served by Cloudflare</td><td><code>curl -sI https://shop.example.com --resolve shop.example.com:443:203.0.113.10</code></td><td><code>server: cloudflare</code> and a <code>cf-ray</code> header</td></tr>
+            <tr><td>Data center</td><td><code>curl -s https://shop.example.com/cdn-cgi/trace</code></td><td><code>colo=</code> nearby; same as with shared IPs</td></tr>
+          </tbody>
+        </table></div>
+        <ul class="bullets">
+          <li><strong>Validation fails:</strong> the IRR object does not exactly match the prefix, the origin is not AS13335, the ROA max-length is too short, or the token is missing.</li>
+          <li><strong>DNS still returns shared IPs:</strong> the map is disabled, the zone is not a member, the record is DNS-only (grey cloud), or a resolver is caching the old answer (check the TTL).</li>
+          <li><strong>Cannot add IPs to an address map:</strong> the BGP prefix is still withdrawn or the CDN binding is not active.</li>
+          <li><strong>TLS errors on the new IP:</strong> the client sends no SNI and no <code>default_sni</code> is set, or the hostname has no edge certificate.</li>
+          <li><strong>Connection resets after a binding change:</strong> bindings take 4&ndash;6 hours and reset traffic on IPs already in use. Change bindings only on unused IPs.</li>
+        </ul>
+      </section>
+
+      <section id="choose">
+        <h2>8. Which one to choose</h2>
+        <div class="table-wrap"><table class="ref">
+          <thead><tr><th>Need</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td>Fixed IPs for partner allowlists, without owning address space</td><td>Static IPs</td></tr>
+            <tr><td>Apex <code>A</code> record for partial zones or SaaS custom hostnames</td><td>Static IPs (or BYOIP)</td></tr>
+            <tr><td>Keep the addresses you already own and their reputation</td><td>BYOIP</td></tr>
+            <tr><td>Protect an entire network (any protocol)</td><td>BYOIP with Magic Transit</td></tr>
+            <tr><td>Origin firewall that allows only a few Cloudflare IPs</td><td>Dedicated CDN Egress IPs</td></tr>
+            <tr><td>Static source IP for employees reaching SaaS</td><td>Gateway dedicated egress IPs</td></tr>
+          </tbody>
+        </table></div>
+        <div class="note">Official references: <a href="https://developers.cloudflare.com/byoip/">BYOIP</a> &middot; <a href="https://developers.cloudflare.com/byoip/get-started/">BYOIP get started</a> &middot; <a href="https://developers.cloudflare.com/byoip/concepts/static-ips/">Static IPs</a> &middot; <a href="https://developers.cloudflare.com/byoip/address-maps/">Address maps</a> &middot; <a href="https://developers.cloudflare.com/byoip/service-bindings/">Service bindings</a> &middot; <a href="https://developers.cloudflare.com/smart-shield/configuration/dedicated-egress-ips/">Dedicated CDN Egress IPs</a>.</div>
+      </section>
+
+      <section class="disclaimer"><div class="box">
+        <b>Disclaimer:</b> Example IPs use documentation ranges (RFC 5737), except the illustrative shared anycast range. Verify current values in Cloudflare documentation before production changes. Developed by Pimenta.fun LAB. <span class="risk">USE AT YOUR OWN RISK.</span>
+      </div></section>
+
+      <footer>
+        Pimenta lab &middot; <a href="https://www.pimenta.fun/#docs">back to documents</a>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
