@@ -7,24 +7,51 @@
   <link rel="stylesheet" href="/assets/lab.css" />
   <style>
     .cert-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
-    .cert-workflow { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; margin: 18px 0; }
-    .cert-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
-    .cert-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 11px; padding: 17px; min-width: 0; }
-    .cert-card h3 { margin: 0 0 8px; }
     .cert-status { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-top: 12px; }
     .cert-status.ready { border-color: rgba(54,211,153,.45); }
     .cert-status.bad { border-color: rgba(255,107,107,.45); }
-    .cert-facts { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; margin-top: 10px; font-size: .82rem; }
+    .cert-status.wait { border-color: rgba(246,130,31,.45); }
+    .cert-facts { display: grid; grid-template-columns: 150px 1fr; gap: 6px 12px; margin-top: 10px; font-size: .82rem; }
     .cert-facts b { color: var(--muted); font-weight: 500; }
-    .cert-facts span { color: var(--text); word-break: break-all; }
+    .cert-facts span { color: var(--text); word-break: break-all; font-family: ui-monospace, Menlo, monospace; }
     .privacy { color: var(--green); font-size: .8rem; margin-top: 8px; }
-    .browser-steps { margin: 10px 0 16px 20px; color: var(--muted); }
-    .browser-steps li { margin: 7px 0; }
     .copy-result { color: var(--green); font-size: .8rem; margin-left: 8px; }
+    .pass { color: var(--green); font-weight: 600; }
+    .fail { color: #ff6b6b; font-weight: 600; }
     [hidden] { display: none !important; }
+
+    /* ---- certificate popup ---- */
+    dialog.cert-modal { width: min(820px, 94vw); max-height: 90vh; padding: 0; border: 1px solid var(--border);
+      border-radius: 16px; background: var(--panel); color: var(--text); box-shadow: 0 30px 80px rgba(0,0,0,.55); }
+    dialog.cert-modal::backdrop { background: rgba(5,8,15,.72); backdrop-filter: blur(3px); }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 18px 22px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+    .modal-head h2 { margin: 0; font-size: 1.15rem; }
+    .modal-close { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 8px;
+      width: 34px; height: 34px; font-size: 1.1rem; cursor: pointer; }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 18px 22px 24px; overflow-y: auto; max-height: calc(90vh - 72px); }
+    .stepper { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 18px; }
+    .stepper button { background: var(--panel2); border: 1px solid var(--border); color: var(--muted); border-radius: 10px;
+      padding: 10px; font: inherit; font-size: .85rem; cursor: pointer; text-align: left; }
+    .stepper button b { display: block; color: var(--text); font-size: .9rem; }
+    .stepper button.active { border-color: var(--accent); color: var(--text); }
+    .stepper button.done b::after { content: " \2713"; color: var(--green); }
+    .pane h3 { margin-top: 0; }
+    .pane pre { white-space: pre-wrap; word-break: break-all; }
+    .os-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+    .os-tabs button { background: var(--panel2); border: 1px solid var(--border); color: var(--muted); border-radius: 999px;
+      padding: 5px 12px; font: inherit; font-size: .82rem; cursor: pointer; }
+    .os-tabs button.active { border-color: var(--accent); color: var(--text); }
+    .pane-nav { display: flex; justify-content: space-between; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+    .result-table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 12px; }
+    .result-table th, .result-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .result-table th { color: var(--muted); font-weight: 500; width: 190px; }
+    .result-table td { font-family: ui-monospace, Menlo, monospace; word-break: break-all; }
     @media (max-width: 720px) {
-      .cert-grid { grid-template-columns: 1fr; }
+      .stepper { grid-template-columns: 1fr; }
       .cert-facts { grid-template-columns: 1fr; gap: 2px; }
+      .result-table th { width: auto; }
     }
   </style>
 </head>
@@ -48,66 +75,21 @@
     <p><a class="btn" href="https://www.pimenta.fun/mtls-guide/">&#128214; Read the full mTLS implementation guide</a></p>
 
     <h2>Test Leg&nbsp;1 live (client &rarr; Cloudflare)</h2>
-    <p>Open the live mTLS inspector on the enforced hostname. Cloudflare requests a client certificate during the TLS
-    handshake and only lets you through if it verifies against the lab CA.</p>
+    <p>Cloudflare requests a client certificate during the TLS handshake with <code class="inline">mtls.pimenta.fun</code> and only lets you through if it verifies against the lab CA.
+    The popup walks you through loading your certificate, then connects so your browser can present it.</p>
     <div class="cert-actions">
-      <button class="btn" id="chooseCert" type="button">&#128272; Choose client certificate &amp; test</button>
-      <a class="btn ghost" href="https://mtls.pimenta.fun/" target="_blank" rel="noopener">Open with an installed certificate &rarr;</a>
-    </div>
-
-    <div class="cert-workflow" id="certWorkflow" hidden>
-      <h2 style="margin-top:0;">Client-certificate test workflow</h2>
-      <p>Select your certificate locally. For a browser test, use a <code class="inline">.p12</code> or
-      <code class="inline">.pfx</code> file containing both the client certificate and its private key.</p>
-
-      <label for="certFile">Client certificate file</label>
-      <input id="certFile" type="file" accept=".p12,.pfx,.pem,.crt,.cer,application/x-pkcs12,application/pkix-cert" />
-      <div class="privacy">&#10003; The selected file stays in this browser. It is never uploaded or sent to pimenta.fun.</div>
-      <div class="cert-status" id="certStatus">Select a certificate to prepare the test.</div>
-
-      <div id="certReady" hidden>
-        <div class="cert-grid">
-          <div class="cert-card">
-            <h3>Browser test</h3>
-            <p>JavaScript cannot attach a file to a TLS handshake. Import the certificate first so the browser can present it when Cloudflare requests one.</p>
-            <ol class="browser-steps">
-              <li id="importInstruction">Import the PKCS#12 file into your browser or operating-system certificate store.</li>
-              <li>Confirm the imported certificate includes its private key and chains to the CA configured in Cloudflare.</li>
-              <li>Open the protected hostname and select the certificate if the browser prompts you.</li>
-            </ol>
-            <a class="btn" href="https://mtls.pimenta.fun/" target="_blank" rel="noopener">I imported it &mdash; open mtls.pimenta.fun &rarr;</a>
-          </div>
-
-          <div class="cert-card">
-            <h3>File-based CLI test</h3>
-            <p>For PEM certificates, optionally select the matching private key to generate the exact local command. File contents remain local.</p>
-            <label for="keyFile">Private key (PEM tests only)</label>
-            <input id="keyFile" type="file" accept=".key,.pem,application/x-pem-file" />
-            <pre id="curlCommand"></pre>
-            <button class="btn ghost" id="copyCurl" type="button">Copy curl command</button><span class="copy-result" id="copyResult"></span>
-          </div>
-        </div>
-      </div>
+      <button class="btn" id="openCertModal" type="button">&#128272; Load client certificate &amp; connect</button>
+      <a class="btn ghost" href="https://mtls.pimenta.fun/" target="_blank" rel="noopener">Open mtls.pimenta.fun in a new tab &rarr;</a>
     </div>
 
     <div class="warn">
-      <strong>Browser security boundary:</strong> choosing a file on this page does not install it or give JavaScript access to TLS client-authentication APIs. The browser can only use a client certificate from its certificate store. The CLI can use selected files directly because <code class="inline">curl</code> owns the TLS connection.
-    </div>
-    <div class="note">
-      <strong>Without a valid client certificate you get a <code class="inline">403</code></strong> &mdash; Cloudflare blocks the
-      unverified handshake at the edge. With your <code class="inline">client.p12</code> imported into the browser, the page renders
-      your <strong>verified certificate</strong>, the TLS session details and everything the edge reports. Add
-      <code class="inline">?format=json</code> for a machine-readable dump.
+      <strong>Browser security boundary:</strong> no web page can attach a certificate file to a TLS connection. The browser only presents certificates from its certificate store, and it shows its <em>own</em> certificate-selection dialog when <code class="inline">mtls.pimenta.fun</code> asks for one. This page prepares the certificate, tells you how to install it, and triggers that dialog. The CLI can use files directly because <code class="inline">curl</code> owns the TLS connection.
     </div>
 
     <h2>Live client-certificate check</h2>
-    <p>This opens the protected mTLS inspector in JSON mode and shows what the edge reports about the certificate selected by your browser.</p>
-    <button class="btn" id="check">Check my client certificate</button>
-    <pre id="out">(not checked yet)</pre>
-    <div class="note">
-      Browsers only send a client certificate if one is installed and the requested hostname asks for it. The inspector
-      opens as a top-level navigation so the browser can perform client-certificate selection during the TLS handshake.
-    </div>
+    <p>Calls <code class="inline">https://mtls.pimenta.fun/?format=json</code> from this page (credentialed request) and shows what the edge reports about the certificate your browser selected.</p>
+    <button class="btn" id="check" type="button">Check my client certificate</button>
+    <div id="checkResult" class="cert-status">(not checked yet)</div>
 
     <h2>How to configure (Cloudflare)</h2>
     <ul class="bullets">
@@ -123,6 +105,9 @@
 openssl req -newkey rsa:2048 -nodes -keyout client.key -out client.csr -subj "/CN=lab-client"
 openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -set_serial 01 -out client.crt -days 365
 
+# bundle for browser import
+openssl pkcs12 -export -out client.p12 -inkey client.key -in client.crt
+
 # call WITHOUT a cert (should be blocked once mTLS is enforced):
 curl -i https://mtls.pimenta.fun/
 
@@ -132,133 +117,296 @@ curl -i --cert client.crt --key client.key https://mtls.pimenta.fun/</pre>
     <p><a class="btn ghost" href="https://www.pimenta.fun/#tests">&larr; Back to tests</a></p>
   </main>
 
+  <!-- ================= Client certificate popup ================= -->
+  <dialog class="cert-modal" id="certModal" aria-labelledby="certModalTitle">
+    <div class="modal-head">
+      <h2 id="certModalTitle">&#128272; Client certificate for mtls.pimenta.fun</h2>
+      <button class="modal-close" id="closeCertModal" type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="stepper">
+        <button type="button" data-step="1" class="active"><b>1. Select</b>certificate file</button>
+        <button type="button" data-step="2"><b>2. Install</b>in your browser</button>
+        <button type="button" data-step="3"><b>3. Connect</b>and verify</button>
+      </div>
+
+      <!-- Step 1 -->
+      <section class="pane" data-pane="1">
+        <h3>Select your client certificate</h3>
+        <p>Use a <code class="inline">.p12</code>/<code class="inline">.pfx</code> (certificate + private key) for the browser. A PEM/DER certificate (<code class="inline">.pem</code>, <code class="inline">.crt</code>, <code class="inline">.cer</code>) lets this page compute its fingerprint and compare it with what Cloudflare receives.</p>
+        <label for="certFile">Certificate file</label>
+        <input id="certFile" type="file" accept=".p12,.pfx,.pem,.crt,.cer,application/x-pkcs12,application/pkix-cert" />
+        <div class="privacy">&#10003; Read locally in this browser. The file is never uploaded or sent anywhere.</div>
+        <div class="cert-status" id="certStatus">No certificate selected yet. You can skip this step if the certificate is already installed.</div>
+        <div class="pane-nav">
+          <span></span>
+          <button class="btn" type="button" data-go="2">Next: install &rarr;</button>
+        </div>
+      </section>
+
+      <!-- Step 2 -->
+      <section class="pane" data-pane="2" hidden>
+        <h3>Install it where the browser can use it</h3>
+        <p id="installIntro">The browser presents certificates from its certificate store. Import the <code class="inline">.p12</code> once; it will then be offered every time <code class="inline">mtls.pimenta.fun</code> asks for a certificate.</p>
+        <div class="os-tabs" id="osTabs">
+          <button type="button" data-os="mac">macOS</button>
+          <button type="button" data-os="win">Windows</button>
+          <button type="button" data-os="linux">Linux (Chrome)</button>
+          <button type="button" data-os="firefox">Firefox</button>
+          <button type="button" data-os="cli">curl</button>
+        </div>
+        <div id="osSteps"></div>
+        <pre id="osCommand"></pre>
+        <button class="btn ghost" id="copyCmd" type="button">Copy command</button><span class="copy-result" id="copyResult"></span>
+        <div class="cert-status wait" id="restartNote">After importing, fully restart the browser if it was open. Chrome and Safari remember the certificate you picked (or that you cancelled) for a host until restart.</div>
+        <div class="pane-nav">
+          <button class="btn ghost" type="button" data-go="1">&larr; Back</button>
+          <button class="btn" type="button" data-go="3">I installed it &rarr; connect</button>
+        </div>
+      </section>
+
+      <!-- Step 3 -->
+      <section class="pane" data-pane="3" hidden>
+        <h3>Connect to mtls.pimenta.fun</h3>
+        <p>Click <b>Connect</b>. Cloudflare sends a certificate request in the TLS handshake and your browser opens its <b>native certificate-selection popup</b>. Pick the lab client certificate and allow access to the key if asked.</p>
+        <div class="cert-actions">
+          <button class="btn" id="connectBtn" type="button">&#128279; Connect &amp; present certificate</button>
+          <a class="btn ghost" id="openTab" href="https://mtls.pimenta.fun/" target="_blank" rel="noopener">Open in a new tab instead</a>
+        </div>
+        <div class="cert-status" id="connectStatus">Not connected yet.</div>
+        <div class="pane-nav">
+          <button class="btn ghost" type="button" data-go="2">&larr; Back</button>
+          <button class="btn ghost" type="button" id="doneBtn">Close</button>
+        </div>
+      </section>
+    </div>
+  </dialog>
+
   <footer class="lab">
     Pimenta lab &middot; <a href="https://www.pimenta.fun/#tests">back to tests</a>
   </footer>
 
   <script>
-    const chooseCert = document.getElementById("chooseCert");
-    const certWorkflow = document.getElementById("certWorkflow");
-    const certFile = document.getElementById("certFile");
-    const keyFile = document.getElementById("keyFile");
-    const certStatus = document.getElementById("certStatus");
-    const certReady = document.getElementById("certReady");
-    const curlCommand = document.getElementById("curlCommand");
-    let selectedCert = null;
+    (function () {
+      "use strict";
+      var MTLS_JSON = "https://mtls.pimenta.fun/?format=json";
+      var $ = function (id) { return document.getElementById(id); };
+      var modal = $("certModal");
+      var state = { file: null, kind: null, fileHash: null, certFp: null, os: null };
 
-    function shellPath(name) {
-      return '"/path/to/' + name.replace(/["\\$`]/g, "_") + '"';
-    }
-
-    function formatBytes(bytes) {
-      if (bytes < 1024) return bytes + " B";
-      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-      return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-    }
-
-    async function fileSha256(file) {
-      const data = await file.arrayBuffer();
-      const digest = await crypto.subtle.digest("SHA-256", data);
-      return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
-    }
-
-    function certificateKind(file) {
-      const ext = file.name.toLowerCase().split(".").pop();
-      if (ext === "p12" || ext === "pfx") return "pkcs12";
-      if (ext === "pem" || ext === "crt" || ext === "cer") return "pem";
-      return "unknown";
-    }
-
-    function updateCurlCommand() {
-      if (!selectedCert) return;
-      const kind = certificateKind(selectedCert);
-      if (kind === "pkcs12") {
-        curlCommand.textContent = "curl -i --cert-type P12 --cert " + shellPath(selectedCert.name) + " https://mtls.pimenta.fun/";
-        return;
+      // ---------- helpers ----------
+      function esc(v) {
+        return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+        });
       }
-      const key = keyFile.files[0];
-      const keyPath = key ? shellPath(key.name) : '"/path/to/client.key"';
-      curlCommand.textContent = "curl -i --cert " + shellPath(selectedCert.name) + " --key " + keyPath + " https://mtls.pimenta.fun/";
-    }
-
-    chooseCert.addEventListener("click", () => {
-      certWorkflow.hidden = false;
-      certWorkflow.scrollIntoView({ behavior: "smooth", block: "start" });
-      certFile.click();
-    });
-
-    certFile.addEventListener("change", async () => {
-      selectedCert = certFile.files[0] || null;
-      certReady.hidden = true;
-      document.getElementById("copyResult").textContent = "";
-      if (!selectedCert) {
-        certStatus.className = "cert-status";
-        certStatus.textContent = "Select a certificate to prepare the test.";
-        return;
+      function hex(buf) { return Array.from(new Uint8Array(buf), function (b) { return b.toString(16).padStart(2, "0"); }).join(""); }
+      function colon(h) { return (h || "").match(/.{1,2}/g).join(":").toUpperCase(); }
+      function normFp(h) { return String(h || "").replace(/[^0-9a-f]/gi, "").toLowerCase(); }
+      function fmtBytes(n) { return n < 1024 ? n + " B" : (n / 1024).toFixed(1) + " KB"; }
+      function shellName(name) { return '"' + (name || "client.p12").replace(/["\\$`]/g, "_") + '"'; }
+      function kindOf(name) {
+        var ext = name.toLowerCase().split(".").pop();
+        if (ext === "p12" || ext === "pfx") return "pkcs12";
+        if (ext === "pem" || ext === "crt" || ext === "cer") return "cert";
+        return "unknown";
       }
-
-      const kind = certificateKind(selectedCert);
-      if (kind === "unknown") {
-        certStatus.className = "cert-status bad";
-        certStatus.textContent = "Unsupported file type. Select .p12/.pfx for a browser import, or .pem/.crt/.cer for curl.";
-        return;
-      }
-      if (selectedCert.size > 5 * 1024 * 1024) {
-        certStatus.className = "cert-status bad";
-        certStatus.textContent = "The selected file exceeds 5 MB, which is unusual for a client certificate. Verify the file before continuing.";
-        return;
-      }
-
-      certStatus.className = "cert-status";
-      certStatus.textContent = "Calculating the local file SHA-256...";
-      try {
-        const hash = await fileSha256(selectedCert);
-        certStatus.className = "cert-status ready";
-        certStatus.innerHTML = "<strong>Certificate selected locally</strong>" +
-          '<div class="cert-facts"><b>File</b><span id="factName"></span><b>Format</b><span id="factFormat"></span><b>Size</b><span id="factSize"></span><b>File SHA-256</b><span id="factHash"></span></div>';
-        document.getElementById("factName").textContent = selectedCert.name;
-        document.getElementById("factFormat").textContent = kind === "pkcs12" ? "PKCS#12 (browser import + curl)" : "PEM/DER certificate (curl; bundle with its key for browser import)";
-        document.getElementById("factSize").textContent = formatBytes(selectedCert.size);
-        document.getElementById("factHash").textContent = hash.match(/.{1,2}/g).join(":");
-        certReady.hidden = false;
-
-        const ua = navigator.userAgent;
-        const instruction = document.getElementById("importInstruction");
-        if (kind !== "pkcs12") {
-          instruction.textContent = "For a browser test, bundle this certificate and its private key into PKCS#12 first: openssl pkcs12 -export -out client.p12 -inkey client.key -in client.crt";
-        } else if (/Firefox/.test(ua)) {
-          instruction.textContent = "Firefox: Settings > Privacy & Security > Certificates > View Certificates > Your Certificates > Import, then select the .p12/.pfx.";
-        } else if (/Macintosh|Mac OS X/.test(ua)) {
-          instruction.textContent = "macOS: double-click the selected .p12/.pfx in Finder, import it into the login Keychain, and enter its export password.";
-        } else if (/Windows/.test(ua)) {
-          instruction.textContent = "Windows: double-click the selected .p12/.pfx, choose Current User > Personal in Certificate Import Wizard, and enter its password.";
+      // SHA-256 of the DER certificate = the fingerprint Cloudflare reports in certFingerprintSHA256.
+      async function certFingerprint(buf) {
+        var bytes = new Uint8Array(buf);
+        var text = new TextDecoder().decode(bytes);
+        var m = text.match(/-----BEGIN CERTIFICATE-----([\s\S]+?)-----END CERTIFICATE-----/);
+        var der;
+        if (m) {
+          var bin = atob(m[1].replace(/\s+/g, ""));
+          der = new Uint8Array(bin.length);
+          for (var i = 0; i < bin.length; i++) der[i] = bin.charCodeAt(i);
+        } else if (bytes[0] === 0x30) {
+          der = bytes; // binary DER
         } else {
-          instruction.textContent = "Import the .p12/.pfx into your browser or operating-system certificate store, including its private key.";
+          return null;
         }
-        updateCurlCommand();
-      } catch (error) {
-        certStatus.className = "cert-status bad";
-        certStatus.textContent = "Could not read the selected file locally: " + error.message;
+        return hex(await crypto.subtle.digest("SHA-256", der));
       }
-    });
 
-    keyFile.addEventListener("change", updateCurlCommand);
-
-    document.getElementById("copyCurl").addEventListener("click", async () => {
-      const result = document.getElementById("copyResult");
-      try {
-        await navigator.clipboard.writeText(curlCommand.textContent);
-        result.textContent = "Copied";
-      } catch (error) {
-        result.textContent = "Copy failed; select the command manually";
+      // ---------- popup + stepper ----------
+      function go(step) {
+        document.querySelectorAll(".pane").forEach(function (p) { p.hidden = p.getAttribute("data-pane") !== String(step); });
+        document.querySelectorAll(".stepper button").forEach(function (b) {
+          var n = Number(b.getAttribute("data-step"));
+          b.classList.toggle("active", n === step);
+          b.classList.toggle("done", n < step);
+        });
       }
-    });
+      function openModal() {
+        if (typeof modal.showModal === "function") modal.showModal(); else modal.setAttribute("open", "");
+        go(1);
+      }
+      function closeModal() { if (modal.close) modal.close(); else modal.removeAttribute("open"); }
 
-    document.getElementById("check").addEventListener("click", () => {
-      const out = document.getElementById("out");
-      out.textContent = "Opening https://mtls.pimenta.fun/?format=json\nThe browser will use an installed client certificate during the new TLS handshake.";
-      window.open("https://mtls.pimenta.fun/?format=json", "_blank", "noopener");
-    });
+      $("openCertModal").addEventListener("click", openModal);
+      $("closeCertModal").addEventListener("click", closeModal);
+      $("doneBtn").addEventListener("click", closeModal);
+      modal.addEventListener("click", function (e) { if (e.target === modal) closeModal(); });
+      document.querySelectorAll(".stepper button").forEach(function (b) {
+        b.addEventListener("click", function () { go(Number(b.getAttribute("data-step"))); });
+      });
+      document.querySelectorAll("[data-go]").forEach(function (b) {
+        b.addEventListener("click", function () { go(Number(b.getAttribute("data-go"))); });
+      });
+      if (location.hash === "#load-cert") openModal();
+
+      // ---------- step 1: select ----------
+      $("certFile").addEventListener("change", async function () {
+        var st = $("certStatus");
+        var f = this.files[0];
+        state.file = f || null; state.kind = null; state.fileHash = null; state.certFp = null;
+        if (!f) { st.className = "cert-status"; st.textContent = "No certificate selected yet."; renderOs(); return; }
+        var kind = kindOf(f.name);
+        if (kind === "unknown" || f.size > 5 * 1024 * 1024) {
+          st.className = "cert-status bad";
+          st.textContent = kind === "unknown" ? "Unsupported file type. Use .p12/.pfx, .pem, .crt or .cer." : "File larger than 5 MB: not a client certificate.";
+          return;
+        }
+        st.className = "cert-status wait"; st.textContent = "Reading locally...";
+        try {
+          var buf = await f.arrayBuffer();
+          state.kind = kind;
+          state.fileHash = hex(await crypto.subtle.digest("SHA-256", buf));
+          if (kind === "cert") state.certFp = await certFingerprint(buf);
+          var hasKey = kind === "cert" && /PRIVATE KEY-----/.test(new TextDecoder().decode(new Uint8Array(buf)));
+          st.className = "cert-status ready";
+          st.innerHTML = "<strong>Certificate loaded locally</strong><div class=\"cert-facts\">" +
+            "<b>File</b><span>" + esc(f.name) + "</span>" +
+            "<b>Format</b><span>" + (kind === "pkcs12" ? "PKCS#12 (cert + key, encrypted)" : "X.509 certificate (PEM/DER)") + "</span>" +
+            "<b>Size</b><span>" + fmtBytes(f.size) + "</span>" +
+            "<b>File SHA-256</b><span>" + colon(state.fileHash) + "</span>" +
+            (state.certFp ? "<b>Cert fingerprint</b><span>" + colon(state.certFp) + "</span>" : "") +
+            "</div>" +
+            (kind === "pkcs12" ? "<p class=\"privacy\">PKCS#12 is password-protected, so its certificate fingerprint cannot be read here. Cloudflare will report it after you connect.</p>" : "") +
+            (kind === "cert" && !state.certFp ? "<p class=\"fail\">No certificate found in this file.</p>" : "") +
+            (hasKey ? "<p class=\"fail\">This file also contains a private key. Keep it private.</p>" : "");
+          renderOs();
+        } catch (err) {
+          st.className = "cert-status bad"; st.textContent = "Could not read the file: " + err.message;
+        }
+      });
+
+      // ---------- step 2: install instructions ----------
+      var OS = {
+        mac: { steps: "Double-click the .p12 in Finder (or run the command), import it into the <b>login</b> keychain and enter the export password. Chrome, Edge and Safari use the macOS keychain.",
+          cmd: function (n) { return "security import " + n + " -k ~/Library/Keychains/login.keychain-db -P '<p12-password>' -T /Applications/Google\\ Chrome.app -T /Applications/Safari.app"; } },
+        win: { steps: "Double-click the .p12, choose <b>Current User</b> &rarr; <b>Personal</b> in the Certificate Import Wizard and enter the password. Chrome and Edge use the Windows store.",
+          cmd: function (n) { return "certutil -user -p <p12-password> -importPFX " + n; } },
+        linux: { steps: "Chrome/Chromium on Linux use the NSS database in your home directory. Import with <code>pk12util</code> (package <code>libnss3-tools</code>) or Settings &rarr; Privacy and security &rarr; Security &rarr; Manage certificates &rarr; Your certificates &rarr; Import.",
+          cmd: function (n) { return "pk12util -d sql:$HOME/.pki/nssdb -i " + n; } },
+        firefox: { steps: "Firefox has its own store: Settings &rarr; Privacy &amp; Security &rarr; Certificates &rarr; <b>View Certificates</b> &rarr; <b>Your Certificates</b> &rarr; <b>Import</b>, select the .p12 and enter its password.",
+          cmd: function () { return "about:preferences#privacy   (Certificates > View Certificates > Your Certificates > Import)"; } },
+        cli: { steps: "No installation needed: curl reads the files directly and owns the TLS connection.",
+          cmd: function (n) {
+            return state.kind === "cert"
+              ? "curl -i --cert " + n + " --key \"client.key\" https://mtls.pimenta.fun/?format=json"
+              : "curl -i --cert-type P12 --cert " + n + ":'<p12-password>' https://mtls.pimenta.fun/?format=json";
+          } }
+      };
+      function detectOs() {
+        var ua = navigator.userAgent;
+        if (/Firefox\//.test(ua)) return "firefox";
+        if (/Windows/.test(ua)) return "win";
+        if (/Macintosh|Mac OS X/.test(ua)) return "mac";
+        if (/Linux|X11/.test(ua)) return "linux";
+        return "mac";
+      }
+      function renderOs(os) {
+        state.os = os || state.os || detectOs();
+        var name = shellName(state.file ? state.file.name : "client.p12");
+        document.querySelectorAll("#osTabs button").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-os") === state.os); });
+        var steps = OS[state.os].steps;
+        if (state.kind === "cert" && state.os !== "cli") {
+          steps = "Browsers import certificate <b>and</b> private key together. Bundle this PEM certificate with its key first: <code>openssl pkcs12 -export -out client.p12 -inkey client.key -in " + esc(state.file.name) + "</code>, then: " + steps;
+          name = shellName("client.p12");
+        }
+        $("osSteps").innerHTML = "<p>" + steps + "</p>";
+        $("osCommand").textContent = OS[state.os].cmd(name);
+        $("copyResult").textContent = "";
+      }
+      document.querySelectorAll("#osTabs button").forEach(function (b) {
+        b.addEventListener("click", function () { renderOs(b.getAttribute("data-os")); });
+      });
+      $("copyCmd").addEventListener("click", async function () {
+        try { await navigator.clipboard.writeText($("osCommand").textContent); $("copyResult").textContent = "Copied"; }
+        catch (e) { $("copyResult").textContent = "Copy failed; select it manually"; }
+      });
+      renderOs();
+
+      // ---------- step 3: connect ----------
+      // A credentialed fetch makes the browser run a TLS handshake with mtls.pimenta.fun.
+      // Cloudflare sends CertificateRequest, so the browser shows its native certificate picker.
+      async function connect(target) {
+        target.className = "cert-status wait";
+        target.innerHTML = "Connecting to <code>mtls.pimenta.fun</code>&hellip; If your browser opens a certificate-selection popup, choose the lab client certificate.";
+        var t0 = performance.now();
+        var res, data;
+        try {
+          res = await fetch(MTLS_JSON + "&t=" + Date.now(), { credentials: "include", cache: "no-store", mode: "cors" });
+        } catch (err) {
+          target.className = "cert-status bad";
+          target.innerHTML = "<span class=\"fail\">&#10007; No readable response from mtls.pimenta.fun.</span>" +
+            "<p>The most common reason is that no valid certificate was presented: Cloudflare's WAF returns a block page that this page is not allowed to read (no CORS headers). Other causes: you cancelled the popup, the certificate is not installed, or the browser cached an earlier choice (restart it).</p>" +
+            "<p>Open <a href=\"https://mtls.pimenta.fun/\" target=\"_blank\" rel=\"noopener\">mtls.pimenta.fun in a new tab</a> to see the result directly.</p>";
+          return;
+        }
+        var ms = Math.round(performance.now() - t0);
+        var text = await res.text();
+        try { data = JSON.parse(text); } catch (e) { data = null; }
+        if (!data) {
+          target.className = "cert-status bad";
+          target.innerHTML = "<span class=\"fail\">&#10007; HTTP " + res.status + " from mtls.pimenta.fun</span><pre>" + esc(text.slice(0, 300)) + "</pre>" +
+            (/BLOCKED|INVALID/i.test(text) ? "<p>Cloudflare blocked the request: no valid client certificate was presented.</p>" : "");
+          return;
+        }
+        renderResult(target, data, res.status, ms);
+      }
+
+      function row(k, v, cls) { return "<tr><th>" + esc(k) + "</th><td" + (cls ? " class=\"" + cls + "\"" : "") + ">" + esc(v == null || v === "" ? "-" : v) + "</td></tr>"; }
+
+      function renderResult(target, d, status, ms) {
+        var s = d.status || {}, c = d.clientCertificate || {}, tls = d.tls || {};
+        var ok = s.presented && s.verified && !s.revoked;
+        var fpEdge = normFp(c.certFingerprintSHA256);
+        var match = "";
+        if (state.certFp && fpEdge) {
+          match = state.certFp === fpEdge
+            ? "<p class=\"pass\">&#10003; Matches the certificate you selected in step 1.</p>"
+            : "<p class=\"fail\">&#10007; Different from the certificate selected in step 1. The browser presented another certificate.</p>";
+        }
+        target.className = "cert-status " + (ok ? "ready" : "bad");
+        target.innerHTML =
+          (ok ? "<span class=\"pass\">&#10003; Client certificate presented and verified by Cloudflare</span>"
+              : s.presented ? "<span class=\"fail\">&#10007; Certificate presented but not valid (" + esc(s.certVerified) + ")</span>"
+              : "<span class=\"fail\">&#10007; No client certificate presented</span>") +
+          match +
+          "<table class=\"result-table\">" +
+          row("HTTP status / time", status + " / " + ms + " ms") +
+          row("Presented", String(!!s.presented), s.presented ? "pass" : "fail") +
+          row("Verified", s.certVerified, s.verified ? "pass" : "fail") +
+          row("Revoked", String(!!s.revoked), s.revoked ? "fail" : "") +
+          row("Subject", c.certSubjectDN) +
+          row("Issuer", c.certIssuerDN) +
+          row("Serial", c.certSerial) +
+          row("Valid from", c.certNotBefore) +
+          row("Valid until", c.certNotAfter + (d.daysToExpiry != null ? "  (" + d.daysToExpiry + " days)" : "")) +
+          row("SHA-256 fingerprint", fpEdge ? colon(fpEdge) : "") +
+          row("TLS", (tls.tlsVersion || "") + " " + (tls.tlsCipher || "")) +
+          row("HTTP protocol", tls.httpProtocol) +
+          row("Ray ID", d.ray) +
+          "</table>" +
+          (d.mtlsEnabledForHostname ? "" : "<p class=\"fail\">The hostname is not associated with mTLS, so Cloudflare did not request a certificate.</p>");
+      }
+
+      $("connectBtn").addEventListener("click", function () { connect($("connectStatus")); });
+      $("check").addEventListener("click", function () { connect($("checkResult")); });
+    })();
   </script>
 </body>
 </html>

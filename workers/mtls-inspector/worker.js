@@ -44,11 +44,27 @@
  *     populate the cf-client-cert-* headers section.
  */
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+// CORS: the lab page on www.pimenta.fun calls this endpoint with
+// fetch(..., { credentials: "include" }) so the browser presents the client
+// certificate. Credentialed CORS requires the exact Origin (not "*") plus
+// Access-Control-Allow-Credentials. Other origins get the public "*" policy.
+const CREDENTIALED_ORIGINS = new Set([
+  "https://www.pimenta.fun",
+  "https://pimenta.fun",
+]);
+
+function corsHeaders(request) {
+  const origin = request.headers.get("Origin");
+  const base = {
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    Vary: "Origin",
+  };
+  if (origin && CREDENTIALED_ORIGINS.has(origin)) {
+    return { ...base, "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true" };
+  }
+  return { ...base, "Access-Control-Allow-Origin": "*" };
+}
 
 const esc = (s) =>
   String(s)
@@ -351,6 +367,7 @@ curl -s --cert client.crt --key client.key \\
 }
 
 async function handle(request) {
+  const CORS = corsHeaders(request);
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS });
   }
