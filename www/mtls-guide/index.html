@@ -27,6 +27,37 @@
     .lbl { display:inline-block; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; padding:2px 8px; border-radius:999px; margin-left:6px; }
     .lbl.dash { background: rgba(246,130,31,0.15); color: var(--accent); border:1px solid rgba(246,130,31,0.4); }
     .lbl.cli  { background: rgba(91,141,239,0.15); color: var(--blue); border:1px solid rgba(91,141,239,0.4); }
+    figure.diagram { margin: 20px 0; }
+    figure.diagram svg { width: 100%; height: auto; display: block;
+      background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+    figure.diagram figcaption { color: var(--muted); font-size: 13px; margin-top: 8px; text-align: center; }
+    .svg-box { fill: var(--panel-2); stroke: var(--border); stroke-width: 1.4; }
+    .svg-box.cf { stroke: var(--accent); }
+    .svg-box.cust { stroke: var(--blue); }
+    .svg-box.ok { stroke: var(--green); }
+    .svg-box.bad { stroke: var(--red); }
+    .svg-zone { fill: none; stroke: var(--border); stroke-dasharray: 6 5; }
+    .svg-zone.cf { stroke: rgba(246,130,31,.6); }
+    .svg-zone.cust { stroke: rgba(91,141,239,.6); }
+    .svg-t { fill: var(--text); font: 700 14px var(--sans); }
+    .svg-h { fill: var(--text); font: 700 16px var(--sans); }
+    .svg-s { fill: var(--muted); font: 12px var(--mono); }
+    .svg-l { fill: var(--muted); font: 12px var(--sans); }
+    .svg-la { fill: var(--accent); font: 600 12px var(--mono); }
+    .svg-lb { fill: var(--blue); font: 600 12px var(--mono); }
+    .svg-lg { fill: var(--green); font: 600 12px var(--mono); }
+    .svg-lr { fill: var(--red); font: 600 12px var(--mono); }
+    .svg-flow { stroke: #9aa4b2; stroke-width: 1.8; fill: none; }
+    .svg-flow.cf { stroke: var(--accent); }
+    .svg-flow.cust { stroke: var(--blue); }
+    .svg-flow.ok { stroke: var(--green); }
+    .svg-flow.bad { stroke: var(--red); stroke-dasharray: 5 4; }
+    .svg-tls { stroke-width: 12; stroke-opacity: .16; fill: none; }
+    .svg-tls.l1 { stroke: var(--green); }
+    .svg-tls.l2 { stroke: var(--blue); }
+    .svg-lane { stroke: var(--border); stroke-dasharray: 3 5; }
+    .table-wrap { overflow-x: auto; }
+    .table-wrap table { min-width: 720px; }
   </style>
 </head>
 <body>
@@ -38,6 +69,7 @@
       <a class="home" href="https://www.pimenta.fun/challenges/mtls/">&rarr; mTLS Test</a>
       <a class="home" href="https://mtls.pimenta.fun/">&rarr; Live mTLS inspector</a>
       <h2>Contents</h2>
+      <a href="#architecture">Architecture &mdash; two mTLS connections</a>
       <a href="#prereq">0. Prerequisites</a>
       <a href="#leg1">Part 1 &mdash; Client &rarr; Cloudflare</a>
       <a href="#leg2">Part 2 &mdash; Cloudflare &rarr; Origin</a>
@@ -69,6 +101,195 @@
       <strong>Leg 2 &mdash; Cloudflare &rarr; Origin (Authenticated Origin Pulls):</strong> Cloudflare presents a client
       certificate that your origin verifies, so the origin only accepts traffic from Cloudflare.
     </div>
+
+    <!-- ================= Architecture diagrams ================= -->
+    <h2 id="architecture">Architecture &mdash; two independent mTLS connections</h2>
+    <p>Cloudflare is a reverse proxy, so a request crosses <strong>two separate TLS connections</strong>. Each one can be <em>mutual</em>, uses its own certificates and CA, and is configured with different Cloudflare services. The client certificate never travels to the origin inside TLS: Cloudflare terminates Leg&nbsp;1 and can only <em>forward details</em> of the certificate as HTTP headers.</p>
+
+    <figure class="diagram">
+      <svg viewBox="0 0 1000 640" role="img" aria-label="Two mTLS connections: clients to Cloudflare and Cloudflare to origin, with the Cloudflare services used on each">
+        <defs>
+          <marker id="m-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3fb950"/></marker>
+          <marker id="m-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b8def"/></marker>
+          <marker id="m-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f85149"/></marker>
+          <marker id="m-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f6821f"/></marker>
+        </defs>
+
+        <!-- column titles -->
+        <text x="20" y="28" class="svg-h">Clients</text>
+        <text x="262" y="28" class="svg-lg">LEG 1: client mTLS</text>
+        <text x="420" y="28" class="svg-h">Cloudflare edge</text>
+        <text x="664" y="28" class="svg-lb">LEG 2: AOP</text>
+        <text x="830" y="28" class="svg-h">Origin</text>
+
+        <!-- ===== clients ===== -->
+        <rect x="20" y="48" width="230" height="104" rx="10" class="svg-box ok"/>
+        <text x="34" y="72" class="svg-t">Browser / employee</text>
+        <text x="34" y="94" class="svg-s">cert in OS keychain</text>
+        <text x="34" y="112" class="svg-s">native cert picker</text>
+        <text x="34" y="136" class="svg-lg">Access mTLS / zone mTLS</text>
+
+        <rect x="20" y="168" width="230" height="104" rx="10" class="svg-box ok"/>
+        <text x="34" y="192" class="svg-t">Mobile app / IoT</text>
+        <text x="34" y="214" class="svg-s">cert bundled in app</text>
+        <text x="34" y="232" class="svg-s">or device keystore</text>
+        <text x="34" y="256" class="svg-lg">Cloudflare-managed CA</text>
+
+        <rect x="20" y="288" width="230" height="104" rx="10" class="svg-box ok"/>
+        <text x="34" y="312" class="svg-t">Partner server / API</text>
+        <text x="34" y="334" class="svg-s">curl --cert / SDK</text>
+        <text x="34" y="352" class="svg-s">existing corporate PKI</text>
+        <text x="34" y="376" class="svg-lg">BYO CA (Enterprise)</text>
+
+        <rect x="20" y="408" width="230" height="84" rx="10" class="svg-box bad"/>
+        <text x="34" y="432" class="svg-t">Client without cert</text>
+        <text x="34" y="454" class="svg-s">or cert from wrong CA</text>
+        <text x="34" y="476" class="svg-lr">cert_verified = false</text>
+
+        <!-- ===== Cloudflare edge ===== -->
+        <rect x="380" y="44" width="270" height="456" rx="14" class="svg-zone cf"/>
+        <rect x="396" y="60" width="238" height="92" rx="10" class="svg-box cf"/>
+        <text x="410" y="82" class="svg-t">&#9312; TLS termination</text>
+        <text x="410" y="104" class="svg-s">edge cert for hostname</text>
+        <text x="410" y="122" class="svg-s">CertificateRequest &rarr; client</text>
+        <text x="410" y="140" class="svg-s">verify chain vs CA</text>
+
+        <rect x="396" y="164" width="238" height="92" rx="10" class="svg-box cf"/>
+        <text x="410" y="186" class="svg-t">&#9313; Decide (rules)</text>
+        <text x="410" y="208" class="svg-s">WAF custom rule /</text>
+        <text x="410" y="226" class="svg-s">API Shield mTLS rule /</text>
+        <text x="410" y="244" class="svg-s">Access Service Auth</text>
+
+        <rect x="396" y="268" width="238" height="92" rx="10" class="svg-box cf"/>
+        <text x="410" y="290" class="svg-t">&#9314; Forward identity</text>
+        <text x="410" y="312" class="svg-s">cf-client-cert-* headers</text>
+        <text x="410" y="330" class="svg-s">RFC 9440 Client-Cert</text>
+        <text x="410" y="348" class="svg-s">Workers tlsClientAuth</text>
+
+        <rect x="396" y="372" width="238" height="112" rx="10" class="svg-box cf"/>
+        <text x="410" y="394" class="svg-t">&#9315; Origin connection</text>
+        <text x="410" y="416" class="svg-s">present AOP client cert</text>
+        <text x="410" y="434" class="svg-s">(global / zone / hostname)</text>
+        <text x="410" y="452" class="svg-s">Full (strict): verify</text>
+        <text x="410" y="470" class="svg-s">origin server cert</text>
+
+        <path d="M515,152 L515,162" class="svg-flow cf" marker-end="url(#m-o)"/>
+        <path d="M515,256 L515,266" class="svg-flow cf" marker-end="url(#m-o)"/>
+        <path d="M515,360 L515,370" class="svg-flow cf" marker-end="url(#m-o)"/>
+
+        <!-- Leg 1 arrows -->
+        <path d="M250,100 C310,100 330,106 394,106" class="svg-tls l1"/>
+        <path d="M250,100 C310,100 330,106 394,106" class="svg-flow ok" marker-end="url(#m-g)"/>
+        <path d="M250,220 C320,220 330,120 394,114" class="svg-tls l1"/>
+        <path d="M250,220 C320,220 330,120 394,114" class="svg-flow ok" marker-end="url(#m-g)"/>
+        <path d="M250,340 C330,340 340,130 394,122" class="svg-tls l1"/>
+        <path d="M250,340 C330,340 340,130 394,122" class="svg-flow ok" marker-end="url(#m-g)"/>
+        <path d="M250,450 C320,450 340,220 394,210" class="svg-flow bad" marker-end="url(#m-r)"/>
+        <text x="262" y="520" class="svg-lr">blocked at &#9313; &rarr; 403</text>
+        <text x="262" y="538" class="svg-l">never reaches the origin</text>
+
+        <!-- ===== origin ===== -->
+        <rect x="770" y="60" width="210" height="300" rx="14" class="svg-zone cust"/>
+        <rect x="786" y="76" width="178" height="130" rx="10" class="svg-box cust"/>
+        <text x="800" y="100" class="svg-t">Apache / nginx</text>
+        <text x="800" y="122" class="svg-s">SSLVerifyClient</text>
+        <text x="800" y="140" class="svg-s">  require</text>
+        <text x="800" y="158" class="svg-s">SSLCACertificateFile</text>
+        <text x="800" y="176" class="svg-s">  AOP CA</text>
+        <text x="800" y="196" class="svg-lb">only Cloudflare in</text>
+
+        <rect x="786" y="220" width="178" height="124" rx="10" class="svg-box cust"/>
+        <text x="800" y="244" class="svg-t">Application</text>
+        <text x="800" y="266" class="svg-s">reads client identity</text>
+        <text x="800" y="284" class="svg-s">from headers</text>
+        <text x="800" y="302" class="svg-s">(subject, SHA-256,</text>
+        <text x="800" y="320" class="svg-s">verified)</text>
+
+        <!-- Leg 2 arrows -->
+        <path d="M634,428 C700,428 720,150 784,142" class="svg-tls l2"/>
+        <path d="M634,428 C700,428 720,150 784,142" class="svg-flow cust" marker-end="url(#m-b)"/>
+        <text x="672" y="204" class="svg-lb">mTLS</text>
+        <path d="M634,312 C700,312 720,280 784,280" class="svg-flow dash cust" stroke-dasharray="4 4" marker-end="url(#m-b)"/>
+        <text x="640" y="276" class="svg-l">headers</text><text x="640" y="292" class="svg-l">(in Leg 2)</text>
+
+        <rect x="770" y="388" width="210" height="104" rx="10" class="svg-box bad"/>
+        <text x="784" y="412" class="svg-t">Direct-to-origin attacker</text>
+        <text x="784" y="434" class="svg-s">knows origin IP,</text>
+        <text x="784" y="452" class="svg-s">no AOP client cert</text>
+        <text x="784" y="476" class="svg-lr">TLS handshake fails</text>
+        <path d="M875,388 L875,346" class="svg-flow bad" marker-end="url(#m-r)"/>
+
+        <!-- legend -->
+        <line x1="20" y1="566" x2="980" y2="566" class="svg-lane"/>
+        <rect x="20" y="582" width="22" height="10" rx="3" fill="#3fb950" opacity=".5"/>
+        <text x="50" y="592" class="svg-l">Leg 1: TLS session #1, client cert signed by YOUR client CA (or Cloudflare-managed CA)</text>
+        <rect x="20" y="604" width="22" height="10" rx="3" fill="#5b8def" opacity=".5"/>
+        <text x="50" y="614" class="svg-l">Leg 2: TLS session #2, Cloudflare presents the AOP certificate; origin trusts only that CA</text>
+        <text x="20" y="634" class="svg-l">Two different CAs, two handshakes, two trust decisions. The client certificate itself is never sent to the origin.</text>
+      </svg>
+      <figcaption>Figure 1 &mdash; Different clients authenticate to Cloudflare on Leg&nbsp;1; Cloudflare authenticates itself to the origin on Leg&nbsp;2 (Authenticated Origin Pulls).</figcaption>
+    </figure>
+
+    <h3>Handshake sequence for one request</h3>
+    <figure class="diagram">
+      <svg viewBox="0 0 1000 470" role="img" aria-label="Sequence of the two TLS handshakes and the request through Cloudflare">
+        <defs>
+          <marker id="s-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3fb950"/></marker>
+          <marker id="s-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b8def"/></marker>
+          <marker id="s-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f6821f"/></marker>
+        </defs>
+        <rect x="60" y="14" width="180" height="40" rx="8" class="svg-box ok"/><text x="118" y="39" class="svg-t">Client</text>
+        <rect x="410" y="14" width="180" height="40" rx="8" class="svg-box cf"/><text x="457" y="39" class="svg-t">Cloudflare</text>
+        <rect x="760" y="14" width="180" height="40" rx="8" class="svg-box cust"/><text x="822" y="39" class="svg-t">Origin</text>
+        <line x1="150" y1="54" x2="150" y2="456" class="svg-lane"/>
+        <line x1="500" y1="54" x2="500" y2="456" class="svg-lane"/>
+        <line x1="850" y1="54" x2="850" y2="456" class="svg-lane"/>
+
+        <text x="20" y="80" class="svg-lg">LEG 1</text>
+        <path d="M150,90 L496,90" class="svg-flow ok" marker-end="url(#s-g)"/><text x="170" y="84" class="svg-s">ClientHello (SNI mtls.pimenta.fun)</text>
+        <path d="M500,118 L154,118" class="svg-flow ok" marker-end="url(#s-g)"/><text x="170" y="112" class="svg-s">ServerHello + edge cert + CertificateRequest</text>
+        <path d="M150,146 L496,146" class="svg-flow ok" marker-end="url(#s-g)"/><text x="170" y="140" class="svg-s">Certificate + CertificateVerify</text>
+        <rect x="512" y="128" width="236" height="40" rx="6" class="svg-box cf"/>
+        <text x="522" y="146" class="svg-s">verify vs client CA &rarr;</text>
+        <text x="522" y="162" class="svg-la">cf.tls_client_auth.*</text>
+        <path d="M150,182 L496,182" class="svg-flow ok" marker-end="url(#s-g)"/><text x="170" y="176" class="svg-s">GET /  (encrypted, session #1)</text>
+        <rect x="512" y="180" width="236" height="40" rx="6" class="svg-box cf"/>
+        <text x="522" y="198" class="svg-s">WAF / API Shield / Access</text>
+        <text x="522" y="214" class="svg-la">not verified &rarr; 403 here</text>
+
+        <text x="20" y="250" class="svg-lb">LEG 2</text>
+        <path d="M500,262 L846,262" class="svg-flow cust" marker-end="url(#s-b)"/><text x="520" y="256" class="svg-s">ClientHello (SNI origin hostname)</text>
+        <path d="M850,290 L504,290" class="svg-flow cust" marker-end="url(#s-b)"/><text x="520" y="284" class="svg-s">origin cert + CertificateRequest</text>
+        <path d="M500,318 L846,318" class="svg-flow cust" marker-end="url(#s-b)"/><text x="520" y="312" class="svg-s">AOP client cert + CertificateVerify</text>
+        <path d="M500,354 L846,354" class="svg-flow cust" marker-end="url(#s-b)"/><text x="520" y="348" class="svg-s">GET / + Cf-Client-Cert-Sha256 / Client-Cert</text>
+        <path d="M850,390 L504,390" class="svg-flow cust" marker-end="url(#s-b)"/><text x="520" y="384" class="svg-s">200 OK (session #2)</text>
+        <path d="M500,424 L154,424" class="svg-flow ok" marker-end="url(#s-g)"/><text x="170" y="418" class="svg-s">200 OK (session #1), optionally cached at edge</text>
+        <text x="520" y="450" class="svg-l">Leg 2 connections are reused across many clients; Leg 1 is per client.</text>
+      </svg>
+      <figcaption>Figure 2 &mdash; Each leg completes its own mutual handshake. Cloudflare evaluates the client certificate before any byte is sent to the origin.</figcaption>
+    </figure>
+
+    <h3>Cloudflare services used on each leg</h3>
+    <div class="table-wrap"><table class="ref">
+      <thead><tr><th>Client type</th><th>Leg 1 service (client &rarr; Cloudflare)</th><th>Who issues the client cert</th><th>Enforcement</th><th>Plan</th></tr></thead>
+      <tbody>
+        <tr><td>Browser / employee</td><td>Zero Trust <b>Access mTLS</b> (Service Auth or extra factor) or zone mTLS</td><td>Your CA uploaded to Access</td><td>Access policy: <em>Valid Certificate</em> / <em>Common Name</em></td><td>Zero Trust pay-as-you-go / Enterprise</td></tr>
+        <tr><td>Mobile app / IoT</td><td><b>SSL/TLS &rarr; Client Certificates</b> + <b>API Shield mTLS</b> rule</td><td>Cloudflare-managed CA (up to 100 active certs per zone by default)</td><td>mTLS rule or WAF rule <code>not cf.tls_client_auth.cert_verified</code> &rarr; Block</td><td>All plans</td></tr>
+        <tr><td>Partner server / B2B API</td><td><b>BYO CA</b> associated with the hostname + WAF / API Shield</td><td>Your existing corporate PKI</td><td>WAF rule on <code>cert_verified</code>, <code>cert_issuer_dn</code>, <code>cert_fingerprint_sha256</code></td><td>Enterprise (up to 5 CAs)</td></tr>
+        <tr><td>Any</td><td>Forward identity to the origin</td><td>&mdash;</td><td>Managed Transform <em>Add TLS client auth headers</em>, RFC 9440 <code>Client-Cert</code> via Transform Rules, or a Worker reading <code>request.cf.tlsClientAuth</code></td><td>All plans</td></tr>
+      </tbody>
+    </table></div>
+    <div class="table-wrap"><table class="ref">
+      <thead><tr><th>Leg 2 option (Cloudflare &rarr; origin)</th><th>Certificate Cloudflare presents</th><th>Origin trusts</th><th>Use when</th></tr></thead>
+      <tbody>
+        <tr><td>Global AOP</td><td>Cloudflare-provided, shared by all customers</td><td>Cloudflare AOP CA</td><td>Quick start; proves &ldquo;from Cloudflare&rdquo;, not &ldquo;from <em>my</em> zone&rdquo;</td></tr>
+        <tr><td>Zone-level AOP</td><td>Your certificate (or Cloudflare's) for the whole zone</td><td>Your CA</td><td>Only your zone may reach the origin (this lab)</td></tr>
+        <tr><td>Per-hostname AOP</td><td>Your certificate per hostname</td><td>Your CA(s)</td><td>Different origins or CAs per hostname</td></tr>
+        <tr><td>Worker <code>mtls_certificates</code> binding</td><td>Certificate uploaded with <code>wrangler mtls-certificate</code></td><td>Your CA</td><td>A Worker calls a third-party or internal API that requires mTLS</td></tr>
+        <tr><td>Full (strict) / Custom Origin Trust Store</td><td>&mdash; (server side)</td><td>&mdash;</td><td>Cloudflare verifies the <em>origin's</em> certificate, completing mutual trust</td></tr>
+      </tbody>
+    </table></div>
+    <div class="warn"><b>Not compatible:</b> AOP has no effect on origins reached through Cloudflare Tunnel (the tunnel already authenticates the connector), and it does not apply with SSL mode Off or Flexible.</div>
 
     <!-- ================= Prereqs ================= -->
     <h2 id="prereq">0. Prerequisites</h2>
