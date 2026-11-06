@@ -1,0 +1,24 @@
+name = "traffic-cron"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+account_id = "9af757cde4de6c1ab25168f42af2b950"   # The Pimenta LAB
+
+# No zone route: the Worker only runs on its schedule (and an optional keyed
+# /run trigger on workers.dev for testing).
+workers_dev = true
+
+[triggers]
+# Every 5 minutes = 288 runs/day. Each run sends ~6-34 requests (BATCH_SIZE x
+# day/night curve x jitter), i.e. roughly 5,000-6,000 requests per day.
+crons = ["*/5 * * * *"]
+
+[vars]
+TZ = "Europe/Lisbon"
+BATCH_SIZE = "20"
+MAX_SUBREQUESTS = "48"
+API_KEY = "12345"
+API_EMAIL = "tpimentacf@gmail.com"
+# Secrets (optional): wrangler secret put API_PASSWORD / RUN_KEY
+
+[observability]
+enabled = true
