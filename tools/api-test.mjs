@@ -38,8 +38,8 @@ const FLAGS = new Set(argv.filter((a) => a.startsWith("-")));
 const POS = argv.filter((a) => !a.startsWith("-"));
 
 const BASE = (POS[0] || process.env.API_BASE || "https://api.pimenta.fun").replace(/\/+$/, "");
-const EMAIL = POS[1] || process.env.API_EMAIL || "admin@juice-sh.op";
-const PASSWORD = POS[2] || process.env.API_PASSWORD || "admin123";
+const EMAIL = POS[1] || process.env.API_EMAIL || "tpimentacf@gmail.com";   // "admin@juice-sh.op";
+const PASSWORD = POS[2] || process.env.API_PASSWORD || "1z1muef2";      // "admin123";
 const API_KEY = (argv.find((a) => a.startsWith("--api-key=")) || "").slice(10) || process.env.API_KEY || "12345";
 const PROVIDED_TOKEN = (argv.find((a) => a.startsWith("--token=")) || "").slice(8) || process.env.API_TOKEN || "";
 const JSON_OUT = FLAGS.has("--json");

@@ -7,3 +7,12 @@ node_modules/
 
 # macOS
 .DS_Store
+
+# TLS/mTLS keys & certs — never commit private keys or client material
+*.key
+*.pem
+*.crt
+*.csr
+*.p12
+*.pfx
+*.srl
